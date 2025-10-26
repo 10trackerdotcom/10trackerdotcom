@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://10tracker.in/sitemap.xml
+
+# Disallow admin areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /auth-handler/
+Disallow: /auth-success/
+
+# Allow important pages
+Allow: /articles/
+Allow: /gate-cse/
+Allow: /cat/
+Allow: /upsc/
+Allow: /practice/
+Allow: /mock-test/
+
+# Crawl delay (optional)
+Crawl-delay: 1

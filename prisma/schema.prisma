@@ -1,0 +1,54 @@
+// Prisma schema for GATE CSE Mock Test
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id    Int    @id @default(autoincrement())
+  email String @unique
+  name  String?
+  role  String @default("student") // 'student' or 'admin'
+  tests TestInstance[]
+}
+
+model Question {
+  id           Int      @id @default(autoincrement())
+  subject      String
+  topic        String
+  type         String   // MCQ, MSQ, NAT
+  marks        Int      // 1 or 2
+  difficulty   String
+  questionText String
+  options      String?  // JSON string for options (MCQ/MSQ)
+  correctAns   String   // JSON string for answer(s)
+  createdBy    Int?
+  creator      User?    @relation(fields: [createdBy], references: [id])
+}
+
+model Test {
+  id        Int      @id @default(autoincrement())
+  createdBy Int?
+  creator   User?    @relation(fields: [createdBy], references: [id])
+  createdAt DateTime @default(now())
+  config    String   // JSON string for test config (weightage, etc.)
+  instances TestInstance[]
+}
+
+model TestInstance {
+  id         Int      @id @default(autoincrement())
+  test       Test     @relation(fields: [testId], references: [id])
+  testId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  userId     Int
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+  answers    String   // JSON string: {questionId: answer}
+  score      Int?
+  analytics  String?  // JSON string for analytics
+}
