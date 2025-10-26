@@ -1,82 +1,52 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Calendar, 
-  Tag, 
-  Eye, 
-  ArrowLeft,
-  Share2,
-  BookOpen,
-  Clock,
-  User
-} from 'lucide-react';
-import { useParams } from 'next/navigation';
+import React from 'react';
+import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { trackContentEvent, trackSocialShare, trackButtonClick } from '@/lib/analytics';
-import ArticleSEO from '@/components/Seo';
+import ArticlePageClient from './ArticlePageClient';
 
-const ArticlePage = () => {
-  const [article, setArticle] = useState(null);
-  const [relatedArticles, setRelatedArticles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { slug } = useParams();
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-  useEffect(() => {
-    if (slug) {
-      fetchArticle();
-      fetchRelatedArticles();
+// Generate static paths for all articles
+export async function generateStaticParams() {
+  try {
+    const { data: articles, error } = await supabase
+      .from('published_articles')
+      .select('slug')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching articles for static generation:', error);
+      return [];
     }
-  }, [slug]);
 
-  const fetchArticle = async () => {
-    try {
-      const response = await fetch(`/api/articles/${slug}`);
-      const result = await response.json();
-      if (result.success) {
-        setArticle(result.data);
-        // Track article view
-        trackContentEvent('viewed', 'article', result.data.id);
-      }
-    } catch (error) {
-      console.error('Error fetching article:', error);
-    } finally {
-      setLoading(false);
+    return articles?.map((article) => ({
+      slug: article.slug,
+    })) || [];
+  } catch (error) {
+    console.error('Error in generateStaticParams:', error);
+    return [];
+  }
+}
+
+// Fetch article data on the server
+export async function generateMetadata({ params }) {
+  const { slug } = await params;
+  
+  try {
+    const { data: article, error } = await supabase
+      .from('published_articles')
+      .select('*')
+      .eq('slug', slug)
+      .single();
+
+    if (error || !article) {
+      return {
+        title: 'Article Not Found | 10tracker',
+        description: 'The article you are looking for could not be found.',
+      };
     }
-  };
-
-  const fetchRelatedArticles = async () => {
-    try {
-      const response = await fetch('/api/articles?limit=4');
-      const result = await response.json();
-      if (result.success) {
-        setRelatedArticles(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching related articles:', error);
-    }
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const getCategoryColor = (categorySlug) => {
-    const colors = {
-      'categories': '#3B82F6',
-      'latest-jobs': '#10B981',
-      'exam-results': '#F59E0B',
-      'answer-key': '#EF4444',
-      'admit-cards': '#8B5CF6',
-      'news': '#6B7280'
-    };
-    return colors[categorySlug] || '#3B82F6';
-  };
 
   const getCategoryName = (categorySlug) => {
     const names = {
@@ -90,515 +60,187 @@ const ArticlePage = () => {
     return names[categorySlug] || categorySlug;
   };
 
-  const shareArticle = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: article.title,
-          text: article.excerpt,
-          url: window.location.href,
-        });
-        // Track social share
-        trackSocialShare('native_share', 'article', article.id);
-      } catch (error) {
-        console.log('Error sharing:', error);
-      }
-    } else {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(window.location.href);
-      alert('Link copied to clipboard!');
-      // Track clipboard share
-      trackSocialShare('clipboard', 'article', article.id);
-    }
-  };
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com';
+    const fullUrl = `${siteUrl}/articles/${article.slug}`;
+    const fullImage = article.featured_image_url 
+      ? (article.featured_image_url.startsWith('http') 
+          ? article.featured_image_url 
+          : `${siteUrl}${article.featured_image_url}`)
+      : `${siteUrl}/og-image.jpg`;
 
-  if (loading) {
+    return {
+      title: `${article.title} | 10tracker`,
+      description: article.excerpt || article.content.substring(0, 160),
+      keywords: [
+        'exam preparation',
+        'CAT exam',
+        'GATE exam',
+        'UPSC preparation',
+        'JEE preparation',
+        'NEET preparation',
+        'competitive exams',
+        ...(article.tags || [])
+      ],
+      authors: [{ name: '10tracker Team' }],
+      creator: '10tracker',
+      publisher: '10tracker',
+      formatDetection: {
+        email: false,
+        address: false,
+        telephone: false,
+      },
+      metadataBase: new URL(siteUrl),
+      alternates: {
+        canonical: fullUrl,
+      },
+      openGraph: {
+        type: 'article',
+        locale: 'en_US',
+        url: fullUrl,
+        title: article.title,
+        description: article.excerpt || article.content.substring(0, 160),
+        siteName: '10tracker',
+        images: [
+          {
+            url: fullImage,
+            width: 1200,
+            height: 630,
+            alt: article.title,
+          },
+        ],
+        publishedTime: article.created_at,
+        modifiedTime: article.updated_at || article.created_at,
+        authors: ['10tracker Team'],
+        section: getCategoryName(article.category),
+        tags: article.tags || [],
+      },
+      twitter: {
+        card: 'summary_large_image',
+          title: article.title,
+        description: article.excerpt || article.content.substring(0, 160),
+        images: [fullImage],
+        creator: '@10tracker',
+      },
+      robots: {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          'max-video-preview': -1,
+          'max-image-preview': 'large',
+          'max-snippet': -1,
+        },
+      },
+      other: {
+        'article:reading_time': Math.ceil(article.content.length / 500).toString(),
+        'article:view_count': (article.view_count || 0).toString(),
+      },
+    };
+      } catch (error) {
+    console.error('Error generating metadata:', error);
+    return {
+      title: 'Article Not Found | 10tracker',
+      description: 'The article you are looking for could not be found.',
+    };
+  }
+}
+
+// Server component that fetches data
+export default async function ArticlePage({ params }) {
+  const { slug } = await params;
+  
+  try {
+    // Fetch the main article
+    const { data: article, error: articleError } = await supabase
+      .from('published_articles')
+      .select('*')
+      .eq('slug', slug)
+      .single();
+
+    if (articleError || !article) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-sm border border-neutral-200">
-          <div className="w-8 h-8 border-4 border-neutral-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-neutral-600">Loading article...</p>
-        </div>
+          <div className="text-center">
+            <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-semibold text-neutral-900 mb-2">Article Not Found</h1>
+            <p className="text-neutral-600 mb-6">The article you&apos;re looking for doesn&apos;t exist.</p>
+            <Link
+              href="/articles"
+              className="inline-flex items-center gap-2 px-6 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors duration-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to Articles
+            </Link>
+          </div>
       </div>
     );
   }
 
-  if (!article) {
+    // Fetch related articles
+    const { data: relatedArticles, error: relatedError } = await supabase
+      .from('published_articles')
+      .select('*')
+      .neq('id', article.id)
+      .eq('category', article.category)
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    // If no related articles in same category, get recent articles
+    let finalRelatedArticles = relatedArticles || [];
+    if (finalRelatedArticles.length === 0) {
+      const { data: recentArticles } = await supabase
+        .from('published_articles')
+        .select('*')
+        .neq('id', article.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      finalRelatedArticles = recentArticles || [];
+    }
+
+    // Increment view count (fire and forget)
+    supabase
+      .from('articles')
+      .update({ view_count: (article.view_count || 0) + 1 })
+      .eq('id', article.id)
+      .then(() => {}) // Fire and forget
+      .catch(() => {}); // Ignore errors
+
+    return (
+      <ArticlePageClient 
+        article={article} 
+        relatedArticles={finalRelatedArticles}
+      />
+    );
+  } catch (error) {
+    console.error('Error fetching article data:', error);
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <BookOpen className="w-8 h-8 text-neutral-400" />
+            <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
           </div>
-          <h1 className="text-2xl font-semibold text-neutral-900 mb-2">Article Not Found</h1>
-          <p className="text-neutral-600 mb-6">The article you&apos;re looking for doesn&apos;t exist.</p>
+          <h1 className="text-2xl font-semibold text-neutral-900 mb-2">Error Loading Article</h1>
+          <p className="text-neutral-600 mb-6">There was an error loading this article.</p>
           <Link
             href="/articles"
             className="inline-flex items-center gap-2 px-6 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors duration-200"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
             Back to Articles
           </Link>
         </div>
       </div>
     );
   }
-
-  return (
-    <>
-      {/* SEO Meta Tags */}
-      {article && (
-        <ArticleSEO
-          title={article.title}
-          description={article.excerpt || article.content.substring(0, 160)}
-          image={article.featured_image_url}
-          url={`/articles/${article.slug}`}
-          publishedTime={article.created_at}
-          modifiedTime={article.updated_at}
-          author="CatTracker Team"
-          category={getCategoryName(article.category)}
-          tags={article.tags || []}
-          readingTime={Math.ceil(article.content.length / 500)}
-          viewCount={article.view_count || 0}
-        />
-      )}
-      
-      <style jsx global>{`
-        .article-content {
-          line-height: 1.6;
-          font-size: 1rem;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-        }
-        .article-content p {
-          margin: 1rem 0;
-          color: #3c4043;
-          line-height: 1.6;
-        }
-        .article-content h1 {
-          font-size: 2rem;
-          font-weight: 400;
-          color: #202124;
-          margin: 2rem 0 1rem 0;
-          line-height: 1.25;
-          border-bottom: 1px solid #dadce0;
-          padding-bottom: 0.5rem;
-        }
-        .article-content h2 {
-          font-size: 1.5rem;
-          font-weight: 400;
-          color: #202124;
-          margin: 1.5rem 0 0.75rem 0;
-          line-height: 1.3;
-        }
-        .article-content h3 {
-          font-size: 1.25rem;
-          font-weight: 500;
-          color: #202124;
-          margin: 1.25rem 0 0.5rem 0;
-          line-height: 1.4;
-        }
-        .article-content h4 {
-          font-size: 1.125rem;
-          font-weight: 500;
-          color: #202124;
-          margin: 1rem 0 0.5rem 0;
-          line-height: 1.4;
-        }
-        .article-content ul, .article-content ol {
-          padding-left: 1.5rem;
-          margin: 1rem 0;
-          color: #3c4043;
-        }
-        .article-content ul li {
-          list-style-type: disc;
-          margin: 0.5rem 0;
-          line-height: 1.6;
-        }
-        .article-content ol li {
-          list-style-type: decimal;
-          margin: 0.5rem 0;
-          line-height: 1.6;
-        }
-        .article-content ul li::marker, .article-content ol li::marker {
-          color: #5f6368;
-        }
-        .article-content ul ul, .article-content ol ol, .article-content ul ol, .article-content ol ul {
-          margin: 0.25rem 0;
-        }
-        .article-content table {
-          border-collapse: collapse;
-          margin: 1.5rem 0;
-          width: 100%;
-          border: 1px solid #dadce0;
-          border-radius: 8px;
-          overflow: hidden;
-        }
-        .article-content table td, .article-content table th {
-          border: 1px solid #dadce0;
-          padding: 0.75rem;
-          text-align: left;
-        }
-        .article-content table th {
-          background-color: #f8f9fa;
-          font-weight: 500;
-          color: #202124;
-        }
-        .article-content table td {
-          color: #3c4043;
-        }
-        .article-content table tr:nth-child(even) {
-          background-color: #f8f9fa;
-        }
-        .article-content ul[data-type="taskList"] {
-          list-style: none;
-          padding-left: 0;
-        }
-        .article-content ul[data-type="taskList"] li {
-          display: flex;
-          align-items: flex-start;
-          margin: 0.5rem 0;
-        }
-        .article-content ul[data-type="taskList"] li > label {
-          flex: 0 0 auto;
-          margin-right: 0.5rem;
-          user-select: none;
-          cursor: pointer;
-        }
-        .article-content ul[data-type="taskList"] li > div {
-          flex: 1 1 auto;
-          color: #3c4043;
-          line-height: 1.6;
-        }
-        .article-content blockquote {
-          border-left: 3px solid #1a73e8;
-          padding: 1rem;
-          margin: 1.5rem 0;
-          font-style: normal;
-          color: #3c4043;
-          background-color: #f8f9fa;
-          border-radius: 4px;
-        }
-        .article-content code {
-          background-color: #f1f3f4;
-          padding: 0.125rem 0.25rem;
-          border-radius: 3px;
-          font-family: 'Roboto Mono', 'Monaco', monospace;
-          color: #202124;
-          font-size: 0.875rem;
-        }
-        .article-content pre {
-          background-color: #f8f9fa;
-          color: #202124;
-          padding: 1rem;
-          border-radius: 8px;
-          overflow-x: auto;
-          margin: 1.5rem 0;
-          border: 1px solid #dadce0;
-        }
-        .article-content pre code {
-          background: none;
-          padding: 0;
-          color: #202124;
-          border: none;
-          font-size: 0.875rem;
-        }
-        .article-content a {
-          color: #1a73e8;
-          text-decoration: none;
-          font-weight: 400;
-        }
-        .article-content a:hover {
-          color: #1557b0;
-          text-decoration: underline;
-        }
-        .article-content strong {
-          color: #202124;
-          font-weight: 500;
-        }
-        .article-content em {
-          font-style: italic;
-          color: #3c4043;
-        }
-        .article-content u {
-          text-decoration: underline;
-        }
-        .article-content s {
-          text-decoration: line-through;
-          color: #5f6368;
-        }
-        .article-content mark {
-          background-color: #fef7e0;
-          padding: 0.125rem 0.25rem;
-          border-radius: 3px;
-          color: #b06000;
-        }
-        .article-content img {
-          max-width: 100%;
-          height: auto;
-          border-radius: 8px;
-          margin: 1rem 0;
-        }
-        .article-content hr {
-          border: none;
-          height: 1px;
-          background-color: #dadce0;
-          margin: 1.5rem 0;
-        }
-      `}</style>
-      <div className="min-h-screen bg-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex">
-            {/* Sidebar */}
-            <div className="hidden lg:block w-64 bg-white border-r border-gray-200 sticky top-0 h-screen overflow-y-auto">
-              <div className="p-6">
-                <div className="mb-6">
-                  <Link
-                    href="/articles"
-                    className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to Articles
-                  </Link>
-                </div>
-                
-                {/* Table of Contents */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">On this page</h3>
-                  <nav className="space-y-1">
-                    <a href="#overview" className="block text-sm text-gray-600 hover:text-gray-900 py-1">
-                      Overview
-                    </a>
-                    <a href="#details" className="block text-sm text-gray-600 hover:text-gray-900 py-1">
-                      Details
-                    </a>
-                    <a href="#related" className="block text-sm text-gray-600 hover:text-gray-900 py-1">
-                      Related Articles
-                    </a>
-                  </nav>
-                </div>
-
-                {/* Category Info */}
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span 
-                      className="px-2 py-1 text-xs font-medium rounded-full"
-                      style={{ 
-                        backgroundColor: getCategoryColor(article.category) + '20',
-                        color: getCategoryColor(article.category)
-                      }}
-                    >
-                      {getCategoryName(article.category)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {formatDate(article.created_at)}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
-                      {article.view_count || 0} views
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {Math.ceil(article.content.length / 500)} min read
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex-1">
-              <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Mobile Back Button */}
-                <div className="lg:hidden mb-6">
-                  <Link
-                    href="/articles"
-                    className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to Articles
-                  </Link>
-                </div>
-
-                {/* Article Header */}
-                <motion.article
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6 }}
-                  className="mb-8"
-                >
-                  {/* Featured Image */}
-                  {article.featured_image_url && (
-                    <div className="aspect-video overflow-hidden rounded-lg mb-6">
-                      <img
-                        src={article.featured_image_url}
-                        alt={article.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
-
-                  {/* Meta Information */}
-                  <div className="flex items-center gap-4 mb-4">
-                    <span 
-                      className="px-3 py-1 text-sm font-medium rounded-full"
-                      style={{ 
-                        backgroundColor: getCategoryColor(article.category) + '20',
-                        color: getCategoryColor(article.category)
-                      }}
-                    >
-                      {getCategoryName(article.category)}
-                    </span>
-                    {article.is_featured && (
-                      <span className="px-3 py-1 text-sm font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                        Featured
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Title */}
-                  <h1 className="text-3xl font-normal text-gray-900 mb-4 leading-tight">
-                    {article.title}
-                  </h1>
-
-                  {/* Excerpt */}
-                  {article.excerpt && (
-                    <p className="text-lg text-gray-600 mb-6 leading-relaxed">
-                      {article.excerpt}
-                    </p>
-                  )}
-
-                  {/* Article Meta */}
-                  <div className="flex items-center justify-between text-sm text-gray-500 mb-8 pb-6 border-b border-gray-200">
-                    <div className="flex items-center gap-6">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        {formatDate(article.created_at)}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Eye className="w-4 h-4" />
-                        {article.view_count || 0} views
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {Math.ceil(article.content.length / 500)} min read
-                      </div>
-                    </div>
-                    <button
-                      onClick={shareArticle}
-                      className="flex items-center gap-1 px-3 py-1 text-gray-600 hover:text-gray-900 transition-colors duration-200"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      Share
-                    </button>
-                  </div>
-
-                  {/* Article Content */}
-                  <div 
-                    className="article-content"
-                    dangerouslySetInnerHTML={{ __html: article.content }}
-                  />
-
-                  {/* Tags */}
-                  {article.tags && article.tags.length > 0 && (
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                      <h3 className="text-sm font-medium text-gray-900 mb-3">Tags</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {article.tags.map((tag, index) => (
-                          <span
-                            key={index}
-                            className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-full"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </motion.article>
-
-                {/* Related Articles */}
-                {relatedArticles.length > 0 && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.2 }}
-                    className="mt-16"
-                  >
-                    <h2 className="text-xl font-medium text-gray-900 mb-6">Related Articles</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {relatedArticles.slice(0, 3).map((relatedArticle, index) => (
-                        <motion.article
-                          key={relatedArticle.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, delay: 0.3 + index * 0.1 }}
-                          whileHover={{ y: -2, transition: { duration: 0.2 } }}
-                          className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition-all duration-200 group"
-                        >
-                          {relatedArticle.featured_image_url && (
-                            <div className="aspect-video overflow-hidden">
-                              <img
-                                src={relatedArticle.featured_image_url}
-                                alt={relatedArticle.title}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              />
-                            </div>
-                          )}
-                          
-                          <div className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span 
-                                className="px-2 py-1 text-xs font-medium rounded-full"
-                                style={{ 
-                                  backgroundColor: getCategoryColor(relatedArticle.category) + '20',
-                                  color: getCategoryColor(relatedArticle.category)
-                                }}
-                              >
-                                {getCategoryName(relatedArticle.category)}
-                              </span>
-                            </div>
-
-                            <h3 className="text-base font-medium text-gray-900 mb-2 line-clamp-2 group-hover:text-gray-700 transition-colors">
-                              {relatedArticle.title}
-                            </h3>
-                            
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                              {relatedArticle.excerpt || relatedArticle.content.substring(0, 100)}...
-                            </p>
-
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {formatDate(relatedArticle.created_at)}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Eye className="w-3 h-3" />
-                                {relatedArticle.view_count || 0}
-                              </div>
-                            </div>
-
-                            <a
-                              href={`/articles/${relatedArticle.slug}`}
-                              className="inline-flex items-center gap-1 w-full justify-center px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors duration-200"
-                            >
-                              Read Article
-                            </a>
-                          </div>
-                        </motion.article>
-                      ))}
-                    </div>
-                  </motion.section>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-};
-
-export default ArticlePage;
+}
