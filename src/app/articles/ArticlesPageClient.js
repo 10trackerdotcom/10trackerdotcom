@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
   Calendar, 
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 const ArticlesPageClient = () => {
+  const searchParams = useSearchParams();
   const [articles, setArticles] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,14 @@ const ArticlesPageClient = () => {
     fetchArticles();
     fetchCategories();
   }, []);
+
+  // Handle URL parameters
+  useEffect(() => {
+    const categoryParam = searchParams.get('category');
+    if (categoryParam) {
+      setSelectedCategory(categoryParam);
+    }
+  }, [searchParams]);
 
   const fetchArticles = async () => {
     try {
@@ -131,12 +141,28 @@ const ArticlesPageClient = () => {
           className="text-center mb-12"
         >
           <h1 className="text-4xl font-bold text-neutral-900 mb-4">
-            Articles & Insights
+            {selectedCategory ? `${getCategoryName(selectedCategory)} Articles` : 'Articles & Insights'}
           </h1>
           <p className="text-lg text-neutral-600 max-w-3xl mx-auto">
-            Discover expert tips, strategies, and insights to enhance your exam preparation journey. 
-            Get the latest articles on CAT, GATE, UPSC, JEE, NEET and other competitive exams.
+            {selectedCategory 
+              ? `Explore all articles in the ${getCategoryName(selectedCategory)} category. Find the latest updates, tips, and insights.`
+              : 'Discover expert tips, strategies, and insights to enhance your exam preparation journey. Get the latest articles on CAT, GATE, UPSC, JEE, NEET and other competitive exams.'
+            }
           </p>
+          {selectedCategory && (
+            <div className="mt-4">
+              <span 
+                className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-full"
+                style={{ 
+                  backgroundColor: getCategoryColor(selectedCategory) + '20',
+                  color: getCategoryColor(selectedCategory)
+                }}
+              >
+                <Tag className="w-4 h-4 mr-2" />
+                {getCategoryName(selectedCategory)}
+              </span>
+            </div>
+          )}
         </motion.div>
 
         {/* Search and Filters */}

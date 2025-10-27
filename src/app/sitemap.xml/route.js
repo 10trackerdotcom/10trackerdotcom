@@ -10,10 +10,13 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-export async function GET() {
+export async function GET(request) {
   const baseUrl = 'https://10tracker.com';
+  const timestamp = new Date().toISOString();
+  const { searchParams } = new URL(request.url);
+  const forceRefresh = searchParams.get('refresh') === 'true';
   
-  console.log('Generating sitemap for:', baseUrl);
+  console.log(`Generating sitemap for: ${baseUrl} at ${timestamp}${forceRefresh ? ' (FORCE REFRESH)' : ''}`);
   
   // Static pages
   const staticPages = [
@@ -64,6 +67,7 @@ export async function GET() {
   console.log(`Total pages in sitemap: ${allPages.length} (${staticPages.length} static + ${articles.length} articles)`);
 
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated at ${timestamp} -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${allPages
   .map(page => {
@@ -81,7 +85,10 @@ ${allPages
   return new Response(sitemap, {
     headers: {
       'Content-Type': 'application/xml',
-      'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Last-Modified': new Date().toUTCString(),
     },
   });
 }
