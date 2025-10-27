@@ -18,6 +18,7 @@ import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TaskList } from '@tiptap/extension-task-list';
 import { TaskItem } from '@tiptap/extension-task-item';
+import EmbedExtension from './EmbedExtension';
 import { 
   Bold, 
   Italic, 
@@ -47,7 +48,10 @@ import {
   Minus,
   Plus,
   Type,
-  X
+  X,
+  Video,
+  MessageCircle,
+  Instagram
 } from 'lucide-react';
 
 const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }) => {
@@ -106,6 +110,7 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
       TaskItem.configure({
         nested: true,
       }),
+      EmbedExtension,
     ],
     content: content || '',
     onUpdate: ({ editor }) => {
@@ -182,6 +187,33 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
   const setHighlight = useCallback((color) => {
     editor.chain().focus().setHighlight({ color }).run();
     setShowHighlightPicker(false);
+  }, [editor]);
+
+  const addEmbed = useCallback((type) => {
+    const url = window.prompt(`Enter ${type} URL:`);
+    if (url && url.trim()) {
+      // Basic URL validation
+      const cleanUrl = url.trim();
+      let isValid = false;
+      
+      switch (type) {
+        case 'youtube':
+          isValid = cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be');
+          break;
+        case 'twitter':
+          isValid = cleanUrl.includes('twitter.com') || cleanUrl.includes('x.com');
+          break;
+        case 'instagram':
+          isValid = cleanUrl.includes('instagram.com');
+          break;
+      }
+      
+      if (isValid) {
+        editor.chain().focus().setEmbed({ url: cleanUrl, type }).run();
+      } else {
+        alert(`Please enter a valid ${type} URL`);
+      }
+    }
   }, [editor]);
 
   if (!isMounted || !editor) {
@@ -380,6 +412,10 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
         .ProseMirror h3[style*="text-align"], 
         .ProseMirror h4[style*="text-align"] {
           text-align: inherit !important;
+        }
+        .ProseMirror [data-type="embed"] {
+          margin: 1.5rem 0;
+          text-align: center;
         }
       `}</style>
       <div className="border border-neutral-200 rounded-lg overflow-hidden">
@@ -637,6 +673,28 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
             title="Add Image"
           >
             <ImageIcon className="w-4 h-4" />
+          </ToolbarButton>
+        </div>
+
+        {/* Embeds */}
+        <div className="flex gap-1 border-r border-neutral-300 pr-3 mr-3">
+          <ToolbarButton
+            onClick={() => addEmbed('youtube')}
+            title="Add YouTube Video"
+          >
+            <Video className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => addEmbed('twitter')}
+            title="Add Twitter Post"
+          >
+            <MessageCircle className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => addEmbed('instagram')}
+            title="Add Instagram Post"
+          >
+            <Instagram className="w-4 h-4" />
           </ToolbarButton>
         </div>
 

@@ -52,10 +52,12 @@
     "react-ga4": "^2.1.0",
     "react-helmet": "^6.1.0",
     "react-hot-toast": "^2.4.1",
+    "react-instagram-embed": "^3.0.0",
     "react-player": "^2.16.0",
     "react-syntax-highlighter": "^15.6.1",
     "react-to-pdf": "^2.0.0",
     "react-tooltip": "^5.29.1",
+    "react-twitter-embed": "^4.0.4",
     "recharts": "^2.15.2",
     "sanitize-html": "^2.15.0",
     "uuid": "^11.1.0"
