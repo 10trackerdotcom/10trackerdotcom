@@ -352,10 +352,7 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                       <Calendar className="w-3 h-3" />
                       {formatDate(article.created_at)}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
-                      {article.view_count || 0} views
-                    </div>
+                     
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {Math.ceil(article.content.length / 500)} min read
@@ -434,10 +431,7 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                         <Calendar className="w-4 h-4" />
                         {formatDate(article.created_at)}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Eye className="w-4 h-4" />
-                        {article.view_count || 0} views
-                      </div>
+                      
                       <div className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
                         {Math.ceil(article.content.length / 500)} min read

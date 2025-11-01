@@ -51,16 +51,22 @@ import {
   X,
   Video,
   MessageCircle,
-  Instagram
+  Instagram,
+  Split,
+  Eye,
+  FileCode
 } from 'lucide-react';
 
 const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." }) => {
   const [isMounted, setIsMounted] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
+  const [viewMode, setViewMode] = useState('split'); // 'wysiwyg', 'html', 'split'
+  const [htmlContent, setHtmlContent] = useState(content || '');
 
   useEffect(() => {
     setIsMounted(true);
+    setHtmlContent(content || '');
   }, []);
 
   const editor = useEditor({
@@ -115,6 +121,7 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
     content: content || '',
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
+      setHtmlContent(html);
       onChange(html);
     },
     editorProps: {
@@ -129,8 +136,22 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content || '');
+      setHtmlContent(content || '');
     }
   }, [content, editor]);
+
+  // Handle HTML code editor changes
+  const handleHtmlChange = useCallback((newHtml) => {
+    setHtmlContent(newHtml);
+    if (editor) {
+      try {
+        editor.commands.setContent(newHtml);
+        onChange(newHtml);
+      } catch (error) {
+        console.error('Error updating editor from HTML:', error);
+      }
+    }
+  }, [editor, onChange]);
 
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href;
@@ -149,9 +170,14 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
   }, [editor]);
 
   const addImage = useCallback(() => {
-    const url = window.prompt('Image URL');
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run();
+    const url = window.prompt('Enter Image URL:', '');
+    if (url && url.trim()) {
+      const imageUrl = url.trim();
+      editor.chain().focus().setImage({ 
+        src: imageUrl,
+        alt: 'Article image',
+        class: 'max-w-full h-auto rounded-lg my-4'
+      }).run();
     }
   }, [editor]);
 
@@ -190,7 +216,7 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
   }, [editor]);
 
   const addEmbed = useCallback((type) => {
-    const url = window.prompt(`Enter ${type} URL:`);
+    const url = window.prompt(`Enter ${type.charAt(0).toUpperCase() + type.slice(1)} URL:`, '');
     if (url && url.trim()) {
       // Basic URL validation
       const cleanUrl = url.trim();
@@ -211,7 +237,7 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
       if (isValid) {
         editor.chain().focus().setEmbed({ url: cleanUrl, type }).run();
       } else {
-        alert(`Please enter a valid ${type} URL`);
+        alert(`Please enter a valid ${type} URL (e.g., ${type === 'youtube' ? 'https://www.youtube.com/watch?v=...' : type === 'twitter' ? 'https://twitter.com/...' : 'https://www.instagram.com/p/...'})`);
       }
     }
   }, [editor]);
@@ -698,6 +724,31 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
           </ToolbarButton>
         </div>
 
+        {/* View Mode Toggle */}
+        <div className="flex gap-1 border-r border-neutral-300 pr-3 mr-3">
+          <ToolbarButton
+            onClick={() => setViewMode('split')}
+            isActive={viewMode === 'split'}
+            title="Split View (WYSIWYG + HTML)"
+          >
+            <Split className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => setViewMode('wysiwyg')}
+            isActive={viewMode === 'wysiwyg'}
+            title="WYSIWYG View Only"
+          >
+            <Eye className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => setViewMode('html')}
+            isActive={viewMode === 'html'}
+            title="HTML Code View Only"
+          >
+            <FileCode className="w-4 h-4" />
+          </ToolbarButton>
+        </div>
+
         {/* History */}
         <div className="flex gap-1">
           <ToolbarButton
@@ -716,12 +767,61 @@ const RichTextEditor = ({ content, onChange, placeholder = "Start writing..." })
       </div>
 
       {/* Editor Content */}
-      <div className="bg-white">
-        <EditorContent 
-          editor={editor} 
-          placeholder={placeholder}
-        />
-      </div>
+      {viewMode === 'split' && (
+        <div className="bg-white grid grid-cols-2 divide-x divide-neutral-200 min-h-[500px]">
+          {/* WYSIWYG Editor - Left */}
+          <div className="flex flex-col border-r border-neutral-200 overflow-hidden">
+            <div className="px-3 py-2 bg-neutral-50 border-b border-neutral-200 text-xs font-medium text-neutral-600 flex-shrink-0">
+              WYSIWYG Preview
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <EditorContent 
+                editor={editor} 
+                placeholder={placeholder}
+              />
+            </div>
+          </div>
+          {/* HTML Editor - Right */}
+          <div className="flex flex-col overflow-hidden">
+            <div className="px-3 py-2 bg-neutral-50 border-b border-neutral-200 text-xs font-medium text-neutral-600 flex-shrink-0">
+              HTML Code
+            </div>
+            <textarea
+              value={htmlContent}
+              onChange={(e) => handleHtmlChange(e.target.value)}
+              className="flex-1 w-full px-4 py-3 font-mono text-sm border-none outline-none resize-none bg-neutral-50 focus:bg-white overflow-y-auto leading-relaxed"
+              placeholder="Edit HTML code directly..."
+              spellCheck={false}
+              style={{ tabSize: 2 }}
+            />
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'wysiwyg' && (
+        <div className="bg-white">
+          <EditorContent 
+            editor={editor} 
+            placeholder={placeholder}
+          />
+        </div>
+      )}
+
+      {viewMode === 'html' && (
+        <div className="bg-white flex flex-col min-h-[500px]">
+          <div className="px-3 py-2 bg-neutral-50 border-b border-neutral-200 text-xs font-medium text-neutral-600 flex-shrink-0">
+            HTML Code Editor
+          </div>
+          <textarea
+            value={htmlContent}
+            onChange={(e) => handleHtmlChange(e.target.value)}
+            className="flex-1 w-full px-4 py-3 font-mono text-sm border-none outline-none resize-none overflow-y-auto leading-relaxed"
+            placeholder="Edit HTML code directly..."
+            spellCheck={false}
+            style={{ tabSize: 2 }}
+          />
+        </div>
+      )}
     </div>
     </>
   );

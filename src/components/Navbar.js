@@ -48,16 +48,16 @@ const Navbar = () => {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 bg-white z-50">
+    <nav className="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70 z-50 border-b border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-28">
+        <div className="flex justify-between h-20">
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 className="flex items-center"
               >
-                <span className="text-2xl font-bold text-gray-800">
+                <span className="text-xl md:text-2xl font-bold text-gray-800 tracking-tight">
                   10Tracker.com
                 </span>
               </motion.div>
@@ -65,12 +65,12 @@ const Navbar = () => {
           </div>
 
           {/* Desktop menu */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden md:flex items-center gap-1">
             {mainNavItems.map((item) => (
               <Link
                 key={item.name}
                 href={item.path}
-                className="group flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-amber-500 transition-colors duration-200"
+                className="group inline-flex items-center px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors"
               >
                 <span className="mr-1.5">{item.icon}</span>
                 {item.name}
@@ -86,16 +86,16 @@ const Navbar = () => {
             ))}
 
             {/* Integrated Auth component */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-3 pl-3 ml-3 border-l border-gray-200">
               {typeof window !== "undefined" && user ? (
                 <div className="relative">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center text-xl font-bold text-white">
+                    <div className="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-sm font-semibold text-white">
                       {(user?.fullName?.[0] || user?.primaryEmailAddress?.emailAddress?.[0] || '').toUpperCase()}
                     </div>
                     <button
                       onClick={toggleUserMenu}
-                      className="text-sm bg-gray-600 hover:bg-gray-700 px-3 py-1 rounded-full text-white transition-colors"
+                      className="text-sm bg-gray-800 hover:bg-gray-900 px-3 py-1 rounded-full text-white transition-colors"
                     >
                       {user?.fullName || user?.primaryEmailAddress?.emailAddress || "Profile"}
                     </button>
@@ -143,7 +143,7 @@ const Navbar = () => {
               ) : (
                 <button
                   onClick={() => setShowAuthModal(true)}
-                  className="bg-white text-gray-600 px-4 py-2 rounded-full font-medium hover:bg-gray-100 border border-gray-300 transition-colors"
+                  className="px-4 py-2 rounded-full font-medium bg-gray-900 text-white hover:bg-black transition-colors"
                 >
                   Sign In
                 </button>
@@ -152,10 +152,10 @@ const Navbar = () => {
           </div>
 
           {/* Mobile menu button */}
-          <div className="flex md:hidden items-center">
+          <div className="flex md:hidden items-center pr-1">
             <button
               onClick={toggleMenu}
-              className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-amber-500 focus:outline-none"
+              className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>

@@ -1,8 +1,9 @@
 import React, { Suspense } from 'react';
 import ArticlesPageClient from './ArticlesPageClient';
 
-export async function generateMetadata({ searchParams }) {
-  const category = searchParams?.category;
+export async function generateMetadata(props) {
+  const resolved = await props.searchParams;
+  const category = resolved?.category;
   
   const getCategoryName = (categorySlug) => {
     const names = {

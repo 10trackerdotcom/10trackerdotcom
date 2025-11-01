@@ -43,7 +43,8 @@ const ArticlesPageClient = () => {
       const response = await fetch('/api/articles?limit=50');
       const result = await response.json();
       if (result.success) {
-        setArticles(result.data);
+        const sorted = [...(result.data || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setArticles(sorted);
       }
     } catch (error) {
       console.error('Error fetching articles:', error);

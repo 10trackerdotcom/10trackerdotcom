@@ -26,10 +26,12 @@ const ArticlesSection = () => {
 
   const fetchArticles = async () => {
     try {
-      const response = await fetch('/api/articles?limit=20');
+      const response = await fetch('/api/articles?limit=50');
       const result = await response.json();
       if (result.success) {
-        setArticles(result.data);
+        const sorted = [...(result.data || [])]
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setArticles(sorted);
       }
     } catch (error) {
       console.error('Error fetching articles:', error);
@@ -50,26 +52,30 @@ const ArticlesSection = () => {
     }
   };
 
-  // Group articles by category
-  const groupedArticles = articles.reduce((acc, article) => {
+  // Ensure only latest 7 overall, then group those for display
+  const latestSeven = [...articles]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 7);
+
+  // Map latest by category
+  const latestByCategory = latestSeven.reduce((acc, article) => {
     const category = article.category || 'uncategorized';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
+    if (!acc[category]) acc[category] = [];
     acc[category].push(article);
     return acc;
   }, {});
 
-  // Get ALL categories with articles
-  const allCategories = Object.entries(groupedArticles)
-    .map(([category, articles]) => ({
-      category,
-      articles: articles, // Show all articles per category
-      totalCount: articles.length
-    }))
-    .filter(categoryData => categoryData.articles.length > 0); // Only show categories with articles
+  // Display ALL categories from API, even if there are 0 recent articles
+  const allCategories = (categories || []).map((cat) => ({
+    category: cat.slug,
+    name: cat.name,
+    color: cat.color,
+    // Show up to 3 latest items for each category from ALL fetched articles
+    articles: articles.filter(a => a.category === cat.slug).slice(0, 3),
+    totalCount: articles.filter(a => a.category === cat.slug).length,
+  }));
 
-  const filteredArticles = articles.filter(article => 
+  const filteredArticles = latestSeven.filter(article => 
     !selectedCategory || article.category === selectedCategory
   );
 
@@ -146,7 +152,7 @@ const ArticlesSection = () => {
         >
           {/* Categories Layout - Desktop */}
           <div className="hidden lg:block">
-            <div className={`grid gap-8 ${allCategories.length === 1 ? 'grid-cols-1 max-w-md mx-auto' : allCategories.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            <div className={`grid gap-8 ${allCategories.length <= 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
               {allCategories.map((categoryData, categoryIndex) => (
                 <motion.div
                   key={categoryData.category}
@@ -161,10 +167,10 @@ const ArticlesSection = () => {
                       <div className="flex items-center gap-3">
                         <div 
                           className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: getCategoryColor(categoryData.category) }}
+                          style={{ backgroundColor: categoryData.color || getCategoryColor(categoryData.category) }}
                         ></div>
                         <h3 className="text-lg font-semibold text-neutral-900">
-                          {getCategoryName(categoryData.category)}
+                          {categoryData.name || getCategoryName(categoryData.category)}
                         </h3>
                       </div>
                       <span className="text-sm text-neutral-500 bg-white px-2 py-1 rounded-full">
@@ -175,7 +181,19 @@ const ArticlesSection = () => {
 
                   {/* Articles List - Vertical */}
                   <div className="divide-y divide-neutral-100">
-                    {categoryData.articles.map((article, index) => (
+                    {categoryData.articles.length === 0 && (
+                      <div className="p-6 text-sm text-neutral-500 flex items-center justify-between">
+                        <span>No recent updates</span>
+                        <Link
+                          href={`/articles?category=${categoryData.category}`}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
+                        >
+                          View all
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
+                      </div>
+                    )}
+                    {categoryData.articles.length > 0 && categoryData.articles.map((article, index) => (
                       <motion.div
                         key={article.id}
                         initial={{ opacity: 0, x: -20 }}
@@ -231,7 +249,7 @@ const ArticlesSection = () => {
                       href={`/articles?category=${categoryData.category}`}
                       className="inline-flex items-center gap-2 w-full justify-center px-4 py-2 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
                     >
-                      View All {getCategoryName(categoryData.category)} Articles
+                      View All {categoryData.name || getCategoryName(categoryData.category)} Articles
                       <ArrowRight className="w-4 h-4" />
                     </Link>
                   </div>
@@ -257,10 +275,10 @@ const ArticlesSection = () => {
                       <div className="flex items-center gap-2">
                         <div 
                           className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: getCategoryColor(categoryData.category) }}
+                          style={{ backgroundColor: categoryData.color || getCategoryColor(categoryData.category) }}
                         ></div>
                         <h3 className="text-base font-semibold text-neutral-900">
-                          {getCategoryName(categoryData.category)}
+                          {categoryData.name || getCategoryName(categoryData.category)}
                         </h3>
                       </div>
                       <span className="text-xs text-neutral-500 bg-white px-2 py-1 rounded-full">
@@ -271,7 +289,19 @@ const ArticlesSection = () => {
 
                   {/* Articles List - Vertical */}
                   <div className="divide-y divide-neutral-100">
-                    {categoryData.articles.map((article, index) => (
+                    {categoryData.articles.length === 0 && (
+                      <div className="p-4 text-sm text-neutral-500 flex items-center justify-between">
+                        <span>No recent updates</span>
+                        <Link
+                          href={`/articles?category=${categoryData.category}`}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
+                        >
+                          View all
+                          <ArrowRight className="w-3 h-3" />
+                        </Link>
+                      </div>
+                    )}
+                    {categoryData.articles.length > 0 && categoryData.articles.map((article, index) => (
                       <motion.div
                         key={article.id}
                         initial={{ opacity: 0, x: -20 }}
@@ -327,7 +357,7 @@ const ArticlesSection = () => {
                       href={`/articles?category=${categoryData.category}`}
                       className="inline-flex items-center gap-2 w-full justify-center px-4 py-2 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
                     >
-                      View All {getCategoryName(categoryData.category)} Articles
+                      View All {categoryData.name || getCategoryName(categoryData.category)} Articles
                       <ArrowRight className="w-4 h-4" />
                     </Link>
                   </div>
