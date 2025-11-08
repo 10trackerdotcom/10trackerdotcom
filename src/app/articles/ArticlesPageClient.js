@@ -2,17 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import Link from 'next/link';
 import { 
   Calendar, 
-  Tag, 
   Eye, 
   ArrowRight,
   BookOpen,
-  Search,
-  Filter,
-  Grid3X3,
-  List
+  Search
 } from 'lucide-react';
 
 const ArticlesPageClient = () => {
@@ -22,7 +18,6 @@ const ArticlesPageClient = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => {
@@ -40,7 +35,7 @@ const ArticlesPageClient = () => {
 
   const fetchArticles = async () => {
     try {
-      const response = await fetch('/api/articles?limit=50');
+      const response = await fetch('/api/articles?limit=100');
       const result = await response.json();
       if (result.success) {
         const sorted = [...(result.data || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -66,33 +61,19 @@ const ArticlesPageClient = () => {
   };
 
   const getCategoryColor = (categorySlug) => {
-    const colors = {
-      'categories': '#3B82F6',
-      'latest-jobs': '#10B981',
-      'exam-results': '#F59E0B',
-      'answer-key': '#EF4444',
-      'admit-cards': '#8B5CF6',
-      'news': '#6B7280'
-    };
-    return colors[categorySlug] || '#3B82F6';
+    const category = categories.find(cat => cat.slug === categorySlug);
+    return category?.color || '#3B82F6';
   };
 
   const getCategoryName = (categorySlug) => {
-    const names = {
-      'categories': 'Categories',
-      'latest-jobs': 'Latest Jobs',
-      'exam-results': 'Exam Results',
-      'answer-key': 'Answer Key',
-      'admit-cards': 'Admit Cards',
-      'news': 'News'
-    };
-    return names[categorySlug] || categorySlug;
+    const category = categories.find(cat => cat.slug === categorySlug);
+    return category?.name || categorySlug;
   };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric'
     });
   };
@@ -122,8 +103,8 @@ const ArticlesPageClient = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-sm border border-neutral-200">
+      <div className="min-h-screen bg-white flex items-center justify-center py-16">
+        <div className="text-center">
           <div className="w-8 h-8 border-4 border-neutral-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-neutral-600">Loading articles...</p>
         </div>
@@ -132,68 +113,59 @@ const ArticlesPageClient = () => {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-white">
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-16 lg:py-24">
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-12"
-        >
-          <h1 className="text-4xl font-bold text-neutral-900 mb-4">
-            {selectedCategory ? `${getCategoryName(selectedCategory)} Articles` : 'Articles & Insights'}
-          </h1>
-          <p className="text-lg text-neutral-600 max-w-3xl mx-auto">
-            {selectedCategory 
-              ? `Explore all articles in the ${getCategoryName(selectedCategory)} category. Find the latest updates, tips, and insights.`
-              : 'Discover expert tips, strategies, and insights to enhance your exam preparation journey. Get the latest articles on CAT, GATE, UPSC, JEE, NEET and other competitive exams.'
-            }
-          </p>
-          {selectedCategory && (
-            <div className="mt-4">
-              <span 
-                className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-full"
-                style={{ 
-                  backgroundColor: getCategoryColor(selectedCategory) + '20',
-                  color: getCategoryColor(selectedCategory)
-                }}
-              >
-                <Tag className="w-4 h-4 mr-2" />
-                {getCategoryName(selectedCategory)}
-              </span>
+        <div className="mb-16 pb-8 border-b border-neutral-200">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-semibold text-neutral-900 mb-4 tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                {selectedCategory ? getCategoryName(selectedCategory) : 'Articles'}
+              </h1>
+              <p className="text-lg text-neutral-600 max-w-2xl" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                {selectedCategory 
+                  ? `Explore all articles in the ${getCategoryName(selectedCategory)} category.`
+                  : 'Latest insights, tips, and strategies for your exam preparation.'
+                }
+              </p>
             </div>
-          )}
-        </motion.div>
+            {selectedCategory && (
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: getCategoryColor(selectedCategory) }}
+                ></div>
+                <span className="text-sm text-neutral-500 bg-neutral-100 px-3 py-1 rounded-full">
+                  {sortedArticles.length} articles
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Search and Filters */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="bg-white rounded-xl border border-neutral-200 p-6 mb-8 shadow-sm"
-        >
+        <div className="mb-12">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-neutral-400 w-5 h-5" />
                 <input
                   type="text"
                   placeholder="Search articles..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-neutral-800 focus:border-transparent"
+                  className="w-full pl-12 pr-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 text-neutral-900 placeholder-neutral-400 bg-white"
                 />
               </div>
             </div>
 
             {/* Category Filter */}
-            <div className="lg:w-64">
+            <div className="lg:w-56">
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-neutral-800 focus:border-transparent"
+                className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 text-neutral-800 bg-white"
               >
                 <option value="">All Categories</option>
                 {categories.map((category) => (
@@ -209,7 +181,7 @@ const ArticlesPageClient = () => {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-neutral-800 focus:border-transparent"
+                className="w-full px-4 py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 text-neutral-800 bg-white"
               >
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
@@ -218,104 +190,122 @@ const ArticlesPageClient = () => {
               </select>
             </div>
           </div>
-        </motion.div>
+          
+          {/* Results Count */}
+          <div className="mt-4">
+            <p className="text-sm text-neutral-500">
+              {sortedArticles.length} {sortedArticles.length === 1 ? 'article' : 'articles'}
+              {searchTerm && ` matching "${searchTerm}"`}
+            </p>
+          </div>
+        </div>
 
-        {/* Results Count */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="mb-6"
-        >
-          <p className="text-neutral-600">
-            Showing {sortedArticles.length} of {articles.length} articles
-            {searchTerm && ` for "${searchTerm}"`}
-            {selectedCategory && ` in ${getCategoryName(selectedCategory)}`}
-          </p>
-        </motion.div>
-
-        {/* Articles Grid */}
+        {/* Articles Grid - Highly Populated Desktop */}
         {sortedArticles.length > 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-          >
-            {sortedArticles.map((article, index) => (
-              <motion.article
-                key={article.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-                whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                className="bg-white rounded-xl border border-neutral-200 overflow-hidden hover:border-neutral-300 transition-all duration-200 group"
-              >
-                {article.featured_image_url && (
-                  <div className="aspect-video overflow-hidden">
+          <>
+            {/* Desktop: 3-column grid */}
+            <div className="hidden lg:grid lg:grid-cols-3 gap-8">
+              {sortedArticles.map((article, index) => (
+                <Link
+                  key={article.id}
+                  href={`/articles/${article.slug}`}
+                  className="block border-b border-neutral-200 pb-8 hover:opacity-80 transition-opacity group"
+                >
+                  {article.featured_image_url && (
                     <img
                       src={article.featured_image_url}
                       alt={article.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-48 object-cover rounded mb-4 border border-neutral-200"
                     />
-                  </div>
-                )}
-                
-                <div className="p-6">
+                  )}
+                  
                   <div className="flex items-center gap-2 mb-3">
-                    <span 
-                      className="px-2 py-1 text-xs font-medium rounded-full"
-                      style={{ 
-                        backgroundColor: getCategoryColor(article.category) + '20',
-                        color: getCategoryColor(article.category)
-                      }}
-                    >
+                    <div 
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: getCategoryColor(article.category) }}
+                    ></div>
+                    <span className="text-xs font-medium text-neutral-600">
                       {getCategoryName(article.category)}
                     </span>
                     {article.is_featured && (
-                      <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                        Featured
+                      <span className="text-xs font-medium text-amber-600">
+                        • Featured
                       </span>
                     )}
                   </div>
 
-                  <h3 className="text-lg font-semibold text-neutral-900 mb-2 line-clamp-2 group-hover:text-neutral-700 transition-colors">
+                  <h3 className="text-lg font-semibold text-neutral-900 mb-3 line-clamp-2 group-hover:text-neutral-700 transition-colors leading-snug" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
                     {article.title}
                   </h3>
                   
-                  <p className="text-sm text-neutral-600 mb-4 line-clamp-3">
-                    {article.excerpt || article.content.substring(0, 100)}...
-                  </p>
+                  {article.excerpt && (
+                    <p className="text-sm text-neutral-600 mb-4 line-clamp-2 leading-relaxed">
+                      {article.excerpt}
+                    </p>
+                  )}
 
-                  <div className="flex items-center justify-between text-xs text-neutral-500 mb-4">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
+                  <div className="flex items-center gap-4 text-xs text-neutral-500">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
                       {formatDate(article.created_at)}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
+                    <div className="flex items-center gap-1.5">
+                      <Eye className="w-3.5 h-3.5" />
                       {article.view_count || 0} views
                     </div>
                   </div>
+                </Link>
+              ))}
+            </div>
 
-                  <a
-                    href={`/articles/${article.slug}`}
-                    className="inline-flex items-center gap-2 w-full justify-center px-4 py-2 text-sm font-medium text-neutral-800 border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors duration-200"
-                  >
-                    Read Article
-                    <ArrowRight className="w-4 h-4" />
-                  </a>
-                </div>
-              </motion.article>
-            ))}
-          </motion.div>
+            {/* Mobile: 1-column list */}
+            <div className="lg:hidden space-y-8">
+              {sortedArticles.map((article, index) => (
+                <Link
+                  key={article.id}
+                  href={`/articles/${article.slug}`}
+                  className="block border-b border-neutral-200 pb-8 hover:opacity-80 transition-opacity group"
+                >
+                  <div className="flex items-start gap-4">
+                    {article.featured_image_url && (
+                      <img
+                        src={article.featured_image_url}
+                        alt={article.title}
+                        className="w-24 h-24 object-cover rounded flex-shrink-0 border border-neutral-200"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div 
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: getCategoryColor(article.category) }}
+                        ></div>
+                        <span className="text-xs font-medium text-neutral-600">
+                          {getCategoryName(article.category)}
+                        </span>
+                        {article.is_featured && (
+                          <span className="text-xs font-medium text-amber-600">
+                            • Featured
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-base font-semibold text-neutral-900 mb-2 line-clamp-2 group-hover:text-neutral-700 transition-colors leading-snug" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                        {article.title}
+                      </h3>
+                      <div className="flex items-center gap-4 text-xs text-neutral-500">
+                        <span>{formatDate(article.created_at)}</span>
+                        <span>•</span>
+                        <span>{article.view_count || 0} views</span>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-600 flex-shrink-0 mt-1 transition-colors" />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
         ) : (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="text-center py-12"
-          >
+          <div className="text-center py-16">
             <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <BookOpen className="w-8 h-8 text-neutral-400" />
             </div>
@@ -331,12 +321,12 @@ const ArticlesPageClient = () => {
                   setSearchTerm('');
                   setSelectedCategory('');
                 }}
-                className="px-6 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors"
+                className="px-6 py-3 border border-neutral-300 text-neutral-800 rounded-lg font-medium hover:bg-neutral-50 transition-colors"
               >
                 Clear Filters
               </button>
             )}
-          </motion.div>
+          </div>
         )}
       </div>
     </div>

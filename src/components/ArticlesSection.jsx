@@ -1,16 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { 
   Calendar, 
-  Tag, 
   Eye, 
   ArrowRight,
-  BookOpen,
-  Clock,
-  User
+  BookOpen
 } from 'lucide-react';
 
 const ArticlesSection = () => {
@@ -26,7 +22,7 @@ const ArticlesSection = () => {
 
   const fetchArticles = async () => {
     try {
-      const response = await fetch('/api/articles?limit=50');
+      const response = await fetch('/api/articles?limit=100');
       const result = await response.json();
       if (result.success) {
         const sorted = [...(result.data || [])]
@@ -70,8 +66,8 @@ const ArticlesSection = () => {
     category: cat.slug,
     name: cat.name,
     color: cat.color,
-    // Show up to 3 latest items for each category from ALL fetched articles
-    articles: articles.filter(a => a.category === cat.slug).slice(0, 3),
+    // Show more articles on desktop (6) vs mobile (3)
+    articles: articles.filter(a => a.category === cat.slug).slice(0, 6),
     totalCount: articles.filter(a => a.category === cat.slug).length,
   }));
 
@@ -115,275 +111,253 @@ const ArticlesSection = () => {
   }
 
   return (
-    <section className="py-16">
-      <div className="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section>
+      <div className="w-full">
         {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          viewport={{ once: true }}
-          className="text-center mb-12"
-        >
-          <h2 className="text-3xl md:text-4xl font-semibold text-neutral-900 mb-4 tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
-            Latest Updates
-          </h2>
-          <p className="text-lg text-neutral-600 max-w-2xl mx-auto" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
-            Stay updated with the latest insights, tips, and strategies for your exam preparation.
+        <div className="mb-16 pb-8 border-b border-neutral-200">
+          <h1 className="text-4xl md:text-5xl font-semibold text-neutral-900 mb-4 tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+            Articles
+          </h1>
+          <p className="text-lg text-neutral-600 max-w-2xl" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+            Latest insights, tips, and strategies for your exam preparation.
           </p>
-        </motion.div>
+        </div>
 
-        {/* Controls */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          viewport={{ once: true }}
-          className="mb-8"
-        >
-        </motion.div>
-
-        {/* Articles Display */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          viewport={{ once: true }}
-        >
-          {/* Categories Layout - Desktop */}
-          <div className="hidden lg:block">
-            <div className={`grid gap-8 ${allCategories.length <= 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-              {allCategories.map((categoryData, categoryIndex) => (
-                <motion.div
-                  key={categoryData.category}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: categoryIndex * 0.1 }}
-                  className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm"
-                >
-                  {/* Category Header */}
-                  <div className="bg-gradient-to-r from-neutral-50 to-neutral-100 px-6 py-4 border-b border-neutral-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: categoryData.color || getCategoryColor(categoryData.category) }}
-                        ></div>
-                        <h3 className="text-lg font-semibold text-neutral-900">
-                          {categoryData.name || getCategoryName(categoryData.category)}
-                        </h3>
-                      </div>
-                      <span className="text-sm text-neutral-500 bg-white px-2 py-1 rounded-full">
-                        {categoryData.totalCount}
-                      </span>
-                    </div>
+        {/* Articles Display - Highly Populated Desktop Layout */}
+        {/* Desktop: Grid layout with more content */}
+        <div className="hidden lg:block">
+          <div className="grid grid-cols-2 gap-12">
+            {allCategories.map((categoryData, categoryIndex) => (
+              <div key={categoryData.category} className="border-b border-neutral-200 pb-10 last:border-b-0">
+                {/* Category Header */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div 
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: categoryData.color || getCategoryColor(categoryData.category) }}
+                    ></div>
+                    <h2 className="text-xl font-semibold text-neutral-900" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                      {categoryData.name || getCategoryName(categoryData.category)}
+                    </h2>
+                    <span className="text-xs text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full">
+                      {categoryData.totalCount}
+                    </span>
                   </div>
+                </div>
 
-                  {/* Articles List - Vertical */}
-                  <div className="divide-y divide-neutral-100">
-                    {categoryData.articles.length === 0 && (
-                      <div className="p-6 text-sm text-neutral-500 flex items-center justify-between">
-                        <span>No recent updates</span>
-                        <Link
-                          href={`/articles?category=${categoryData.category}`}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
-                        >
-                          View all
-                          <ArrowRight className="w-4 h-4" />
-                        </Link>
-                      </div>
-                    )}
-                    {categoryData.articles.length > 0 && categoryData.articles.map((article, index) => (
-                      <motion.div
-                        key={article.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: (categoryIndex * 0.1) + (index * 0.05) }}
-                        className="p-4 hover:bg-neutral-50 transition-colors duration-200 group"
+                {/* Articles List - Compact Grid */}
+                <div className="space-y-2">
+                  {categoryData.articles.length === 0 ? (
+                    <div className="text-sm text-neutral-500 py-6">
+                      <p className="mb-3">No articles in this category yet.</p>
+                      <Link
+                        href={`/articles?category=${categoryData.category}`}
+                        className="inline-flex items-center gap-1 text-sm text-neutral-700 hover:text-neutral-900 transition-colors"
                       >
-                        <div className="flex items-start gap-3">
-                          {article.featured_image_url && (
-                            <img
-                              src={article.featured_image_url}
-                              alt={article.title}
-                              className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold text-neutral-900 mb-1 line-clamp-2 group-hover:text-neutral-700 transition-colors" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
-                              {article.title}
-                            </h4>
-                            <div className="flex items-center gap-3 text-xs text-neutral-500 mb-2">
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {formatDate(article.created_at)}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Eye className="w-3 h-3" />
-                                {article.view_count || 0}
+                        View all
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  ) : (
+                    <>
+                      {/* First article - larger with image */}
+                      {categoryData.articles[0] && (
+                        <Link
+                          key={categoryData.articles[0].id}
+                          href={`/articles/${categoryData.articles[0].slug}`}
+                          className="block p-3 -mx-3 rounded-lg hover:bg-neutral-50 transition-colors group border border-transparent hover:border-neutral-200"
+                        >
+                          <div className="flex items-start gap-3">
+                            {categoryData.articles[0].featured_image_url && (
+                              <img
+                                src={categoryData.articles[0].featured_image_url}
+                                alt={categoryData.articles[0].title}
+                                className="w-24 h-24 object-cover rounded flex-shrink-0 border border-neutral-200"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-semibold text-neutral-900 mb-2 group-hover:text-neutral-700 transition-colors line-clamp-2 leading-snug" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                                {categoryData.articles[0].title}
+                              </h3>
+                              <div className="flex items-center gap-3 text-xs text-neutral-500">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {formatDate(categoryData.articles[0].created_at)}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Eye className="w-3 h-3" />
+                                  {categoryData.articles[0].view_count || 0}
+                                </div>
+                                {categoryData.articles[0].is_featured && (
+                                  <span className="text-xs font-medium text-amber-600">
+                                    Featured
+                                  </span>
+                                )}
                               </div>
                             </div>
+                          </div>
+                        </Link>
+                      )}
+                      
+                      {/* Remaining articles - compact list */}
+                      {categoryData.articles.slice(1).map((article, index) => (
+                        <Link
+                          key={article.id}
+                          href={`/articles/${article.slug}`}
+                          className="block py-2.5 px-2 -mx-2 rounded hover:bg-neutral-50 transition-colors group"
+                        >
+                          <div className="flex items-start gap-3">
+                            {article.featured_image_url && (
+                              <img
+                                src={article.featured_image_url}
+                                alt={article.title}
+                                className="w-14 h-14 object-cover rounded flex-shrink-0 border border-neutral-200"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-medium text-neutral-900 mb-1 group-hover:text-neutral-700 transition-colors line-clamp-2 leading-snug" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                                {article.title}
+                              </h3>
+                              <div className="flex items-center gap-3 text-xs text-neutral-500">
+                                <span>{formatDate(article.created_at)}</span>
+                                <span>•</span>
+                                <span>{article.view_count || 0} views</span>
+                                {article.is_featured && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-amber-600 font-medium">Featured</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <ArrowRight className="w-4 h-4 text-neutral-300 group-hover:text-neutral-500 flex-shrink-0 mt-1 transition-colors" />
+                          </div>
+                        </Link>
+                      ))}
+                    </>
+                  )}
+                </div>
+
+                {/* View All Link */}
+                {categoryData.totalCount > categoryData.articles.length && (
+                  <div className="mt-5 pt-5 border-t border-neutral-100">
+                    <Link
+                      href={`/articles?category=${categoryData.category}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
+                    >
+                      View all {categoryData.name || getCategoryName(categoryData.category)} articles
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Mobile: Vertical layout */}
+        <div className="lg:hidden space-y-10">
+          {allCategories.map((categoryData, categoryIndex) => (
+            <div key={categoryData.category} className="border-b border-neutral-200 pb-10 last:border-b-0">
+              {/* Category Header */}
+              <div className="mb-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div 
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: categoryData.color || getCategoryColor(categoryData.category) }}
+                  ></div>
+                  <h2 className="text-xl font-semibold text-neutral-900" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                    {categoryData.name || getCategoryName(categoryData.category)}
+                  </h2>
+                  <span className="text-sm text-neutral-500">
+                    ({categoryData.totalCount})
+                  </span>
+                </div>
+              </div>
+
+              {/* Articles List - Mobile */}
+              <div className="space-y-1">
+                {categoryData.articles.length === 0 ? (
+                  <div className="text-sm text-neutral-500 py-8">
+                    <p className="mb-4">No articles in this category yet.</p>
+                    <Link
+                      href={`/articles?category=${categoryData.category}`}
+                      className="inline-flex items-center gap-1 text-sm text-neutral-700 hover:text-neutral-900 transition-colors"
+                    >
+                      View all
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+                ) : (
+                  categoryData.articles.slice(0, 3).map((article, index) => (
+                    <Link
+                      key={article.id}
+                      href={`/articles/${article.slug}`}
+                      className="block py-4 px-2 -mx-2 rounded-lg hover:bg-neutral-50 transition-colors group"
+                    >
+                      <div className="flex items-start gap-4">
+                        {article.featured_image_url && (
+                          <img
+                            src={article.featured_image_url}
+                            alt={article.title}
+                            className="w-20 h-20 object-cover rounded flex-shrink-0 border border-neutral-200"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-medium text-neutral-900 mb-2 group-hover:text-neutral-700 transition-colors line-clamp-2" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                            {article.title}
+                          </h3>
+                          <div className="flex items-center gap-4 text-sm text-neutral-500">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {formatDate(article.created_at)}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Eye className="w-3.5 h-3.5" />
+                              {article.view_count || 0} views
+                            </div>
                             {article.is_featured && (
-                              <span className="inline-block px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                              <span className="text-xs font-medium text-amber-600">
                                 Featured
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="mt-2">
-                          <Link
-                            href={`/articles/${article.slug}`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 hover:text-neutral-900 transition-colors duration-200"
-                          >
-                            Read More
-                            <ArrowRight className="w-3 h-3" />
-                          </Link>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  {/* View All Button for Category */}
-                  <div className="px-6 py-4 bg-neutral-50 border-t border-neutral-100">
-                    <Link
-                      href={`/articles?category=${categoryData.category}`}
-                      className="inline-flex items-center gap-2 w-full justify-center px-4 py-2 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
-                    >
-                      View All {categoryData.name || getCategoryName(categoryData.category)} Articles
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-
-          {/* Mobile Categories Layout */}
-          <div className="lg:hidden">
-            <div className="space-y-6">
-              {allCategories.map((categoryData, categoryIndex) => (
-                <motion.div
-                  key={categoryData.category}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: categoryIndex * 0.1 }}
-                  className="bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm"
-                >
-                  {/* Category Header */}
-                  <div className="bg-gradient-to-r from-neutral-50 to-neutral-100 px-4 py-3 border-b border-neutral-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: categoryData.color || getCategoryColor(categoryData.category) }}
-                        ></div>
-                        <h3 className="text-base font-semibold text-neutral-900">
-                          {categoryData.name || getCategoryName(categoryData.category)}
-                        </h3>
+                        <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-600 flex-shrink-0 mt-1 transition-colors" />
                       </div>
-                      <span className="text-xs text-neutral-500 bg-white px-2 py-1 rounded-full">
-                        {categoryData.totalCount}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Articles List - Vertical */}
-                  <div className="divide-y divide-neutral-100">
-                    {categoryData.articles.length === 0 && (
-                      <div className="p-4 text-sm text-neutral-500 flex items-center justify-between">
-                        <span>No recent updates</span>
-                        <Link
-                          href={`/articles?category=${categoryData.category}`}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
-                        >
-                          View all
-                          <ArrowRight className="w-3 h-3" />
-                        </Link>
-                      </div>
-                    )}
-                    {categoryData.articles.length > 0 && categoryData.articles.map((article, index) => (
-                      <motion.div
-                        key={article.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: (categoryIndex * 0.1) + (index * 0.05) }}
-                        className="p-3 hover:bg-neutral-50 transition-colors duration-200 group"
-                      >
-                        <div className="flex items-start gap-3">
-                          {article.featured_image_url && (
-                            <img
-                              src={article.featured_image_url}
-                              alt={article.title}
-                              className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold text-neutral-900 mb-1 line-clamp-2 group-hover:text-neutral-700 transition-colors" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
-                              {article.title}
-                            </h4>
-                            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {formatDate(article.created_at)}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Eye className="w-3 h-3" />
-                                {article.view_count || 0}
-                              </div>
-                            </div>
-                            {article.is_featured && (
-                              <span className="inline-block px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                                Featured
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-2">
-                          <Link
-                            href={`/articles/${article.slug}`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 hover:text-neutral-900 transition-colors duration-200"
-                          >
-                            Read More
-                            <ArrowRight className="w-3 h-3" />
-                          </Link>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  {/* View All Button for Category */}
-                  <div className="px-4 py-3 bg-neutral-50 border-t border-neutral-100">
-                    <Link
-                      href={`/articles?category=${categoryData.category}`}
-                      className="inline-flex items-center gap-2 w-full justify-center px-4 py-2 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-white transition-colors duration-200"
-                    >
-                      View All {categoryData.name || getCategoryName(categoryData.category)} Articles
-                      <ArrowRight className="w-4 h-4" />
                     </Link>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
+                  ))
+                )}
+              </div>
 
-        {/* View All Button */}
+              {/* View All Link */}
+              {categoryData.totalCount > categoryData.articles.length && (
+                <div className="mt-6 pt-6 border-t border-neutral-100">
+                  <Link
+                    href={`/articles?category=${categoryData.category}`}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors"
+                  >
+                    View all {categoryData.name || getCategoryName(categoryData.category)} articles
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* View All Link */}
         {allCategories.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            viewport={{ once: true }}
-            className="text-center mt-12"
-          >
+          <div className="mt-16 pt-8 border-t border-neutral-200">
             <Link
               href="/articles"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors duration-200 font-medium"
+              className="inline-flex items-center gap-2 text-base font-medium text-neutral-700 hover:text-neutral-900 transition-colors"
             >
               <BookOpen className="w-5 h-5" />
-              View All Articles
+              View all articles
+              <ArrowRight className="w-4 h-4" />
             </Link>
-          </motion.div>
+          </div>
         )}
       </div>
     </section>
