@@ -33,6 +33,7 @@
     "@tiptap/starter-kit": "^3.7.2",
     "axios": "^1.7.9",
     "better-react-mathjax": "^2.3.0",
+    "cheerio": "^1.1.2",
     "crypto": "^1.0.1",
     "firebase": "^11.4.0",
     "flowbite": "^2.5.2",

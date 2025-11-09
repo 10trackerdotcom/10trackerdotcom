@@ -269,25 +269,28 @@ const progress = useMemo(() => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-gray-50">
+      <div className="min-h-screen bg-neutral-50">
         <Suspense fallback={<div>Loading metadata...</div>}>
           <MetaDataJobs
             seoTitle={`${category?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} Practice Tracker`}
             seoDescription={`Practice ${category?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} PYQs Topic-Wise Chapter-Wise Date-Wise questions with detailed solutions.`}
           />
         </Suspense>
-        <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }} 
-          animate={{ scale: 1, opacity: 1 }} 
-          transition={{ duration: 0.5 }} 
-          className="bg-white p-8 rounded-xl shadow-lg flex items-center space-x-6 max-w-md"
-        >
-          <div className="h-12 w-12 rounded-full border-4 border-t-indigo-600 border-indigo-100 animate-spin"></div>
-          <div>
-            <h3 className="text-xl font-medium text-gray-800 mb-1">Loading your dashboard</h3>
-            <p className="text-gray-500 text-sm">Please wait a moment...</p>
-          </div>
-        </motion.div>
+        <Navbar />
+        <div className="flex justify-center items-center min-h-[60vh] pt-20 px-4">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            transition={{ duration: 0.5 }} 
+            className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-neutral-200 flex items-center space-x-3 sm:space-x-6 max-w-md w-full"
+          >
+            <div className="w-6 h-6 sm:w-12 sm:h-12 rounded-full border-4 border-t-indigo-600 border-indigo-100 animate-spin flex-shrink-0"></div>
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-xl font-medium text-neutral-900 mb-1">Loading your dashboard</h3>
+              <p className="text-xs sm:text-sm text-neutral-600">Please wait a moment...</p>
+            </div>
+          </motion.div>
+        </div>
       </div>
     );
   }
@@ -303,12 +306,12 @@ const progress = useMemo(() => {
       <Suspense fallback={<div>Loading navbar...</div>}>
         <Navbar/>
       </Suspense>
-      <div className="min-h-screen bg-neutral-50 pt-20 pb-12 mt-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-h-screen bg-neutral-50 pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-12 sm:pb-16">
+          <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">{category?.toUpperCase()} Practice Tracker</h1>
-              <p className="text-neutral-600 mt-1">Track your progress across {allSubtopics.length} topics and {totalQuestions} questions</p>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-neutral-900">{category?.toUpperCase()} Practice Tracker</h1>
+              <p className="text-sm sm:text-base text-neutral-600 mt-1">Track your progress across {allSubtopics.length} topics and {totalQuestions} questions</p>
             </div>
             <button 
               onClick={() => setShowMobileOptions(true)} 
@@ -324,7 +327,7 @@ const progress = useMemo(() => {
 
           <div className="flex flex-col md:flex-row md:space-x-8">
             <div className="hidden md:block w-64 flex-shrink-0">
-              <div className="sticky top-24 bg-white rounded-xl shadow-sm border border-neutral-200 p-6">
+              <div className="sticky top-20 bg-white rounded-xl shadow-sm border border-neutral-200 p-4 sm:p-6">
                 <h3 className="text-lg font-medium text-neutral-900 mb-4">{category?.toUpperCase()} Tracker</h3>
                 {user ? (
                   <div className="mb-6 bg-neutral-100 rounded-xl p-4">
@@ -474,11 +477,11 @@ const progress = useMemo(() => {
             </AnimatePresence>
 
             <div className="md:flex-1">
-              <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-4 mb-6">
+              <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-4 sm:p-6 mb-4 sm:mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between">
                   <div className="mb-4 sm:mb-0">
-                    <h2 className="text-xl font-semibold text-neutral-900">{activeSubject || "All Subjects"}</h2>
-                    <p className="text-sm text-neutral-500 mt-1">
+                    <h2 className="text-lg sm:text-xl font-semibold text-neutral-900">{activeSubject || "All Subjects"}</h2>
+                    <p className="text-xs sm:text-sm text-neutral-500 mt-1">
                       {activeSubject 
                         ? `${data.find((s) => s.subject === activeSubject)?.subtopics?.length || 0} topics` 
                         : `${allSubtopics.length} topics across ${data.length} subjects`}
@@ -491,7 +494,7 @@ const progress = useMemo(() => {
                     <input
                       type="text"
                       placeholder="Search topics (Ctrl + /)"
-                      className="pl-10 pr-4 py-2 w-full border border-neutral-300 rounded-lg focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                      className="pl-10 pr-10 sm:pr-4 py-2.5 sm:py-2 w-full border border-neutral-300 rounded-lg focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800 text-sm sm:text-base"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       ref={searchInputRef}
@@ -522,7 +525,7 @@ const progress = useMemo(() => {
                 />
               </Suspense>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {/* // Updated topic card rendering with correct field names */}
 {filteredAndSortedTopics.map((topic) => {
   const topicProgress = userProgress[topic.title] || { 
@@ -544,13 +547,13 @@ const progress = useMemo(() => {
                       transition={{ duration: 0.2 }}
                       className={`bg-white rounded-xl shadow-sm border ${
                         isCompleted ? "border-green-200" : completedCount > 0 ? "border-neutral-300" : "border-neutral-200"
-                      }`}
+                      } hover:shadow-md transition-shadow duration-200`}
                     >
-                      <div className="p-5">
+                      <div className="p-4 sm:p-5">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <h3 className="text-lg font-medium text-gray-900">{topic.title.replace(/-/g, " ")}</h3>
-                            <div className="text-sm text-gray-500">{topic.parentSubject}</div>
+                        <h3 className="text-base sm:text-lg font-medium text-neutral-900 line-clamp-2">{topic.title.replace(/-/g, " ")}</h3>
+                        <div className="text-xs sm:text-sm text-neutral-500">{topic.parentSubject}</div>
                           </div>
                           {isCompleted && (
                             <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
@@ -595,12 +598,12 @@ const progress = useMemo(() => {
               </div>
 
               {filteredAndSortedTopics.length === 0 && (
-                <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-neutral-200">
-                  <svg className="h-12 w-12 text-neutral-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center border border-neutral-200">
+                  <svg className="h-10 w-10 sm:h-12 sm:w-12 text-neutral-400 mx-auto mb-3 sm:mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="text-lg font-medium text-neutral-900 mb-2">No topics found</h3>
-                  <p className="text-neutral-500">{searchTerm ? `No topics match "${searchTerm}"` : "No topics available"}</p>
+                  <h3 className="text-base sm:text-lg font-medium text-neutral-900 mb-2">No topics found</h3>
+                  <p className="text-sm sm:text-base text-neutral-500">{searchTerm ? `No topics match "${searchTerm}"` : "No topics available"}</p>
                 </div>
               )}
             </div>
