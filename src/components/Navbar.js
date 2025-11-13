@@ -39,10 +39,11 @@ const Navbar = () => {
 
   const mainNavItems = [
     { name: "Home", path: "/", icon: <Home size={18} /> },
-    { name: "About Us", path: "https://10tracker.com/about/", icon: <Info size={18} /> },
-    { name: "Contact Us", path: "https://10tracker.com/contact/", icon: <Mail size={18} /> },
-    { name: "Privacy Policy", path: "https://10tracker.com/privacy/", icon: <Shield size={18} /> },
-    { name: "Terms of Service", path: "https://10tracker.com/terms/", icon: <FileText size={18} /> },
+    { name: "About Us", path: "/about-us", icon: <Info size={18} /> },
+    { name: "Contact Us", path: "/contact-us", icon: <Mail size={18} /> },
+    { name: "Privacy Policy", path: "/privacy-policy", icon: <Shield size={18} /> },
+    { name: "Terms of Service", path: "/terms-and-services", icon: <FileText size={18} /> },
+    { name: "Disclaimer", path: "/disclaimer", icon: <FileText size={18} /> },
     // { name: "Exams", path: "/exams", icon: <BookOpen size={18} /> },
     // { name: "Dashboard", path: "/dashboard", icon: <BarChart2 size={18} /> },
   ];

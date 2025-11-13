@@ -30,13 +30,15 @@ const Footer = () => {
           <div className="flex flex-col md:items-center md:justify-center">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Company</p>
             <div className="flex flex-wrap items-center gap-4">
-              <Link href="https://10tracker.com/about/" className="text-sm text-gray-700 hover:text-gray-900">About</Link>
+              <Link href="/about-us" className="text-sm text-gray-700 hover:text-gray-900">About</Link>
               <span className="hidden md:inline text-gray-300">•</span>
-              <Link href="https://10tracker.com/contact/" className="text-sm text-gray-700 hover:text-gray-900">Contact</Link>
+              <Link href="/contact-us" className="text-sm text-gray-700 hover:text-gray-900">Contact</Link>
               <span className="hidden md:inline text-gray-300">•</span>
-              <Link href="https://10tracker.com/privacy/" className="text-sm text-gray-700 hover:text-gray-900">Privacy</Link>
+              <Link href="/privacy-policy" className="text-sm text-gray-700 hover:text-gray-900">Privacy</Link>
               <span className="hidden md:inline text-gray-300">•</span>
-              <Link href="https://10tracker.com/terms/" className="text-sm text-gray-700 hover:text-gray-900">Terms</Link>
+              <Link href="/terms-and-services" className="text-sm text-gray-700 hover:text-gray-900">Terms</Link>
+              <span className="hidden md:inline text-gray-300">•</span>
+              <Link href="/disclaimer" className="text-sm text-gray-700 hover:text-gray-900">Disclaimer</Link>
             </div>
           </div>
 
@@ -54,7 +56,7 @@ const Footer = () => {
               </button>
             </form>
             <div className="flex items-center gap-3 pt-1">
-              <Link href="mailto:support@10tracker.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Mail size={16} /></Link>
+              <Link href="mailto:jain10gunjan@gmail.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Mail size={16} /></Link>
               <Link href="https://twitter.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Twitter size={16} /></Link>
               <Link href="https://facebook.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Facebook size={16} /></Link>
               <Link href="https://instagram.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Instagram size={16} /></Link>
@@ -68,9 +70,11 @@ const Footer = () => {
         <div className="border-t border-gray-100 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
           <p className="text-xs text-gray-600">&copy; {new Date().getFullYear()} 10tracker. All rights reserved.</p>
           <div className="flex items-center gap-4 text-xs text-gray-600">
-            <Link href="https://10tracker.com/privacy/" className="hover:text-gray-900">Privacy</Link>
+            <Link href="/privacy-policy" className="hover:text-gray-900">Privacy</Link>
             <span className="text-gray-300">•</span>
-            <Link href="https://10tracker.com/terms/" className="hover:text-gray-900">Terms</Link>
+            <Link href="/terms-and-services" className="hover:text-gray-900">Terms</Link>
+            <span className="text-gray-300">•</span>
+            <Link href="/disclaimer" className="hover:text-gray-900">Disclaimer</Link>
             <span className="text-gray-300">•</span>
             <Link href="/articles" className="hover:text-gray-900">Articles</Link>
           </div>

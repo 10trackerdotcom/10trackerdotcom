@@ -116,7 +116,7 @@ const ArticlesSection = () => {
         {/* Header */}
         <div className="mb-16 pb-8 border-b border-neutral-200">
           <h1 className="text-4xl md:text-5xl font-semibold text-neutral-900 mb-4 tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
-            Articles
+            Latest Updates
           </h1>
           <p className="text-lg text-neutral-600 max-w-2xl" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
             Latest insights, tips, and strategies for your exam preparation.
@@ -126,7 +126,7 @@ const ArticlesSection = () => {
         {/* Articles Display - Highly Populated Desktop Layout */}
         {/* Desktop: Grid layout with more content */}
         <div className="hidden lg:block">
-          <div className="grid grid-cols-2 gap-12">
+          <div className="grid grid-cols-3 gap-12">
             {allCategories.map((categoryData, categoryIndex) => (
               <div key={categoryData.category} className="border-b border-neutral-200 pb-10 last:border-b-0">
                 {/* Category Header */}
