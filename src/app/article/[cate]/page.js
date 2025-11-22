@@ -1,13 +1,11 @@
 import React, { Suspense } from 'react';
-import ArticlesPageClient from './ArticlesPageClient';
+import CategoryPageClient from './CategoryPageClient';
 
-export async function generateMetadata(props) {
-  const resolved = await props.searchParams;
-  const category = resolved?.category;
+export async function generateMetadata({ params }) {
+  const { cate } = await params;
   
   const getCategoryName = (categorySlug) => {
     const names = {
-      'categories': 'Categories',
       'latest-jobs': 'Latest Jobs',
       'exam-results': 'Exam Results',
       'answer-key': 'Answer Key',
@@ -28,30 +26,23 @@ export async function generateMetadata(props) {
     return descriptions[categorySlug] || `Explore all articles in the ${getCategoryName(categorySlug)} category.`;
   };
 
-  const title = category ? `${getCategoryName(category)} Articles - 10tracker` : 'Articles & Insights - Exam Preparation Tips | 10tracker';
-  const description = category ? getCategoryDescription(category) : 'Discover expert tips, strategies, and insights to enhance your exam preparation journey. Get the latest articles on CAT, GATE, UPSC, JEE, NEET and other competitive exams.';
-  const url = category ? `/articles?category=${category}` : '/articles';
+  const title = `${getCategoryName(cate)} - 10tracker`;
+  const description = getCategoryDescription(cate);
 
   return {
     title,
     description,
     keywords: [
-      'exam preparation tips',
-      'CAT preparation articles',
-      'GATE exam strategies',
-      'UPSC preparation guides',
-      'JEE study tips',
-      'NEET preparation articles',
-      'competitive exam insights',
-      'study strategies',
-      'exam success tips',
-      ...(category ? [getCategoryName(category).toLowerCase(), `${getCategoryName(category)} articles`] : [])
+      getCategoryName(cate).toLowerCase(),
+      `${getCategoryName(cate)} articles`,
+      'exam preparation',
+      'competitive exams'
     ],
     openGraph: {
       title,
       description,
       type: 'website',
-      url,
+      url: `/article/${cate}`,
       images: [
         {
           url: '/og-articles.jpg',
@@ -70,17 +61,18 @@ export async function generateMetadata(props) {
   };
 }
 
-export default function ArticlesPage() {
+export default function CategoryPage({ params }) {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50 flex items-center justify-center">
         <div className="bg-white p-8 rounded-lg shadow-sm border border-neutral-200">
           <div className="w-8 h-8 border-4 border-neutral-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-neutral-600">Loading articles...</p>
         </div>
       </div>
     }>
-      <ArticlesPageClient />
+      <CategoryPageClient params={params} />
     </Suspense>
   );
 }
+

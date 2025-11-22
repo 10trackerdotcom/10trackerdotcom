@@ -31,7 +31,7 @@ export default function DisclaimerPage() {
                 General Information
               </h2>
               <p className="leading-relaxed mb-4">
-                The information provided on 10tracker (the "Platform") is for general informational purposes only. While we strive to keep the information up to date and correct, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability of the information, products, services, or related graphics contained on the Platform.
+                The information provided on 10tracker (the &quot;Platform&quot;) is for general informational purposes only. While we strive to keep the information up to date and correct, we make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability, or availability of the information, products, services, or related graphics contained on the Platform.
               </p>
             </section>
 
@@ -52,7 +52,7 @@ export default function DisclaimerPage() {
                 No Warranty
               </h2>
               <p className="leading-relaxed mb-4">
-                The Platform is provided "as is" without any warranties, expressed or implied. We disclaim all warranties, including but not limited to:
+                The Platform is provided &quot;as is&quot; without any warranties, expressed or implied. We disclaim all warranties, including but not limited to:
               </p>
               <ul className="list-disc list-inside space-y-2 ml-4">
                 <li>Warranties of merchantability and fitness for a particular purpose</li>

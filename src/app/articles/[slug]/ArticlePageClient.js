@@ -7,6 +7,7 @@ import {
   Tag, 
   Eye, 
   ArrowLeft,
+  ArrowRight,
   Share2,
   BookOpen,
   Clock,
@@ -302,43 +303,27 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           margin: 1.5rem 0;
         }
       `}</style>
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-gradient-to-b from-white to-neutral-50">
         <div className="max-w-7xl mx-auto pt-6">
           <div className="flex">
             {/* Sidebar */}
-            <div className="hidden lg:block w-64 bg-white border-r border-gray-200 sticky top-0 h-screen overflow-y-auto">
+            <div className="hidden lg:block w-72 bg-white border-r border-neutral-200 sticky top-24 h-[calc(100vh-6rem)] overflow-y-auto">
               <div className="p-6">
                 <div className="mb-6">
                   <Link
-                    href="/articles"
-                    className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                    href={`/article/${article.category}`}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors duration-200 group"
                   >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to Articles
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Back to {getCategoryName(article.category)}
                   </Link>
                 </div>
                 
-                {/* Table of Contents */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">On this page</h3>
-                  <nav className="space-y-1">
-                    <a href="#overview" className="block text-sm text-gray-600 hover:text-gray-900 py-1">
-                      Overview
-                    </a>
-                    <a href="#details" className="block text-sm text-gray-600 hover:text-gray-900 py-1">
-                      Details
-                    </a>
-                    <a href="#related" className="block text-sm text-gray-600 hover:text-gray-900 py-1">
-                      Related Articles
-                    </a>
-                  </nav>
-                </div>
-
-                {/* Category Info */}
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-center gap-2 mb-2">
+                {/* Category Info Card */}
+                <div className="bg-gradient-to-br from-neutral-50 to-white rounded-xl p-4 border border-neutral-200 mb-6">
+                  <div className="flex items-center gap-2 mb-3">
                     <span 
-                      className="px-2 py-1 text-xs font-medium rounded-full"
+                      className="px-3 py-1.5 text-xs font-semibold rounded-full"
                       style={{ 
                         backgroundColor: getCategoryColor(article.category) + '20',
                         color: getCategoryColor(article.category)
@@ -347,32 +332,52 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                       {getCategoryName(article.category)}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {formatDate(article.created_at)}
+                  <div className="space-y-2 text-xs text-neutral-600">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-neutral-400" />
+                      <span className="font-medium">{formatDate(article.created_at)}</span>
                     </div>
                      
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {Math.ceil(article.content.length / 500)} min read
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-neutral-400" />
+                      <span className="font-medium">{Math.ceil(article.content.length / 500)} min read</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-neutral-400" />
+                      <span className="font-medium">{article.view_count || 0} views</span>
                     </div>
                   </div>
+                </div>
+
+                {/* Table of Contents */}
+                <div className="bg-white rounded-xl p-4 border border-neutral-200">
+                  <h3 className="text-sm font-semibold text-neutral-900 mb-3">On this page</h3>
+                  <nav className="space-y-1.5">
+                    <a href="#overview" className="block text-sm text-neutral-600 hover:text-neutral-900 py-1.5 px-2 rounded-lg hover:bg-neutral-50 transition-colors">
+                      Overview
+                    </a>
+                    <a href="#details" className="block text-sm text-neutral-600 hover:text-neutral-900 py-1.5 px-2 rounded-lg hover:bg-neutral-50 transition-colors">
+                      Details
+                    </a>
+                    <a href="#related" className="block text-sm text-neutral-600 hover:text-neutral-900 py-1.5 px-2 rounded-lg hover:bg-neutral-50 transition-colors">
+                      Related Articles
+                    </a>
+                  </nav>
                 </div>
               </div>
             </div>
 
             {/* Main Content */}
             <div className="flex-1">
-              <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-12 py-8 lg:py-12">
                 {/* Mobile Back Button */}
                 <div className="lg:hidden mb-6">
                   <Link
-                    href="/articles"
-                    className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                    href={`/article/${article.category}`}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors duration-200 group"
                   >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to Articles
+                    <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    Back to {getCategoryName(article.category)}
                   </Link>
                 </div>
 
@@ -381,11 +386,11 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6 }}
-                  className="mb-8"
+                  className="mb-12"
                 >
                   {/* Featured Image */}
                   {article.featured_image_url && (
-                    <div className="aspect-video overflow-hidden rounded-lg mb-6">
+                    <div className="aspect-video overflow-hidden rounded-2xl mb-8 border border-neutral-200 shadow-sm">
                       <img
                         src={article.featured_image_url}
                         alt={article.title}
@@ -395,9 +400,9 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                   )}
 
                   {/* Meta Information */}
-                  <div className="flex items-center gap-4 mb-4">
+                  <div className="flex items-center gap-3 mb-6 flex-wrap">
                     <span 
-                      className="px-3 py-1 text-sm font-medium rounded-full"
+                      className="px-3 py-1.5 text-sm font-semibold rounded-full"
                       style={{ 
                         backgroundColor: getCategoryColor(article.category) + '20',
                         color: getCategoryColor(article.category)
@@ -406,40 +411,45 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                       {getCategoryName(article.category)}
                     </span>
                     {article.is_featured && (
-                      <span className="px-3 py-1 text-sm font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                        Featured
+                      <span className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-r from-amber-100 to-amber-50 text-amber-800 rounded-full border border-amber-200">
+                        ⭐ Featured
                       </span>
                     )}
                   </div>
 
                   {/* Title */}
-                  <h1 className="text-3xl font-normal text-gray-900 mb-4 leading-tight">
+                  <h1 className="text-4xl lg:text-5xl font-semibold text-neutral-900 mb-6 leading-tight tracking-tight" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
                     {article.title}
                   </h1>
 
                   {/* Excerpt */}
                   {article.excerpt && (
-                    <p className="text-lg text-gray-600 mb-6 leading-relaxed">
+                    <p className="text-xl text-neutral-600 mb-8 leading-relaxed" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
                       {article.excerpt}
                     </p>
                   )}
 
                   {/* Article Meta */}
-                  <div className="flex items-center justify-between text-sm text-gray-500 mb-8 pb-6 border-b border-gray-200">
-                    <div className="flex items-center gap-6">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        {formatDate(article.created_at)}
+                  <div className="flex items-center justify-between text-sm text-neutral-600 mb-10 pb-8 border-b border-neutral-200">
+                    <div className="flex items-center gap-6 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-neutral-400" />
+                        <span className="font-medium">{formatDate(article.created_at)}</span>
                       </div>
                       
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {Math.ceil(article.content.length / 500)} min read
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-neutral-400" />
+                        <span className="font-medium">{Math.ceil(article.content.length / 500)} min read</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-neutral-400" />
+                        <span className="font-medium">{article.view_count || 0} views</span>
                       </div>
                     </div>
                     <button
                       onClick={shareArticle}
-                      className="flex items-center gap-1 px-3 py-1 text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                      className="flex items-center gap-2 px-4 py-2 text-neutral-700 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-all duration-200 font-medium"
                     >
                       <Share2 className="w-4 h-4" />
                       Share
@@ -454,13 +464,13 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
 
                   {/* Tags */}
                   {article.tags && article.tags.length > 0 && (
-                    <div className="mt-8 pt-6 border-t border-gray-200">
-                      <h3 className="text-sm font-medium text-gray-900 mb-3">Tags</h3>
+                    <div className="mt-10 pt-8 border-t border-neutral-200">
+                      <h3 className="text-sm font-semibold text-neutral-900 mb-4 uppercase tracking-wider">Tags</h3>
                       <div className="flex flex-wrap gap-2">
                         {article.tags.map((tag, index) => (
                           <span
                             key={index}
-                            className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-full"
+                            className="px-4 py-2 text-sm font-medium bg-neutral-100 text-neutral-700 rounded-full hover:bg-neutral-200 transition-colors cursor-default"
                           >
                             {tag}
                           </span>
@@ -479,7 +489,12 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                     className="mt-16"
                     id="related"
                   >
-                    <h2 className="text-xl font-medium text-gray-900 mb-6">Related Articles</h2>
+                    <div className="mb-8 pb-4 border-b border-neutral-200">
+                      <h2 className="text-2xl font-semibold text-neutral-900" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                        Related Articles
+                      </h2>
+                      <p className="text-sm text-neutral-600 mt-2">Continue reading more articles</p>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {relatedArticles.slice(0, 3).map((relatedArticle, index) => (
                         <motion.article
@@ -487,23 +502,23 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.3, delay: 0.3 + index * 0.1 }}
-                          whileHover={{ y: -2, transition: { duration: 0.2 } }}
-                          className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition-all duration-200 group"
+                          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                          className="bg-white border border-neutral-200 rounded-xl overflow-hidden hover:border-neutral-300 hover:shadow-lg transition-all duration-300 group"
                         >
                           {relatedArticle.featured_image_url && (
                             <div className="aspect-video overflow-hidden">
                               <img
                                 src={relatedArticle.featured_image_url}
                                 alt={relatedArticle.title}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                               />
                             </div>
                           )}
                           
-                          <div className="p-4">
-                            <div className="flex items-center gap-2 mb-2">
+                          <div className="p-5">
+                            <div className="flex items-center gap-2 mb-3">
                               <span 
-                                className="px-2 py-1 text-xs font-medium rounded-full"
+                                className="px-2.5 py-1 text-xs font-semibold rounded-full"
                                 style={{ 
                                   backgroundColor: getCategoryColor(relatedArticle.category) + '20',
                                   color: getCategoryColor(relatedArticle.category)
@@ -513,30 +528,33 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                               </span>
                             </div>
 
-                            <h3 className="text-base font-medium text-gray-900 mb-2 line-clamp-2 group-hover:text-gray-700 transition-colors">
+                            <h3 className="text-base font-semibold text-neutral-900 mb-2 line-clamp-2 group-hover:text-neutral-700 transition-colors leading-snug" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
                               {relatedArticle.title}
                             </h3>
                             
-                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                              {relatedArticle.excerpt || relatedArticle.content.substring(0, 100)}...
-                            </p>
+                            {relatedArticle.excerpt && (
+                              <p className="text-sm text-neutral-600 mb-4 line-clamp-2 leading-relaxed">
+                                {relatedArticle.excerpt}
+                              </p>
+                            )}
 
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-                              <div className="flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
+                            <div className="flex items-center justify-between text-xs text-neutral-500 mb-4">
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5" />
                                 {formatDate(relatedArticle.created_at)}
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Eye className="w-3 h-3" />
+                              <div className="flex items-center gap-1.5">
+                                <Eye className="w-3.5 h-3.5" />
                                 {relatedArticle.view_count || 0}
                               </div>
                             </div>
 
                             <Link
                               href={`/articles/${relatedArticle.slug}`}
-                              className="inline-flex items-center gap-1 w-full justify-center px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors duration-200"
+                              className="inline-flex items-center gap-2 w-full justify-center px-4 py-2.5 text-sm font-medium text-neutral-700 border border-neutral-300 rounded-lg hover:bg-neutral-50 hover:border-neutral-400 transition-all duration-200 group/link"
                             >
                               Read Article
+                              <ArrowRight className="w-4 h-4 group-hover/link:translate-x-1 transition-transform" />
                             </Link>
                           </div>
                         </motion.article>

@@ -19,7 +19,7 @@ export default function ContactUsPage() {
             Contact Us
           </h1>
           <p className="text-lg text-neutral-600 max-w-2xl mx-auto" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
-            Have a question or feedback? We'd love to hear from you. Reach out to us through any of the channels below.
+            Have a question or feedback? We&apos;d love to hear from you. Reach out to us through any of the channels below.
           </p>
         </div>
 

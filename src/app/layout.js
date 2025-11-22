@@ -2,6 +2,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import MobileBottomMenu from "@/components/MobileBottomMenu";
 import Script from "next/script";
 import { ClerkProvider } from "@clerk/nextjs";
 import { AuthProvider } from "./context/AuthContext";
@@ -140,10 +141,11 @@ export default function RootLayout({ children }) {
             <AuthModalWrapper />
             <Navbar/>
             <ProfileModal />
-            <div className="pt-24">
+            <div className="pt-24 pb-16 md:pb-0">
               {children}
             </div>
             <Footer />
+            <MobileBottomMenu />
             <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
           </AuthProvider>
         </ClerkProvider>
