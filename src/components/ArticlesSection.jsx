@@ -333,7 +333,7 @@ const ArticlesSection = () => {
               {categoryData.totalCount > 0 && (
                 <div className="mt-5 pt-4 border-t border-neutral-200">
                   <Link
-                    href={`/category/${categoryData.category}`}
+                    href={`/article/${categoryData.category}`}
                     className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors group"
                   >
                     View all {categoryData.name || getCategoryName(categoryData.category)} articles
