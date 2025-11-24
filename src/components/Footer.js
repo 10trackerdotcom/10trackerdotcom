@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect } from "react";
 import Link from "next/link";
-import { Facebook, Twitter, Youtube, Instagram, Github, Mail } from "lucide-react";
+import { Twitter, Instagram, Mail } from "lucide-react";
 import ReactGA from "react-ga4";
 
 const Footer = () => {
@@ -12,71 +12,65 @@ const Footer = () => {
   }, []);
 
   return (
-    <footer className="bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70 border-t border-gray-100">
+    <footer className="bg-white border-t border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Top: Brand + Links */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 pb-8">
-          {/* Brand */}
-          <div className="space-y-3">
-            <Link href="/" className="inline-flex items-center">
-              <span className="text-xl md:text-2xl font-bold text-gray-800 tracking-tight">10Tracker.com</span>
-            </Link>
-            <p className="text-sm text-gray-600 leading-6">
-              Practice smarter. Stay updated with curated articles, results, answer keys, admit cards and the latest exam news.
+        {/* Top: Brand + Social */}
+        <div className="flex flex-col md:flex-row justify-between items-start gap-8 md:gap-12 pb-8">
+          {/* Brand Section - Left */}
+          <div className="flex flex-col items-start max-w-md">
+            <div className="border-2 border-black px-3 md:px-4 py-1.5 mb-3">
+              <span className="text-lg md:text-xl font-semibold text-black tracking-wide">
+                10tracker.com
+              </span>
+            </div>
+            <p className="text-sm md:text-base text-gray-600 italic font-light leading-relaxed">
+              Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.
             </p>
           </div>
 
-          {/* Company Links (Horizontal) */}
-          <div className="flex flex-col md:items-center md:justify-center">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Company</p>
-            <div className="flex flex-wrap items-center gap-4">
-              <Link href="/about-us" className="text-sm text-gray-700 hover:text-gray-900">About</Link>
-              <span className="hidden md:inline text-gray-300">•</span>
-              <Link href="/contact-us" className="text-sm text-gray-700 hover:text-gray-900">Contact</Link>
-              <span className="hidden md:inline text-gray-300">•</span>
-              <Link href="/privacy-policy" className="text-sm text-gray-700 hover:text-gray-900">Privacy</Link>
-              <span className="hidden md:inline text-gray-300">•</span>
-              <Link href="/terms-and-services" className="text-sm text-gray-700 hover:text-gray-900">Terms</Link>
-              <span className="hidden md:inline text-gray-300">•</span>
-              <Link href="/disclaimer" className="text-sm text-gray-700 hover:text-gray-900">Disclaimer</Link>
-            </div>
-          </div>
-
-          {/* Newsletter / Social */}
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Stay in touch</p>
-            <form className="flex gap-2">
-              <input
-                type="email"
-                placeholder="Email for updates"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm"
-              />
-              <button type="submit" className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-black">
-                Subscribe
-              </button>
-            </form>
-            <div className="flex items-center gap-3 pt-1">
-              <Link href="mailto:jain10gunjan@gmail.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Mail size={16} /></Link>
-              <Link href="https://twitter.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Twitter size={16} /></Link>
-              <Link href="https://facebook.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Facebook size={16} /></Link>
-              <Link href="https://instagram.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Instagram size={16} /></Link>
-              <Link href="https://youtube.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Youtube size={16} /></Link>
-              <Link href="https://github.com" className="p-2 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"><Github size={16} /></Link>
+          {/* Social Section - Right */}
+          <div className="flex flex-col items-start md:items-end">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-700 mb-4">STAY IN TOUCH</p>
+            <div className="flex items-center gap-3">
+              <Link 
+                href="mailto:jain10gunjan@gmail.com" 
+                className="w-10 h-10 rounded-md border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+                aria-label="Email"
+              >
+                <Mail size={18} />
+              </Link>
+              <Link 
+                href="https://x.com/10Tracker" 
+                className="w-10 h-10 rounded-md border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+                aria-label="Twitter"
+              >
+                <Twitter size={18} />
+              </Link>
+              <Link 
+                href="https://www.instagram.com/10tracker/" 
+                className="w-10 h-10 rounded-md border border-gray-300 bg-white flex items-center justify-center text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
+                aria-label="Instagram"
+              >
+                <Instagram size={18} />
+              </Link>
             </div>
           </div>
         </div>
 
+        {/* Divider */}
+        <div className="border-t border-gray-200 my-6"></div>
+
         {/* Bottom bar */}
-        <div className="border-t border-gray-100 pt-6 flex flex-col md:flex-row items-center justify-between gap-3">
-          <p className="text-xs text-gray-600">&copy; {new Date().getFullYear()} 10tracker. All rights reserved.</p>
-          <div className="flex items-center gap-4 text-xs text-gray-600">
-            <Link href="/privacy-policy" className="hover:text-gray-900">Privacy</Link>
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3 pt-2">
+          <p className="text-xs text-gray-500">&copy; {new Date().getFullYear()} 10tracker. All rights reserved.</p>
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            <Link href="/privacy-policy" className="hover:text-gray-700 transition-colors">Privacy</Link>
             <span className="text-gray-300">•</span>
-            <Link href="/terms-and-services" className="hover:text-gray-900">Terms</Link>
+            <Link href="/terms-and-services" className="hover:text-gray-700 transition-colors">Terms</Link>
             <span className="text-gray-300">•</span>
-            <Link href="/disclaimer" className="hover:text-gray-900">Disclaimer</Link>
+            <Link href="/disclaimer" className="hover:text-gray-700 transition-colors">Disclaimer</Link>
             <span className="text-gray-300">•</span>
-            <Link href="/articles" className="hover:text-gray-900">Articles</Link>
+            <Link href="/articles" className="hover:text-gray-700 transition-colors">Articles</Link>
           </div>
         </div>
       </div>

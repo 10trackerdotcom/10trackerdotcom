@@ -6,8 +6,8 @@ import LmsPlatform from "@/components/LmsPlatform";
 // import Image from "next/image";
 
 export const metadata = {
-  title: '10tracker - Exam Preparation Platform',
-  description: 'Comprehensive exam preparation platform for CAT, GATE, UPSC, JEE, NEET and other competitive exams. Practice MCQs, mock tests, and access study materials.',
+  title: '10tracker - Latest Updates in 10 Points',
+  description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
   keywords: [
     'exam preparation',
     'CAT exam',
@@ -21,8 +21,8 @@ export const metadata = {
     'study materials'
   ],
   openGraph: {
-    title: '10tracker - Exam Preparation Platform',
-    description: 'Comprehensive exam preparation platform for CAT, GATE, UPSC, JEE, NEET and other competitive exams. Practice MCQs, mock tests, and access study materials.',
+    title: '10tracker - Latest Updates in 10 Points',
+    description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
     type: 'website',
     url: process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.in',
     images: [
@@ -30,14 +30,14 @@ export const metadata = {
         url: '/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: '10tracker - Exam Preparation Platform',
+        alt: '10tracker - Latest Updates in 10 Points',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: '10tracker - Exam Preparation Platform',
-    description: 'Comprehensive exam preparation platform for CAT, GATE, UPSC, JEE, NEET and other competitive exams.',
+    title: '10tracker - Latest Updates in 10 Points',
+    description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
     images: ['/og-image.jpg'],
   },
 };

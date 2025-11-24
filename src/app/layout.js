@@ -23,10 +23,10 @@ const geistMono = localFont({
 
 export const metadata = {
   title: {
-    default: '10tracker - Exam Preparation Platform',
+    default: '10tracker - Latest Updates in 10 Points',
     template: '%s | 10tracker'
   },
-  description: 'Comprehensive exam preparation platform for CAT, GATE, UPSC, JEE, NEET and other competitive exams. Practice MCQs, mock tests, and access study materials.',
+  description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
   keywords: [
     'exam preparation',
     'CAT exam',
@@ -55,22 +55,22 @@ export const metadata = {
     type: 'website',
     locale: 'en_US',
     url: process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.in',
-    title: '10tracker - Exam Preparation Platform',
-    description: 'Comprehensive exam preparation platform for CAT, GATE, UPSC, JEE, NEET and other competitive exams. Practice MCQs, mock tests, and access study materials.',
+    title: '10tracker - Latest Updates in 10 Points',
+    description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
     siteName: '10tracker',
     images: [
       {
         url: '/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: '10tracker - Exam Preparation Platform',
+        alt: '10tracker - Latest Updates in 10 Points',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: '10tracker - Exam Preparation Platform',
-    description: 'Comprehensive exam preparation platform for CAT, GATE, UPSC, JEE, NEET and other competitive exams.',
+    title: '10tracker - Latest Updates in 10 Points',
+    description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
     images: ['/og-image.jpg'],
     creator: '@10tracker',
   },
@@ -120,6 +120,8 @@ export default function RootLayout({ children }) {
           strategy="lazyOnload"
           crossOrigin="anonymous"
         />
+        {/* <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2873018653456315"
+     crossorigin="anonymous"></script> */}
         
         {/* Additional SEO Meta Tags */}
         <meta name="viewport" content="width=device-width, initial-scale=1" />

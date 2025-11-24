@@ -79,11 +79,16 @@ const Navbar = () => {
               <Link href="/" className="flex items-center">
                 <motion.div
                   whileHover={{ scale: 1.05 }}
-                  className="flex items-center"
+                  className="flex flex-col items-start"
                 >
-                  <span className="text-xl md:text-2xl font-bold text-gray-800 tracking-tight">
-                    10Tracker.com
-                  </span>
+                  <div className="border-2 border-black px-3  md:px-4">
+                    <span className="text-lg md:text-xl font-semibold text-black tracking-wide">
+                      10tracker.com
+                    </span>
+                  </div>
+                  <p className="text-sm md:text-base text-gray-700 italic font-light">
+                    Latest Updates in 10 Points
+                  </p>
                 </motion.div>
               </Link>
             </div>
