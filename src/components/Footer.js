@@ -34,7 +34,7 @@ const Footer = () => {
               </span>
             </div>
             <p className="text-sm md:text-base text-gray-600 italic font-light leading-relaxed">
-              Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.
+            Practice smarter, track better, achieve more. Get daily problems, contest challenges, and comprehensive exam preparation all in one place.
             </p>
           </div>
 

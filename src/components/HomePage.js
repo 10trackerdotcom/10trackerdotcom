@@ -60,7 +60,7 @@ export default function HomePage() {
         <section className="bg-neutral-50 border-b border-neutral-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20 lg:py-24">
             <div className="text-center">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-100 border border-neutral-200 mb-6">
+              <div className="inline-flex items-center gap-2 px-4 mt-8 py-4 sm:py-2 rounded-full sm:bg-neutral-100 border border-neutral-200 mb-6">
                 <Sparkles className="w-4 h-4 text-neutral-600" />
                 <span className="text-sm font-medium text-neutral-700">Your Path to Success Starts Here</span>
               </div>
@@ -199,13 +199,13 @@ export default function HomePage() {
                 <p className="text-neutral-600 mb-4">
                   Get fresh problems every day tailored to your exam. Build consistency and improve gradually.
                 </p>
-                <Link
+                {/* <Link
                   href="/daily-practice"
                   className="text-neutral-800 font-semibold hover:text-neutral-900 flex items-center gap-2"
                 >
                   Start Daily Practice
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </Link> */}
               </div>
 
               {/* Contest */}
@@ -217,13 +217,13 @@ export default function HomePage() {
                 <p className="text-neutral-600 mb-4">
                   Compete with peers in timed contests. Test your skills and climb the leaderboard.
                 </p>
-                <Link
+                {/* <Link
                   href="/contests"
                   className="text-neutral-800 font-semibold hover:text-neutral-900 flex items-center gap-2"
                 >
                   Join Contest
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </Link> */}
               </div>
 
               {/* Progress Tracker */}
@@ -235,13 +235,13 @@ export default function HomePage() {
                 <p className="text-neutral-600 mb-4">
                   Track your performance across topics. Identify strengths and areas for improvement.
                 </p>
-                <Link
+                {/* <Link
                   href="/dashboard"
                   className="text-neutral-800 font-semibold hover:text-neutral-900 flex items-center gap-2"
                 >
                   View Dashboard
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </Link> */}
               </div>
 
               {/* Topic-wise Practice */}
@@ -253,13 +253,13 @@ export default function HomePage() {
                 <p className="text-neutral-600 mb-4">
                   Practice questions organized by topics. Master each concept before moving forward.
                 </p>
-                <Link
+                {/* <Link
                   href="/practice"
                   className="text-neutral-800 font-semibold hover:text-neutral-900 flex items-center gap-2"
                 >
                   Start Practice
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </Link> */}
               </div>
 
               {/* Detailed Solutions */}
@@ -271,13 +271,13 @@ export default function HomePage() {
                 <p className="text-neutral-600 mb-4">
                   Every question comes with step-by-step solutions. Learn the right approach and methodology.
                 </p>
-                <Link
+                {/* <Link
                   href="/solutions"
                   className="text-neutral-800 font-semibold hover:text-neutral-900 flex items-center gap-2"
                 >
                   Explore Solutions
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </Link> */}
               </div>
 
               {/* Performance Analytics */}
@@ -289,13 +289,13 @@ export default function HomePage() {
                 <p className="text-neutral-600 mb-4">
                   Get insights into your performance with detailed analytics and recommendations.
                 </p>
-                <Link
+                {/* <Link
                   href="/analytics"
                   className="text-neutral-800 font-semibold hover:text-neutral-900 flex items-center gap-2"
                 >
                   View Analytics
                   <ArrowRight className="w-4 h-4" />
-                </Link>
+                </Link> */}
               </div>
             </div>
           </div>
