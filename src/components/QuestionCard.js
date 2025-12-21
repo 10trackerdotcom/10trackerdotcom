@@ -166,7 +166,7 @@ const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, o
         animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
         transition={{ duration: 0.2 }}
-      className={`bg-white rounded-xl shadow-md border border-gray-100/50 ${isCompleted ? "ring-2 ring-emerald-500/20" : "hover:shadow-lg"}`}
+      className={`bg-white rounded-xl shadow-md border border-gray-100/50 overflow-hidden ${isCompleted ? "ring-2 ring-emerald-500/20" : "hover:shadow-lg"}`}
     >
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <MathJaxContext config={config}>
@@ -183,31 +183,43 @@ const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, o
                 </div>
               </div>
             </div>
-            {questionData.year && (
-              <div className="px-2 py-1 rounded-lg bg-white/80 text-xs font-semibold text-gray-700 border border-gray-200/60">{questionData.year}</div>
-            )}
-            {isAdmin && !isEditing && (
-              <button onClick={onStartEditing} className="px-2 py-1 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-semibold flex items-center space-x-1">
-                <Edit3 size={12} />
-                <span>Edit</span>
-              </button>
-            )}
-            <div className={`px-2 py-1 rounded-lg text-xs font-semibold border ${state.isAnswered ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-              {state.isAnswered ? (
-                <div className="flex items-center space-x-1">
-                  <CheckCircle size={12} className="text-emerald-600" />
-                  <span>Completed</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-1">
-                  <Clock size={12} className="text-amber-600" />
-                  <span>Pending</span>
-              </div>
+            <div className="flex items-center gap-2">
+              {questionData.year && (
+                <div className="px-2 py-1 rounded-lg bg-white/80 text-xs font-semibold text-gray-700 border border-gray-200/60">{questionData.year}</div>
               )}
+              {!state.isAnswered && !questionData.options_A && (
+                <button 
+                  onClick={handleSkip}
+                  className="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium flex items-center space-x-1 transition-colors"
+                  title="Mark as complete"
+                >
+                  <CheckCircle size={12} />
+                  <span>Mark Complete</span>
+                </button>
+              )}
+              {isAdmin && !isEditing && (
+                <button onClick={onStartEditing} className="px-2 py-1 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-semibold flex items-center space-x-1">
+                  <Edit3 size={12} />
+                  <span>Edit</span>
+                </button>
+              )}
+              <div className={`px-2 py-1 rounded-lg text-xs font-semibold border ${state.isAnswered ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                {state.isAnswered ? (
+                  <div className="flex items-center space-x-1">
+                    <CheckCircle size={12} className="text-emerald-600" />
+                    <span>Completed</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-1">
+                    <Clock size={12} className="text-amber-600" />
+                    <span>Pending</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-        <div className="p-4">
+        <div className="p-4 overflow-x-auto">
           {isEditing && isAdmin ? (
             <textarea
               value={state.editData.question}
@@ -217,25 +229,31 @@ const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, o
             />
           ) : (
             <MathJax hideUntilTypeset={"first"} inline dynamic>
-              <div className="text-gray-800 text-sm leading-relaxed">
-                <div dangerouslySetInnerHTML={{ __html: questionData.question }} />
+              <div className="text-gray-800 text-sm leading-relaxed break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
+                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: questionData.question }} />
                 {questionData.questionextratext && (
-                  <div className="mt-2 text-gray-600 text-xs" dangerouslySetInnerHTML={{ __html: questionData.questionextratext }} />
+                  <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: questionData.questionextratext }} />
                 )}
                 {(questionData.category === "GATE-CSE" || questionData.category === "CAT") && questionData.questionCode && (
-                  <div className="mt-3 rounded-lg overflow-hidden shadow-sm border border-gray-200/50">
-                    <SyntaxHighlighter language="javascript" style={atomOneDark} customStyle={{ margin: 0, padding: "12px" }}>
+                  <div className="mt-3 rounded-lg overflow-x-auto shadow-sm border border-gray-200/50 max-w-full">
+                    <SyntaxHighlighter 
+                      language="javascript" 
+                      style={atomOneDark} 
+                      customStyle={{ margin: 0, padding: "12px", maxWidth: "100%", overflowX: "auto" }}
+                      wrapLines={true}
+                      wrapLongLines={true}
+                    >
                       {questionData.questionCode}
                   </SyntaxHighlighter>
                 </div>
               )}
                 {(questionData.category === "GATE-CSE" || questionData.category === "CAT") && questionData.questionImage && (
-                  <div className="mt-3 flex justify-center">
+                  <div className="mt-3 flex justify-center max-w-full overflow-hidden">
                     <Image
                       src={questionData.questionImage}
                       width={160}
                       height={120}
-                      className="w-40 rounded-lg shadow-sm border border-gray-200/50"
+                      className="max-w-full h-auto rounded-lg shadow-sm border border-gray-200/50"
                       alt={`Question ${questionIndex + 1}`}
                     loading="lazy"
                       onError={(e) => (e.target.style.display = "none")}
@@ -277,17 +295,19 @@ const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, o
                         transition={{ delay: optIndex * 0.05 }}
                         onClick={() => handleOptionClick(opt)}
                         disabled={state.isAnswered}
-                        className={`w-full text-left p-3 rounded-lg ${optionClass} ${state.isAnswered ? "cursor-default" : "cursor-pointer"}`}
+                        className={`w-full text-left p-3 rounded-lg ${optionClass} ${state.isAnswered ? "cursor-default" : "cursor-pointer"} overflow-x-auto`}
                       >
-                        <div className="flex items-start space-x-2">
-                          <div className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs ${isSelected ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600"}`}>
+                        <div className="flex items-start space-x-2 min-w-0">
+                          <div className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs flex-shrink-0 ${isSelected ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600"}`}>
                             {opt}
                           </div>
                           <MathJax hideUntilTypeset={"first"} inline dynamic>
-                            <div className="flex-grow text-xs">{optionText}</div>
+                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">{optionText}</div>
                           </MathJax>
-                          {state.isAnswered && state.showFeedback && isCorrectOption && <Check size={14} className="text-green-500" />}
-                          {state.isAnswered && state.showFeedback && isSelected && !isCorrectOption && <X size={14} className="text-red-500" />}
+                          <div className="flex-shrink-0">
+                            {state.isAnswered && state.showFeedback && isCorrectOption && <Check size={14} className="text-green-500" />}
+                            {state.isAnswered && state.showFeedback && isSelected && !isCorrectOption && <X size={14} className="text-red-500" />}
+                          </div>
                         </div>
                       </motion.button>
                     )}
@@ -360,45 +380,32 @@ const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, o
                   </div>
           )}
           {!isEditing && (
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-4 flex gap-2">
               {!state.isAnswered && questionData.options_A && (
                 <button
-                    onClick={handleSubmit}
+                  onClick={handleSubmit}
                   disabled={!state.selectedOption}
-                  className={`flex-1 py-1.5 rounded-lg font-semibold text-xs ${state.selectedOption ? "bg-gradient-to-r from-gray-800 to-gray-900 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-                  >
-                    Submit Answer
-                </button>
-              )}
-              {!state.isAnswered && !questionData.options_A && (
-                <button onClick={handleSkip} className="flex-1 py-1.5 rounded-lg bg-gradient-to-r from-gray-800 to-gray-900 text-white font-semibold text-xs">
-                    Mark Complete
-                </button>
-              )}
-              {questionData.solution && (
-                <a
-                  href={questionData.solution}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-1.5 rounded-lg bg-gradient-to-r from-gray-700 to-gray-800 text-white font-semibold text-xs flex items-center justify-center space-x-1"
+                  className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-colors ${
+                    state.selectedOption 
+                      ? "bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-gray-700 hover:to-gray-800" 
+                      : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  }`}
                 >
-                  <BookOpen size={14} />
-                  <span>Solution Answer</span>
-                </a>
+                  Submit Answer
+                </button>
               )}
               <button
                 onClick={() => setState((prev) => ({ ...prev, showSolution: !prev.showSolution }))}
-                className={`flex-1 py-1.5 rounded-lg font-semibold text-xs ${state.showSolution ? "bg-gray-100 text-gray-800 border-2 border-gray-300" : "border-2 border-gray-300 text-gray-700"}`}
+                className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center space-x-2 ${
+                  state.showSolution 
+                    ? "bg-gray-100 text-gray-800 border-2 border-gray-300" 
+                    : "bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-gray-700 hover:to-gray-800"
+                }`}
               >
-                <div className="flex items-center justify-center space-x-1">
-                  <BookOpen size={14} />
-                  <span>{state.showSolution ? "Hide Solution" : "Show Solution"}</span>
-                </div>
+                <BookOpen size={16} />
+                <span>{state.showSolution ? "Hide Solution" : "Show Solution"}</span>
               </button>
-              {false && !state.isAnswered && (
-                <button onClick={() => {}} className="hidden" />
-                )}
-              </div>
+            </div>
           )}
               <AnimatePresence>
             {state.showFeedback && (
@@ -430,35 +437,43 @@ const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, o
                   </motion.div>
                 )}
               </AnimatePresence>
-              <AnimatePresence>
-            {state.showSolution && (
-                  <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-3 p-3 rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 border-l-4 border-indigo-500"
-              >
-                <h3 className="font-bold mb-1 text-indigo-800 text-sm flex items-center">
-                  <BookOpen size={14} className="mr-1" />
-                      Solution
-                    </h3>
-                {questionData.correct_option && (
-                  <div className="mb-1 p-2 bg-white/70 rounded-lg">
-                    <span className="font-semibold text-indigo-800 text-xs">Correct Answer: {questionData.correct_option}</span>
-                      </div>
-                    )}
-                <MathJax hideUntilTypeset={"first"} inline dynamic>
-                  <div className="text-gray-700 text-xs">
-                    {questionData.category?.includes("GATE") ? (
-                      <div dangerouslySetInnerHTML={{ __html: questionData.solutiontext }} />
-                    ) : (
-                      <div dangerouslySetInnerHTML={{ __html: questionData.solution }} />
-                    )}
-                      </div>
-                    </MathJax>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {state.showSolution && (
+                <div className="mt-3 p-3 rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 border-l-4 border-indigo-500 transition-all duration-300 ease-in-out overflow-x-auto">
+                  <h3 className="font-bold mb-1 text-indigo-800 text-sm flex items-center">
+                    <BookOpen size={14} className="mr-1 flex-shrink-0" />
+                    Solution
+                  </h3>
+                  {questionData.correct_option && (
+                    <div className="mb-1 p-2 bg-white/70 rounded-lg break-words">
+                      <span className="font-semibold text-indigo-800 text-xs">Correct Answer: {questionData.correct_option}</span>
+                    </div>
+                  )}
+                  <MathJax hideUntilTypeset={"first"} inline dynamic>
+                    <div className="text-gray-700 text-xs break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
+                      {questionData.category?.includes("GATE") ? (
+                        <a
+                        href={questionData.solution}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        Discuss solution
+                      </a>
+                      ) : (
+                        // <div className="[&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: questionData.solution }} />
+                        <a
+                        href={questionData.solution}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        Discuss solution
+                      </a>
+                      )}
+                    </div>
+                  </MathJax>
+                </div>
+              )}
         </div>
       </MathJaxContext>
     </motion.div>

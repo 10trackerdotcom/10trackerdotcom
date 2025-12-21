@@ -9,6 +9,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Cached data fetching function
 const getCachedExamData = unstable_cache(
   async (category) => {
+    const isDev = process.env.NODE_ENV === 'development';
+    if (isDev) console.log("🔄 [Cache] Fetching data for category:", category);
+    
     const allData = [];
     let from = 0;
     const pageSize = 1000;
@@ -25,9 +28,12 @@ const getCachedExamData = unstable_cache(
 
       const { data, error } = await query.range(from, from + pageSize - 1);
 
-      if (error) throw error;
+      if (error) {
+        if (isDev) console.error("❌ [Cache] Supabase error:", error);
+        throw error;
+      }
 
-      if (data) {
+      if (data && data.length > 0) {
         allData.push(...data);
         from += pageSize;
         fetchMore = data.length === pageSize;
@@ -38,6 +44,10 @@ const getCachedExamData = unstable_cache(
 
     // Process data
     const subjectsWithTopics = allData.reduce((acc, row) => {
+      if (!row.subject || !row.topic) {
+        return acc;
+      }
+      
       if (!acc[row.subject]) {
         acc[row.subject] = { subject: row.subject, subtopics: [] };
       }
@@ -59,31 +69,66 @@ const getCachedExamData = unstable_cache(
       return acc;
     }, {});
 
-    return Object.values(subjectsWithTopics);
+    const result = Object.values(subjectsWithTopics);
+    if (isDev) {
+      console.log(`✅ [Cache] Processed ${result.length} subjects, ${allData.length} total records`);
+    }
+    
+    return result;
   },
-  ["exam-data"], // Cache key prefix
+  // Cache key includes category - Next.js automatically includes function params in cache key
+  [`exam-data`],
   {
     tags: ["examtracker"], // Tags for cache invalidation
-    revalidate: 30, // Cache revalidation after 30 seconds (in seconds)
+    revalidate: 10, // Cache revalidation after 10 seconds (reduced from 30)
   }
 );
 
 export async function GET(req) {
+  const isDev = process.env.NODE_ENV === 'development';
+  
   try {
     const { searchParams } = new URL(req.url);
-    const category = searchParams.get("category").toUpperCase();
+    let categoryParam = searchParams.get("category");
+    
+    // Handle URL decoding for categories with hyphens or special chars
+    if (categoryParam) {
+      categoryParam = decodeURIComponent(categoryParam);
+    }
+    
+    if (!categoryParam) {
+      return new Response(JSON.stringify({ error: "Category parameter is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    
+    const category = categoryParam.toUpperCase();
 
+    // Category is automatically part of cache key since it's a function parameter
     const subjectsData = await getCachedExamData(category);
+    
+    if (isDev && subjectsData) {
+      console.log(`✅ [API] Fetched ${subjectsData.length} subjects for ${category}`);
+    }
 
     return new Response(JSON.stringify({ subjectsData }), {
       status: 200,
       headers: {
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=30", // Cache for 30 seconds, stale-while-revalidate for 30 seconds
+        "Content-Type": "application/json",
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
       },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    if (isDev) {
+      console.error("❌ [API] Error:", error);
+    }
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      details: isDev ? error.stack : undefined
+    }), {
       status: 500,
+      headers: { "Content-Type": "application/json" },
     });
   }
 }

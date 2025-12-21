@@ -3,11 +3,11 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } fr
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@supabase/supabase-js";
 import toast, { Toaster } from "react-hot-toast";
-import debounce from "lodash/debounce";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
 import Navbar from "@/components/Navbar";
+import { getCachedData, invalidateCache } from "@/lib/utils/apiCache";
 // Lazy-loaded components
 const AuthModal = dynamic(() => import("@/components/AuthModal"), { ssr: false });
 const Alert = dynamic(() => import("@/components/Alert"), { ssr: false });
@@ -64,44 +64,74 @@ const Examtracker = () => {
   const [showMobileOptions, setShowMobileOptions] = useState(false);
   const searchInputRef = useRef(null);
   const { category, subject } = useParams();
-  const [activeSubject, setActiveSubject] = useState(
-    category === "gate-cse" && subject
-      ? subject.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-      : subject || ""
-  );
   
+  // Properly decode and format subject from URL
+  const decodedSubject = subject ? decodeURIComponent(subject) : null;
+  const formattedSubject = decodedSubject 
+    ? decodedSubject.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : null;
+  
+  const [activeSubject, setActiveSubject] = useState(formattedSubject || "");
 
-  const apiEndpoint = `/api/allsubtopics?category=${category?.toUpperCase()}`;
+  // Properly encode category to handle hyphens and special characters
+  const encodedCategory = category ? encodeURIComponent(category.toUpperCase()) : '';
+  const apiEndpoint = `/api/allsubtopics?category=${encodedCategory}`;
   const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsInVzZXJuYW1lIjoiZXhhbXBsZVVzZXIiLCJpYXQiOjE3MzYyMzM2NDZ9.YMTSQxYuzjd3nD3GlZXO6zjjt1kqfUmXw7qdy-C2RD8";
+  
+  // Cache refresh interval (every 5 minutes - reduced frequency)
+  const cacheRefreshInterval = useRef(null);
+  
+  // Client-side cache key
+  const cacheKey = useMemo(() => `subjects-${category}`, [category]);
 
-// Updated fetchUserProgress function
+  // Update activeSubject when URL parameter changes
+  useEffect(() => {
+    const newSubject = formattedSubject || "";
+    setActiveSubject(newSubject);
+  }, [subject, formattedSubject, decodedSubject]);
+
+// Updated fetchUserProgress function with caching
 const fetchUserProgress = useCallback(
   async (userId) => {
-    if (!userId) return;
+    if (!userId || !category) {
+      return;
+    }
+    
+    const progressCacheKey = `user-progress-${userId}-${category}`;
     
     try {
-      const { data: progressData, error } = await supabase
-        .from("user_progress")
-        .select("topic, completedquestions, correctanswers, points")
-        .eq("user_id", userId)
-        .eq("area", category?.toLowerCase())
-        .limit(100);
+      // Use cached data if available (2 minute TTL for user progress)
+      const cachedProgress = await getCachedData(
+        progressCacheKey,
+        async () => {
+          const { data: progressData, error } = await supabase
+            .from("user_progress")
+            .select("topic, completedquestions, correctanswers, points")
+            .eq("user_id", userId)
+            .eq("area", category?.toLowerCase())
+            .limit(100);
 
-      // console.log(progressData, "Consoled Progress Data");
-      if (error) throw error;
+          if (error) throw error;
 
-      // Convert to map with camelCase field names for UI consistency
-      const progressMap = {};
-      progressData?.forEach((item) => {
-        progressMap[item.topic] = {
-          completedQuestions: item.completedquestions || [], // Transform to camelCase
-          correctAnswers: item.correctanswers || [],         // Transform to camelCase
-          points: item.points || 0,
-        };
-      });
-      setUserProgress(progressMap);
+          // Convert to map with camelCase field names for UI consistency
+          const progressMap = {};
+          progressData?.forEach((item) => {
+            progressMap[item.topic] = {
+              completedQuestions: item.completedquestions || [],
+              correctAnswers: item.correctanswers || [],
+              points: item.points || 0,
+            };
+          });
+          return progressMap;
+        },
+        2 * 60 * 1000 // 2 minutes TTL
+      );
+      
+      setUserProgress(cachedProgress || {});
     } catch (error) {
-      console.error("Error fetching user progress:", error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error fetching user progress:", error);
+      }
       setUserProgress({});
     }
   },
@@ -110,36 +140,61 @@ const fetchUserProgress = useCallback(
 
 
 
-  // Fetch subjects data with cache
+  // Fetch subjects data with client-side caching
   const fetchData = useCallback(
-    debounce(async () => {
+    async (forceRefresh = false) => {
       setIsLoading(true);
+      
       try {
-        if (user?.id) {
-          fetchUserProgress(user.id);
+        // Invalidate cache if force refresh
+        if (forceRefresh) {
+          invalidateCache(cacheKey);
         }
-   
-        const response = await fetch(apiEndpoint, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        });
+
+        // Fetch user progress separately (not inside fetchData to avoid duplicate calls)
+        // This will be handled by the useEffect hook below
         
-        if (!response.ok) throw new Error("Failed to fetch data");
-        const responseData = await response.json();
-        const subjectsData = responseData.subjectsData || [];
-        // console.log(subjectsData)
-        setData(subjectsData);
+        // Use cached data or fetch fresh
+        const subjectsData = await getCachedData(
+          cacheKey,
+          async () => {
+            const response = await fetch(apiEndpoint, {
+              method: "GET",
+              headers: { 
+                Authorization: `Bearer ${token}`,
+                'Cache-Control': 'max-age=300' // 5 minutes browser cache
+              },
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`Failed to fetch data: ${response.status} ${errorText}`);
+            }
+            
+            const responseData = await response.json();
+            return responseData.subjectsData || [];
+          },
+          5 * 60 * 1000 // 5 minutes TTL
+        );
+        
+        setData(subjectsData || []);
       } catch (error) {
-        console.error("Error fetching data:", error);
-        setData([
-          { subject: "Compiler Design", subtopics: [{ title: "lexical-analysis", count: 19 }, { title: "parsing", count: 82 }] },
-          { subject: "Theory of Computation", subtopics: [{ title: "finite-automata", count: 73 }, { title: "turing-machine", count: 13 }] },
-        ]);
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Error fetching data:", error);
+        }
+        // Set fallback data only in development
+        if (process.env.NODE_ENV === 'development') {
+          const fallbackData = [
+            { subject: "Compiler Design", subtopics: [{ title: "lexical-analysis", count: 19 }, { title: "parsing", count: 82 }] },
+            { subject: "Theory of Computation", subtopics: [{ title: "finite-automata", count: 73 }, { title: "turing-machine", count: 13 }] },
+          ];
+          setData(fallbackData);
+        }
       } finally {
         setIsLoading(false);
       }
-    }, 300),
-    [apiEndpoint, token, category, user, fetchUserProgress]
+    },
+    [apiEndpoint, token, cacheKey]
   );
 
   // Google Sign-In with Supabase
@@ -177,14 +232,40 @@ const fetchUserProgress = useCallback(
   );
   
   const filteredAndSortedTopics = useMemo(() => {
-    let topics = activeSubject 
-      ? (data.find((s) => s.subject === activeSubject)?.subtopics || [])
-          .map((t) => ({ 
-            ...t, 
-            parentSubject: activeSubject, 
-            uniqueId: `${activeSubject}-${t.title}` 
-          })) 
-      : allSubtopics;
+    let topics = [];
+    
+    if (activeSubject) {
+      // Try exact match first
+      let foundSubject = data.find((s) => s.subject === activeSubject);
+      
+      // If not found, try case-insensitive match
+      if (!foundSubject) {
+        foundSubject = data.find((s) => 
+          s.subject.toLowerCase() === activeSubject.toLowerCase()
+        );
+      }
+      
+      // If still not found, try matching with normalized formatting (handle hyphens, spaces, etc.)
+      if (!foundSubject) {
+        const normalize = (str) => str.toLowerCase().replace(/[-\s]/g, '');
+        foundSubject = data.find((s) => 
+          normalize(s.subject) === normalize(activeSubject)
+        );
+      }
+      
+      if (foundSubject && foundSubject.subtopics) {
+        topics = foundSubject.subtopics.map((t) => ({ 
+          ...t, 
+          parentSubject: foundSubject.subject, 
+          uniqueId: `${foundSubject.subject}-${t.title}` 
+        }));
+      } else {
+        // Fallback to all topics if subject not found
+        topics = allSubtopics;
+      }
+    } else {
+      topics = allSubtopics;
+    }
 
     if (searchTerm) {
       topics = topics.filter((t) => 
@@ -192,7 +273,7 @@ const fetchUserProgress = useCallback(
       );
     }
 
-    return topics.sort((a, b) => {
+    const sorted = topics.sort((a, b) => {
       const aCompleted = userProgress[a.title]?.completedQuestions?.length || 0;
       const bCompleted = userProgress[b.title]?.completedQuestions?.length || 0;
       const aTotal = a.count || 1;
@@ -209,7 +290,9 @@ const fetchUserProgress = useCallback(
             : a.parentSubject.localeCompare(b.parentSubject) || a.title.localeCompare(b.title);
       }
     });
-  }, [activeSubject, allSubtopics, searchTerm, sortBy, userProgress]);
+    
+    return sorted;
+  }, [activeSubject, allSubtopics, searchTerm, sortBy, userProgress, data]);
 
 // Updated progress calculation with correct field names
 const progress = useMemo(() => {
@@ -236,9 +319,21 @@ const progress = useMemo(() => {
   };
 }, [allSubtopics, userProgress, totalQuestions]);
 
-  // Effect to fetch data when component mounts
+  // Effect to fetch data when component mounts or category changes
   useEffect(() => {
-    fetchData();
+    fetchData(false);
+    
+    // Set up cache refresh interval (every 5 minutes - reduced frequency)
+    cacheRefreshInterval.current = setInterval(() => {
+      fetchData(true);
+    }, 5 * 60 * 1000); // 5 minutes instead of 30 seconds
+    
+    // Cleanup interval on unmount
+    return () => {
+      if (cacheRefreshInterval.current) {
+        clearInterval(cacheRefreshInterval.current);
+      }
+    };
   }, [fetchData]);
 
   // Effect to fetch user progress when user changes
@@ -313,16 +408,30 @@ const progress = useMemo(() => {
               <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-neutral-900">{category?.toUpperCase()} Practice Tracker</h1>
               <p className="text-sm sm:text-base text-neutral-600 mt-1">Track your progress across {allSubtopics.length} topics and {totalQuestions} questions</p>
             </div>
-            <button 
-              onClick={() => setShowMobileOptions(true)} 
-              className="mt-4 sm:mt-0 md:hidden px-4 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg flex items-center justify-center"
-              aria-label="Show options and progress"
-            >
-              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-              </svg>
-              Options & Progress
-            </button>
+            <div className="mt-4 sm:mt-0 flex items-center gap-2">
+              <button 
+                onClick={() => fetchData(true)}
+                disabled={isLoading}
+                className="px-3 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 disabled:opacity-50 text-sm flex items-center gap-2 transition-colors"
+                aria-label="Refresh data"
+                title="Refresh data (clears cache)"
+              >
+                <svg className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button 
+                onClick={() => setShowMobileOptions(true)} 
+                className="md:hidden px-4 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg flex items-center justify-center"
+                aria-label="Show options and progress"
+              >
+                <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                Options & Progress
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col md:flex-row md:space-x-8">
@@ -481,11 +590,11 @@ const progress = useMemo(() => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between">
                   <div className="mb-4 sm:mb-0">
                     <h2 className="text-lg sm:text-xl font-semibold text-neutral-900">{activeSubject || "All Subjects"}</h2>
-                    <p className="text-xs sm:text-sm text-neutral-500 mt-1">
+                    {/* <p className="text-xs sm:text-sm text-neutral-500 mt-1">
                       {activeSubject 
                         ? `${data.find((s) => s.subject === activeSubject)?.subtopics?.length || 0} topics` 
                         : `${allSubtopics.length} topics across ${data.length} subjects`}
-                    </p>
+                    </p> */}
                   </div>
                   <div className="relative sm:max-w-xs w-full">
                     <svg className="h-5 w-5 text-neutral-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -603,7 +712,20 @@ const progress = useMemo(() => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <h3 className="text-base sm:text-lg font-medium text-neutral-900 mb-2">No topics found</h3>
-                  <p className="text-sm sm:text-base text-neutral-500">{searchTerm ? `No topics match "${searchTerm}"` : "No topics available"}</p>
+                  <p className="text-sm sm:text-base text-neutral-500 mb-4">
+                    {searchTerm ? `No topics match "${searchTerm}"` : activeSubject ? `No topics found for "${activeSubject}"` : "No topics available"}
+                  </p>
+                  {/* Debug info in development */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="mt-4 p-4 bg-neutral-50 rounded-lg text-left text-xs">
+                      <p className="font-semibold mb-2">Debug Info:</p>
+                      <p>Data length: {data.length}</p>
+                      <p>All subtopics: {allSubtopics.length}</p>
+                      <p>Active subject: {activeSubject || "None"}</p>
+                      <p>Available subjects: {data.map(s => s.subject).join(", ") || "None"}</p>
+                      <p>Is loading: {isLoading ? "Yes" : "No"}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

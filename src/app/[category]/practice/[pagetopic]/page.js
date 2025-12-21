@@ -6,122 +6,66 @@ import { useParams } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import debounce from "lodash/debounce";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/context/AuthContext";
 import toast, { Toaster } from "react-hot-toast";
-import { Trophy, Target, CheckCircle2, Star, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 
 // Lazy-loaded components
 const QuestionCard = dynamic(() => import("@/components/QuestionCard"), { 
   ssr: false,
   loading: () => <QuestionSkeleton />
 });
-const AuthModal = dynamic(() => import("@/components/AuthModal"), { ssr: false });
 const Navbar = dynamic(() => import("@/components/Navbar"), { ssr: false });
-const Sidebar = dynamic(() => import("@/components/Sidebar"), { ssr: false });
 const MetaDataJobs = dynamic(() => import("@/components/Seo"), { ssr: false });
 
-// Supabase Config with optimized settings
+// Optimized Supabase config
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  { 
-    fetch: (...args) => fetch(...args),
-    db: { schema: 'public' },
-    realtime: { params: { eventsPerSecond: 10 } },
-    global: { headers: { 'x-my-custom-header': 'my-app-name' } }
-  }
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 const ADMIN_EMAIL = "jain10gunjan@gmail.com";
-const API_ENDPOINT = "/api/allsubtopics?category=GATE-CSE";
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsInVzZXJuYW1lIjoiZXhhbXBsZVVzZXIiLCJpYXQiOjE3MzYyMzM2NDZ9.YMTSQxYuzjd3nD3GlZXO6zjjt1kqfUmXw7qdy-C2RD8";
+const QUESTIONS_PER_PAGE = 10; // Reduced initial load
+const BATCH_DELAY = 3000; // Increased delay for less frequent updates
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 
-// Constants for batching
-const BATCH_SIZE = 10;
-const BATCH_DELAY = 2000; // 2 seconds
-const MAX_RETRY_ATTEMPTS = 3;
-
-// Memoized Skeleton Component
+// Simple Skeleton
 const QuestionSkeleton = memo(() => (
-  <div className="bg-white border border-slate-200/60 rounded-2xl shadow-sm">
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-slate-200 rounded-full animate-pulse" />
-          <div className="space-y-1">
-            <div className="h-3 w-16 bg-slate-200 rounded animate-pulse" />
-            <div className="h-2 w-12 bg-slate-100 rounded animate-pulse" />
-          </div>
-        </div>
-        <div className="flex space-x-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="w-2 h-2 bg-slate-200 rounded-full animate-pulse" />
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="h-4 bg-slate-200 rounded animate-pulse" />
-        <div className="h-4 bg-slate-200 rounded w-4/5 animate-pulse" />
-      </div>
-      <div className="grid gap-2">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex items-center space-x-3 p-3 border border-slate-100 rounded-xl">
-            <div className="w-6 h-6 bg-slate-100 rounded-full animate-pulse" />
-            <div className="h-3 bg-slate-100 rounded animate-pulse flex-1" />
-          </div>
-        ))}
-      </div>
+  <div className="bg-white border border-neutral-200 rounded-lg p-4 space-y-3">
+    <div className="h-4 bg-neutral-200 rounded w-3/4 animate-pulse" />
+    <div className="space-y-2">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="h-10 bg-neutral-100 rounded animate-pulse" />
+      ))}
     </div>
   </div>
 ));
 
 QuestionSkeleton.displayName = 'QuestionSkeleton';
 
-// Memoized StatCard Component
-const StatCard = memo(({ icon: Icon, label, value, color = "slate", isPending = false }) => (
-  <div className={`bg-gradient-to-br from-${color}-50 to-${color}-100 p-4 rounded-xl border border-${color}-200/50 relative`}>
-    <div className="flex items-center justify-between">
-      <div>
-        <p className={`text-${color}-600 text-xs font-medium`}>{label}</p>
-        <p className={`text-${color}-900 text-lg font-bold`}>{value}</p>
-      </div>
-      <div className="flex items-center space-x-1">
-        <Icon className={`text-${color}-500`} size={20} />
-        {isPending && (
-          <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" title="Syncing..." />
-        )}
-      </div>
-    </div>
-  </div>
-));
-
-StatCard.displayName = 'StatCard';
-
-// Memoized DifficultyButton Component
+// Simple Difficulty Button
 const DifficultyButton = memo(({ difficulty, count, active, onClick, loading }) => (
-  <motion.button
-    whileHover={{ scale: 1.02 }}
-    whileTap={{ scale: 0.98 }}
+  <button
     onClick={onClick}
     disabled={loading}
-    className={`px-4 py-2 rounded-xl font-medium transition-all disabled:opacity-50 ${
-      active ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white" : "bg-white text-slate-700 border border-slate-200"
+    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+      active 
+        ? "bg-neutral-900 text-white" 
+        : "bg-white text-neutral-700 border border-neutral-300 hover:bg-neutral-50"
     }`}
   >
-    <span className="flex items-center space-x-1">
-      <span className="capitalize">{difficulty}</span>
-      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
-        {count || 0}
-      </span>
+    <span className="capitalize">{difficulty}</span>
+    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${
+      active ? "bg-white/20" : "bg-neutral-100"
+    }`}>
+      {count || 0}
     </span>
-  </motion.button>
+  </button>
 ));
 
 DifficultyButton.displayName = 'DifficultyButton';
 
 const Pagetracker = memo(() => {
-  // Optimized MathJax config
   const mathJaxConfig = useMemo(() => ({
     "fast-preview": { disabled: false },
     tex: { 
@@ -136,384 +80,457 @@ const Pagetracker = memo(() => {
   const { category, pagetopic } = useParams();
   const { user, setShowAuthModal } = useAuth();
 
-  // Refs for batch processing
-  const pendingUpdatesRef = useRef(new Map());
-  const batchTimeoutRef = useRef(null);
-  const retryQueueRef = useRef(new Map());
-
-  // Consolidated state with optimistic updates
-  const [state, setState] = useState({
-    data: [],
-    questions: [],
-    allQuestionsCounts: { easy: 0, medium: 0, hard: 0 },
-    activeDifficulty: "easy",
-    progress: { 
-      completedquestions: [], 
-      correctanswers: [], 
-      points: 0,
-      // Optimistic state
-      pendingCompleted: new Set(),
-      pendingCorrect: new Set(),
-      pendingPoints: 0
-    },
-    isLoading: true,
-    isDifficultyLoading: false,
-    isSidebarOpen: false,
-    activeSubject: null,
-    syncStatus: 'synced', // 'synced', 'pending', 'error'
-    editingQuestionId: null,
+  // Simplified state
+  const [questions, setQuestions] = useState([]);
+  const [counts, setCounts] = useState({ easy: 0, medium: 0, hard: 0 });
+  const [activeDifficulty, setActiveDifficulty] = useState("easy");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  const [progress, setProgress] = useState({
+    completed: [],
+    correct: [],
+    points: 0
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  // Batch progress update function
-  const processBatch = useCallback(async () => {
-    if (!user || pendingUpdatesRef.current.size === 0) return;
+  // Refs for optimization
+  const pendingUpdatesRef = useRef(new Map());
+  const cacheRef = useRef(new Map());
+  const batchTimeoutRef = useRef(null);
 
-    const updates = Array.from(pendingUpdatesRef.current.values());
-    pendingUpdatesRef.current.clear();
-
-    // Aggregate all updates
-    const aggregated = updates.reduce((acc, update) => ({
-      completedquestions: [...new Set([...acc.completedquestions, ...update.completedquestions])],
-      correctanswers: [...new Set([...acc.correctanswers, ...update.correctanswers])],
-      points: Math.max(acc.points, update.points)
-    }), { completedquestions: [], correctanswers: [], points: 0 });
-
-    try {
-      setState(prev => ({ ...prev, syncStatus: 'pending' }));
-      
-      await supabase.from("user_progress").upsert({
-        user_id: user.id,
-        email: user.email,
-        topic: pagetopic,
-        completedquestions: aggregated.completedquestions,
-        correctanswers: aggregated.correctanswers,
-        points: aggregated.points,
-        area: category,
-      }, { onConflict: ["user_id", "topic"] });
-
-      setState(prev => ({ 
-        ...prev, 
-        syncStatus: 'synced',
-        progress: {
-          ...prev.progress,
-          pendingCompleted: new Set(),
-          pendingCorrect: new Set(),
-          pendingPoints: 0
-        }
-      }));
-
-    } catch (error) {
-      console.error("Batch update failed:", error);
-      setState(prev => ({ ...prev, syncStatus: 'error' }));
-      
-      // Add to retry queue
-      const retryKey = Date.now();
-      retryQueueRef.current.set(retryKey, { ...aggregated, attempts: 1 });
-      
-      // Retry after delay
-      setTimeout(() => retryFailedUpdate(retryKey), 5000);
+  // Cache helper
+  const getCached = useCallback((key) => {
+    const cached = cacheRef.current.get(key);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
     }
-  }, [user, pagetopic, category]);
+    cacheRef.current.delete(key);
+    return null;
+  }, []);
 
-  // Retry failed updates
-  const retryFailedUpdate = useCallback(async (retryKey) => {
-    const retryData = retryQueueRef.current.get(retryKey);
-    if (!retryData || retryData.attempts >= MAX_RETRY_ATTEMPTS) {
-      retryQueueRef.current.delete(retryKey);
+  const setCached = useCallback((key, data) => {
+    cacheRef.current.set(key, { data, timestamp: Date.now() });
+  }, []);
+
+  // Fetch counts once (cached)
+  const fetchCounts = useCallback(async () => {
+    const cacheKey = `counts-${category}-${pagetopic}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      setCounts(cached);
       return;
     }
 
     try {
-      await supabase.from("user_progress").upsert({
-        user_id: user.id,
-        email: user.email,
-        topic: pagetopic,
-        completedquestions: retryData.completedquestions,
-        correctanswers: retryData.correctanswers,
-        points: retryData.points,
-        area: category,
-      }, { onConflict: ["user_id", "topic"] });
+      // Single query for all counts
+      const { data, error } = await supabase
+        .from("examtracker")
+        .select("difficulty")
+        .eq("topic", pagetopic)
+        .eq("category", category?.toUpperCase());
 
-      retryQueueRef.current.delete(retryKey);
-      setState(prev => ({ ...prev, syncStatus: 'synced' }));
+      if (error) throw error;
 
+      const countsData = { easy: 0, medium: 0, hard: 0 };
+      data?.forEach(q => {
+        if (countsData.hasOwnProperty(q.difficulty)) {
+          countsData[q.difficulty]++;
+        }
+      });
+
+      setCounts(countsData);
+      setCached(cacheKey, countsData);
     } catch (error) {
-      retryData.attempts += 1;
-      setTimeout(() => retryFailedUpdate(retryKey), 10000 * retryData.attempts);
+      console.error("Error fetching counts:", error);
     }
-  }, [user, pagetopic, category]);
+  }, [category, pagetopic, getCached, setCached]);
 
-  // Debounced batch processor
-  const debouncedBatchProcess = useMemo(
-    () => debounce(processBatch, BATCH_DELAY),
-    [processBatch]
-  );
+  // Fetch questions with pagination
+  const fetchQuestions = useCallback(async (difficulty, page = 1, append = false) => {
+    if (!pagetopic || !category) return;
 
-  // Memoized fetch functions (unchanged for brevity)
-  const fetchSubjectsData = useCallback(async () => {
+    setIsLoadingQuestions(true);
     try {
-      const cacheKey = `subjects-${category}`;
-      const cached = localStorage.getItem(cacheKey);
+      const cacheKey = `questions-${category}-${pagetopic}-${difficulty}-${page}`;
+      const cached = getCached(cacheKey);
+      
       if (cached) {
-        const parsedData = JSON.parse(cached);
-        setState((prev) => ({ ...prev, data: parsedData, activeSubject: parsedData[0]?.subject }));
+        if (append) {
+          setQuestions(prev => [...prev, ...cached]);
+        } else {
+          setQuestions(cached);
+        }
+        setHasMore(cached.length === QUESTIONS_PER_PAGE);
+        setIsLoadingQuestions(false);
         return;
       }
 
-      const response = await fetch(API_ENDPOINT, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${TOKEN}` },
-        cache: "force-cache",
-      });
-      
-      if (!response.ok) throw new Error("Failed to fetch subjects");
-      const { subjectsData } = await response.json();
-      localStorage.setItem(cacheKey, JSON.stringify(subjectsData));
-      setState((prev) => ({ ...prev, data: subjectsData, activeSubject: subjectsData[0]?.subject }));
-    } catch (error) {
-      console.error("Error fetching subjects:", error);
-      setState((prev) => ({ ...prev, data: [] }));
-    }
-  }, [category]);
-
-  const fetchQuestionCounts = useCallback(async () => {
-    if (!pagetopic || !category) return;
-    try {
-      const difficulties = ["easy", "medium", "hard"];
-      const countPromises = difficulties.map(async (difficulty) => {
-        const { count } = await supabase
-          .from("examtracker")
-          .select("*", { count: "exact", head: true })
-          .eq("topic", pagetopic)
-          .eq("category", category.toUpperCase())
-          .eq("difficulty", difficulty);
-        return { [difficulty]: count || 0 };
-      });
-      
-      const counts = Object.assign({}, ...(await Promise.all(countPromises)));
-      setState((prev) => ({ ...prev, allQuestionsCounts: counts }));
-    } catch (error) {
-      console.error("Error fetching question counts:", error);
-    }
-  }, [pagetopic, category]);
-
-  const fetchQuestionsByDifficulty = useCallback(async (difficulty) => {
-    if (!pagetopic || !category) return;
-    setState((prev) => ({ ...prev, isDifficultyLoading: true }));
-    try {
-      const { data: questionsData, error } = await supabase
+      const { data, error } = await supabase
         .from("examtracker")
-        .select("*")
+        .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, difficulty")
         .eq("topic", pagetopic)
         .eq("category", category.toUpperCase())
         .eq("difficulty", difficulty)
-        .order("_id");
-      if (error) throw error;
-      setState((prev) => ({ ...prev, questions: questionsData || [] }));
-    } catch (error) {
-      console.error("Fetch questions error:", error);
-      setState((prev) => ({ ...prev, questions: [] }));
-    } finally {
-      setState((prev) => ({ ...prev, isDifficultyLoading: false }));
-    }
-  }, [pagetopic, category]);
+        .order("_id")
+        .range((page - 1) * QUESTIONS_PER_PAGE, page * QUESTIONS_PER_PAGE - 1);
 
-  const fetchUserProgress = useCallback(async (userId) => {
-    if (!userId || !pagetopic || !category) return;
+      if (error) throw error;
+
+      const questionsData = data || [];
+      
+      if (append) {
+        setQuestions(prev => [...prev, ...questionsData]);
+      } else {
+        setQuestions(questionsData);
+      }
+      
+      setHasMore(questionsData.length === QUESTIONS_PER_PAGE);
+      setCached(cacheKey, questionsData);
+    } catch (error) {
+      console.error("Error fetching questions:", error);
+      toast.error("Failed to load questions");
+    } finally {
+      setIsLoadingQuestions(false);
+    }
+  }, [category, pagetopic, getCached, setCached]);
+
+  // Fetch user progress (simplified)
+  const fetchUserProgress = useCallback(async () => {
+    if (!user?.id || !pagetopic || !category) {
+      setProgress({ completed: [], correct: [], points: 0 });
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from("user_progress")
         .select("completedquestions, correctanswers, points")
-        .eq("user_id", userId)
+        .eq("user_id", user.id)
         .eq("topic", pagetopic)
         .eq("area", category)
-        .single();
-      if (error && error.code !== "PGRST116") throw error;
-      setState((prev) => ({ 
-        ...prev, 
-        progress: { 
-          ...(data || { completedquestions: [], correctanswers: [], points: 0 }),
-          pendingCompleted: new Set(),
-          pendingCorrect: new Set(),
-          pendingPoints: 0
-        } 
-      }));
-    } catch (error) {
-      console.error("Progress fetch error:", error);
-    }
-  }, [pagetopic, category]);
+        .maybeSingle(); // Use maybeSingle to handle no record case gracefully
 
-  const handleDifficultyChange = useCallback(
-    (difficulty) => {
-      if (difficulty === state.activeDifficulty || state.isDifficultyLoading) return;
-      setState((prev) => ({ ...prev, activeDifficulty: difficulty }));
-      fetchQuestionsByDifficulty(difficulty);
-    },
-    [state.activeDifficulty, state.isDifficultyLoading, fetchQuestionsByDifficulty]
+      if (error && error.code !== "PGRST116") {
+        console.error("❌ [Progress] Error fetching progress:", error);
+        throw error;
+      }
+
+      // Ensure arrays are valid (handle null/undefined)
+      const completed = Array.isArray(data?.completedquestions) ? data.completedquestions : [];
+      const correct = Array.isArray(data?.correctanswers) ? data.correctanswers : [];
+      const points = typeof data?.points === 'number' ? data.points : 0;
+
+      console.log("✅ [Progress] Loaded progress:", {
+        completed: completed.length,
+        correct: correct.length,
+        points: points
+      });
+
+      setProgress({
+        completed,
+        correct,
+        points
+      });
+    } catch (error) {
+      console.error("❌ [Progress] Error fetching user progress:", error);
+      // Set empty progress on error to prevent UI issues
+      setProgress({ completed: [], correct: [], points: 0 });
+    }
+  }, [user, pagetopic, category]);
+
+  // Batch progress update - properly merges with existing progress
+  const saveProgress = useCallback(async (immediate = false) => {
+    if (!user) {
+      console.warn("⚠️ [Progress] Cannot save: user not logged in");
+      return;
+    }
+
+    if (pendingUpdatesRef.current.size === 0) {
+      console.log("ℹ️ [Progress] No pending updates to save");
+      return;
+    }
+
+    const updates = Array.from(pendingUpdatesRef.current.values());
+    pendingUpdatesRef.current.clear();
+
+    console.log("💾 [Progress] Saving progress:", {
+      updatesCount: updates.length,
+      immediate,
+      userId: user.id,
+      topic: pagetopic,
+      area: category
+    });
+
+    try {
+      // First, fetch existing progress from database
+      const { data: existingProgress, error: fetchError } = await supabase
+        .from("user_progress")
+        .select("completedquestions, correctanswers, points")
+        .eq("user_id", user.id)
+        .eq("topic", pagetopic)
+        .eq("area", category)
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== "PGRST116") {
+        console.error("❌ [Progress] Error fetching existing progress:", fetchError);
+        throw fetchError;
+      }
+
+      // Get existing arrays (or empty if no record exists) - ensure they're arrays
+      const existingCompleted = Array.isArray(existingProgress?.completedquestions) 
+        ? existingProgress.completedquestions 
+        : [];
+      const existingCorrect = Array.isArray(existingProgress?.correctanswers) 
+        ? existingProgress.correctanswers 
+        : [];
+      const existingPoints = typeof existingProgress?.points === 'number' 
+        ? existingProgress.points 
+        : 0;
+
+      console.log("📊 [Progress] Existing progress:", {
+        completed: existingCompleted.length,
+        correct: existingCorrect.length,
+        points: existingPoints
+      });
+
+      // Aggregate new updates
+      const newUpdates = updates.reduce((acc, update) => ({
+        completed: [...new Set([...acc.completed, ...update.completed])],
+        correct: [...new Set([...acc.correct, ...update.correct])],
+        points: acc.points + (update.points || 0) // Sum points instead of max
+      }), { completed: [], correct: [], points: 0 });
+
+      console.log("🆕 [Progress] New updates:", {
+        completed: newUpdates.completed,
+        correct: newUpdates.correct,
+        points: newUpdates.points
+      });
+
+      // Merge existing with new updates
+      const mergedCompleted = [...new Set([...existingCompleted, ...newUpdates.completed])];
+      const mergedCorrect = [...new Set([...existingCorrect, ...newUpdates.correct])];
+      const mergedPoints = existingPoints + newUpdates.points;
+
+      console.log("🔄 [Progress] Merged progress:", {
+        completed: mergedCompleted.length,
+        correct: mergedCorrect.length,
+        points: mergedPoints
+      });
+
+      // Save merged progress - use upsert with proper conflict handling
+      const progressData = {
+        user_id: user.id,
+        email: user.email,
+        topic: pagetopic,
+        completedquestions: mergedCompleted,
+        correctanswers: mergedCorrect,
+        points: mergedPoints,
+        area: category,
+      };
+
+      console.log("💾 [Progress] Attempting to save:", progressData);
+
+      // Try upsert first
+      let { error: saveError, data: savedData } = await supabase
+        .from("user_progress")
+        .upsert(progressData, { 
+          onConflict: "user_id,topic,area"
+        })
+        .select();
+
+      // If upsert fails, try insert then update
+      if (saveError) {
+        console.warn("⚠️ [Progress] Upsert failed, trying insert/update:", saveError);
+        
+        // Try to insert first
+        const { error: insertError } = await supabase
+          .from("user_progress")
+          .insert(progressData);
+
+        // If insert fails (likely due to existing record), try update
+        if (insertError) {
+          console.log("ℹ️ [Progress] Insert failed (record exists), trying update");
+          const { error: updateError } = await supabase
+            .from("user_progress")
+            .update({
+              completedquestions: mergedCompleted,
+              correctanswers: mergedCorrect,
+              points: mergedPoints,
+              email: user.email,
+            })
+            .eq("user_id", user.id)
+            .eq("topic", pagetopic)
+            .eq("area", category);
+
+          if (updateError) {
+            console.error("❌ [Progress] Update also failed:", updateError);
+            throw updateError;
+          }
+        }
+      } else {
+        console.log("✅ [Progress] Upsert successful:", savedData);
+      }
+
+      // Update local state with merged data
+      setProgress(prev => ({
+        completed: [...new Set([...prev.completed, ...newUpdates.completed])],
+        correct: [...new Set([...prev.correct, ...newUpdates.correct])],
+        points: prev.points + newUpdates.points
+      }));
+
+      console.log("✅ [Progress] Progress saved successfully:", {
+        completed: mergedCompleted.length,
+        correct: mergedCorrect.length,
+        points: mergedPoints
+      });
+
+      toast.success("Progress saved!", { duration: 2000 });
+    } catch (error) {
+      console.error("❌ [Progress] Error saving progress:", error);
+      toast.error("Failed to save progress. Retrying...");
+      // Re-add to queue for retry
+      updates.forEach(update => {
+        pendingUpdatesRef.current.set(Date.now(), update);
+      });
+    }
+  }, [user, pagetopic, category]);
+
+  const debouncedSave = useMemo(
+    () => debounce(() => saveProgress(false), BATCH_DELAY),
+    [saveProgress]
   );
 
-  // Optimized progress update with optimistic UI
-  const updateProgress = useCallback(
-    (questionId, isCorrect) => {
+  // Immediate save function (for critical actions)
+  const saveProgressImmediate = useCallback(() => {
+    saveProgress(true);
+  }, [saveProgress]);
+
+  // Handle answer
+  const handleAnswer = useCallback((questionId, isCorrect) => {
     if (!user) {
       setShowAuthModal(true);
       return;
     }
-    
-      // Optimistic UI update - immediate response
-      setState((prev) => {
-        const newPendingCompleted = new Set([...prev.progress.pendingCompleted, questionId]);
-        const newPendingCorrect = new Set(prev.progress.pendingCorrect);
-        
-        if (isCorrect) {
-          newPendingCorrect.add(questionId);
-        } else {
-          newPendingCorrect.delete(questionId);
-        }
 
-        const newPendingPoints = prev.progress.pendingPoints + (isCorrect ? 100 : 0);
+    console.log("📝 [Answer] Handling answer:", { questionId, isCorrect });
 
-        // Prepare data for batch update
-        const allCompleted = [...new Set([...prev.progress.completedquestions, ...newPendingCompleted])];
-        const allCorrect = [...new Set([...prev.progress.correctanswers, ...newPendingCorrect])];
-        const totalPoints = prev.progress.points + newPendingPoints;
-
-        // Add to pending batch
-        pendingUpdatesRef.current.set(questionId, {
-          completedquestions: allCompleted,
-          correctanswers: allCorrect,
-          points: totalPoints
-        });
-
-        return {
-          ...prev,
-          progress: {
-            ...prev.progress,
-            pendingCompleted: newPendingCompleted,
-            pendingCorrect: newPendingCorrect,
-            pendingPoints: newPendingPoints
-          },
-          syncStatus: 'pending'
-        };
-      });
-
-      // Trigger batch processing
-      debouncedBatchProcess();
-    },
-    [user, setShowAuthModal, debouncedBatchProcess]
-  );
-
-  const handleQuestionEdit = useCallback((questionId, updatedData) => {
-    setState((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q) =>
-        q._id === questionId
-          ? { ...q, ...updatedData, solutiontext: updatedData.solution }
-          : q
-      ),
-      editingQuestionId: null,
+    // Optimistic update
+    setProgress(prev => ({
+      completed: [...new Set([...prev.completed, questionId])],
+      correct: isCorrect 
+        ? [...new Set([...prev.correct, questionId])]
+        : prev.correct.filter(id => id !== questionId),
+      points: prev.points + (isCorrect ? 100 : 0)
     }));
-  }, []);
 
-  const handleStartEditing = useCallback((questionId) => {
-    setState((prev) => ({
-      ...prev,
-      editingQuestionId: prev.editingQuestionId === questionId ? null : questionId,
-    }));
-  }, []);
+    // Queue for batch save
+    pendingUpdatesRef.current.set(questionId, {
+      completed: [questionId],
+      correct: isCorrect ? [questionId] : [],
+      points: isCorrect ? 100 : 0
+    });
 
-  // Initial data loading
+    // Save immediately for all user actions to ensure progress is saved
+    // This ensures "Mark Complete" and correct answers are saved right away
+    saveProgressImmediate();
+  }, [user, setShowAuthModal, debouncedSave, saveProgressImmediate]);
+
+  // Handle difficulty change
+  const handleDifficultyChange = useCallback((difficulty) => {
+    if (difficulty === activeDifficulty || isLoadingQuestions) return;
+    setActiveDifficulty(difficulty);
+    setCurrentPage(1);
+    setHasMore(true);
+    fetchQuestions(difficulty, 1, false);
+  }, [activeDifficulty, isLoadingQuestions, fetchQuestions]);
+
+  // Load more questions
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingQuestions) return;
+    const nextPage = currentPage + 1;
+    setCurrentPage(nextPage);
+    fetchQuestions(activeDifficulty, nextPage, true);
+  }, [hasMore, isLoadingQuestions, currentPage, activeDifficulty, fetchQuestions]);
+
+  // Initial load
   useEffect(() => {
-    const loadData = async () => {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      await Promise.all([fetchSubjectsData(), fetchQuestionCounts()]);
-      await fetchQuestionsByDifficulty(state.activeDifficulty);
-      setState((prev) => ({ ...prev, isLoading: false }));
+    const load = async () => {
+      setIsLoading(true);
+      await Promise.all([fetchCounts(), fetchQuestions(activeDifficulty, 1)]);
+      setIsLoading(false);
     };
-    loadData();
-  }, [fetchSubjectsData, fetchQuestionCounts, fetchQuestionsByDifficulty, state.activeDifficulty]);
+    load();
+  }, [fetchCounts, fetchQuestions, activeDifficulty]);
 
+  // Load progress when user changes
   useEffect(() => {
-    if (user) {
-      fetchUserProgress(user.id);
-    } else {
-      setState((prev) => ({ 
-        ...prev, 
-        progress: { 
-          completedquestions: [], 
-          correctanswers: [], 
-          points: 0,
-          pendingCompleted: new Set(),
-          pendingCorrect: new Set(),
-          pendingPoints: 0
-        } 
-      }));
-    }
-  }, [user, fetchUserProgress]);
+    fetchUserProgress();
+  }, [fetchUserProgress]);
 
-  // Cleanup on unmount
+  // Cleanup and save on unmount
   useEffect(() => {
     return () => {
       if (batchTimeoutRef.current) {
         clearTimeout(batchTimeoutRef.current);
       }
-      debouncedBatchProcess.cancel();
+      debouncedSave.cancel();
+      // Save any pending updates before unmounting
+      if (pendingUpdatesRef.current.size > 0 && user) {
+        saveProgress(true);
+      }
     };
-  }, [debouncedBatchProcess]);
+  }, [debouncedSave, user, saveProgress]);
 
-  // Memoized stats calculation with optimistic updates
+  // Save progress before page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (pendingUpdatesRef.current.size > 0 && user) {
+        // Use sendBeacon or sync save for critical data
+        saveProgress(true);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [user, saveProgress]);
+
+  // Calculate stats
   const stats = useMemo(() => {
-    const completedFromDB = state.questions.filter((q) => state.progress.completedquestions.includes(q._id)).length;
-    const pendingCompleted = Array.from(state.progress.pendingCompleted).filter(id => 
-      state.questions.some(q => q._id === id)
-    ).length;
-    
-    const completed = completedFromDB + pendingCompleted;
-    const correct = state.progress.correctanswers.length + state.progress.pendingCorrect.size;
-    const total = state.questions.length;
-    const points = state.progress.points + state.progress.pendingPoints;
+    const completed = questions.filter(q => progress.completed.includes(q._id)).length;
+    const correct = questions.filter(q => progress.correct.includes(q._id)).length;
+    const total = questions.length;
     
     return {
       completed,
       correct,
-      points,
+      total,
       completionPercentage: total ? Math.round((completed / total) * 100) : 0,
       accuracy: completed ? Math.round((correct / completed) * 100) : 0,
-      total,
-      hasPendingUpdates: state.progress.pendingCompleted.size > 0 || state.progress.pendingCorrect.size > 0
+      points: progress.points
     };
-  }, [state.questions, state.progress]);
+  }, [questions, progress]);
 
-  // Helper function to check if question is completed (including pending)
-  const isQuestionCompleted = useCallback((questionId) => {
-    return state.progress.completedquestions.includes(questionId) || 
-           state.progress.pendingCompleted.has(questionId);
-  }, [state.progress.completedquestions, state.progress.pendingCompleted]);
+  // Format topic name
+  const topicName = useMemo(() => 
+    pagetopic?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) || "",
+    [pagetopic]
+  );
 
-  // Helper function to check if question is correct (including pending)
-  const isQuestionCorrect = useCallback((questionId) => {
-    return state.progress.correctanswers.includes(questionId) || 
-           state.progress.pendingCorrect.has(questionId);
-  }, [state.progress.correctanswers, state.progress.pendingCorrect]);
-
-  // Loading state
-  if (state.isLoading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
-        <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-24 pb-12">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className="lg:col-span-3 space-y-4">
-              {[1, 2, 3].map((i) => <QuestionSkeleton key={i} />)}
-            </div>
-            <div className="space-y-4">
-              <div className="bg-white p-4 rounded-xl shadow-sm">
-                <div className="h-5 w-24 bg-slate-200 rounded animate-pulse mb-3" />
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-3 w-full bg-slate-100 rounded animate-pulse" />
-                  ))}
-                </div>
-              </div>
+      <div className="min-h-screen bg-neutral-50">
+        <MetaDataJobs
+          seoTitle={`${topicName} ${category?.toUpperCase()} Practice`}
+          seoDescription={`Practice ${topicName} questions with detailed solutions.`}
+        />
+        <Navbar />
+        <div className="flex justify-center items-center min-h-[60vh] pt-16 px-4">
+          <div className="bg-white p-8 rounded-lg border border-neutral-200 flex items-center space-x-4">
+            <div className="w-8 h-8 border-4 border-neutral-200 border-t-neutral-900 rounded-full animate-spin" />
+            <div>
+              <h3 className="text-lg font-medium text-neutral-900">Loading questions</h3>
+              <p className="text-sm text-neutral-600">Please wait...</p>
             </div>
           </div>
         </div>
@@ -522,247 +539,144 @@ const Pagetracker = memo(() => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30">
+    <>
+    <Navbar />
+    <div className="min-h-screen bg-neutral-50">
       <MetaDataJobs
-        seoTitle={`${pagetopic?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} ${category?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} PYQs`}
-        seoDescription={`Practice ${pagetopic?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} questions with detailed solutions.`}
+        seoTitle={`${topicName} ${category?.toUpperCase()} Practice`}
+        seoDescription={`Practice ${topicName} questions with detailed solutions.`}
       />
-      <Navbar 
-        setIsSidebarOpen={(value) => setState((prev) => ({ ...prev, isSidebarOpen: value }))}
-        isSidebarOpen={state.isSidebarOpen}
-        user={user} 
-        setShowAuthModal={setShowAuthModal} 
-      />
-      <Sidebar 
-        isSidebarOpen={state.isSidebarOpen}
-        setIsSidebarOpen={(value) => setState((prev) => ({ ...prev, isSidebarOpen: value }))}
-        data={state.data}
-        activeSubject={state.activeSubject}
-        setActiveSubject={(value) => setState((prev) => ({ ...prev, activeSubject: value }))}
-      />
-      <AnimatePresence>
-        {state.isSidebarOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-10 lg:hidden" 
-            onClick={() => setState((prev) => ({ ...prev, isSidebarOpen: false }))}
-          />
-        )}
-      </AnimatePresence>
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-24 pb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <main className="lg:col-span-3">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white border border-slate-200/60 rounded-xl shadow-sm mb-6"
-            >
-              <div className="bg-gradient-to-r from-slate-900 to-blue-900 p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h1 className="text-2xl font-bold text-white">
-                  {pagetopic?.replace(/-/g, " ").toUpperCase()}
-                </h1>
-                    <p className="text-blue-100 text-sm">Master your concepts with curated questions</p>
-                  </div>
-                  {state.syncStatus === 'pending' && (
-                    <div className="flex items-center space-x-2 bg-white/10 px-3 py-1 rounded-full">
-                      <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse" />
-                      <span className="text-xs text-white">Syncing...</span>
-                    </div>
-                  )}
-                  {state.syncStatus === 'error' && (
-                    <div className="flex items-center space-x-2 bg-red-500/20 px-3 py-1 rounded-full">
-                      <div className="w-2 h-2 bg-red-400 rounded-full" />
-                      <span className="text-xs text-red-200">Sync failed</span>
-                    </div>
-                  )}
+      <div className="bg-neutral-50 pt-4 overflow-x-hidden">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 w-full">
+          {/* Header with Stats */}
+          <div className="mb-4">
+            <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900 mb-1">
+              {topicName}
+            </h1>
+            <p className="text-xs sm:text-sm text-neutral-600 mb-4">
+              {stats.total} questions available
+            </p>
+            
+            {/* Stats Row */}
+            <div className="bg-white rounded-lg border border-neutral-200 p-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div>
+                  <p className="text-xs text-neutral-600 mb-1">Completion</p>
+                  <p className="text-lg font-semibold text-neutral-900">{stats.completionPercentage}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-neutral-600 mb-1">Correct</p>
+                  <p className="text-lg font-semibold text-neutral-900">{stats.correct}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-neutral-600 mb-1">Accuracy</p>
+                  <p className="text-lg font-semibold text-neutral-900">{stats.accuracy}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-neutral-600 mb-1">Points</p>
+                  <p className="text-lg font-semibold text-neutral-900">{stats.points}</p>
                 </div>
               </div>
-              <div className="p-4">
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs font-medium text-slate-700">Progress</span>
-                    <span className="text-xs text-slate-500">{stats.completed}/{stats.total}</span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-1.5">
-                    <motion.div 
-                      className="bg-gradient-to-r from-blue-500 to-indigo-500 h-1.5 rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${stats.completionPercentage}%` }}
-                      transition={{ duration: 0.6 }}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {["easy", "medium", "hard"].map((difficulty) => (
-                    <DifficultyButton
-                      key={difficulty}
-                      difficulty={difficulty}
-                      count={state.allQuestionsCounts[difficulty]}
-                      active={state.activeDifficulty === difficulty}
-                      loading={state.isDifficultyLoading}
-                      onClick={() => handleDifficultyChange(difficulty)}
-                    />
-                  ))}
-                </div>
-                {!user && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="font-semibold text-amber-800 text-sm">Sign in to track progress</p>
-                      <p className="text-xs text-amber-600">Your answers won&apos;t be saved without an account</p>
-                    </div>
-                    <motion.button 
-                      whileHover={{ scale: 1.05 }}
-                      onClick={() => setShowAuthModal(true)}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium"
-                    >
-                      Sign In
-                    </motion.button>
-                  </motion.div>
-                )}
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-4">
+            {/* Progress Bar */}
+            <div className="mb-4">
+              <div className="flex justify-between text-xs sm:text-sm mb-2">
+                <span className="text-neutral-700">Progress</span>
+                <span className="text-neutral-600">{stats.completed}/{stats.total} questions</span>
               </div>
-            </motion.div>
+              <div className="w-full bg-neutral-200 rounded-full h-2">
+                <div 
+                  className="bg-neutral-900 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${stats.completionPercentage}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Difficulty Buttons */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {["easy", "medium", "hard"].map((difficulty) => (
+                <DifficultyButton
+                  key={difficulty}
+                  difficulty={difficulty}
+                  count={counts[difficulty]}
+                  active={activeDifficulty === difficulty}
+                  loading={isLoadingQuestions}
+                  onClick={() => handleDifficultyChange(difficulty)}
+                />
+              ))}
+            </div>
+
+            {/* Sign in prompt */}
+            {!user && (
+              <div className="bg-neutral-50 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs sm:text-sm font-medium text-neutral-900">Sign in to track progress</p>
+                  <p className="text-xs text-neutral-600">Save your answers and track your improvement</p>
+                </div>
+                <button 
+                  onClick={() => setShowAuthModal(true)}
+                  className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-neutral-800 whitespace-nowrap"
+                >
+                  Sign In
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Questions */}
+          <div className="space-y-4 w-full overflow-x-hidden">
             <MathJaxContext config={mathJaxConfig}>
               <MathJax>
-                <AnimatePresence mode="wait">
-                  {state.isDifficultyLoading ? (
-                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-                      {[1, 2, 3].map((i) => <QuestionSkeleton key={i} />)}
-                    </motion.div>
-                  ) : state.questions.length > 0 ? (
-                    <motion.div
-                      key={`questions-${state.activeDifficulty}`}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="space-y-4"
-                    >
-                      {state.questions.map((question, index) => (
-                        <motion.div
-                          key={question._id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
+                {isLoadingQuestions && questions.length === 0 ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => <QuestionSkeleton key={i} />)}
+                  </div>
+                ) : questions.length > 0 ? (
+                  <>
+                    {questions.map((question, index) => (
+                      <QuestionCard
+                        key={question._id}
+                        question={question}
+                        index={index}
+                        onAnswer={(isCorrect) => handleAnswer(question._id, isCorrect)}
+                        isCompleted={progress.completed.includes(question._id)}
+                        isCorrect={progress.correct.includes(question._id)}
+                        isAdmin={user?.email === ADMIN_EMAIL}
+                      />
+                    ))}
+                    
+                    {/* Load More */}
+                    {hasMore && (
+                      <div className="text-center py-4">
+                        <button
+                          onClick={loadMore}
+                          disabled={isLoadingQuestions}
+                          className="px-6 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 transition-colors"
                         >
-                          <QuestionCard
-                            question={question}
-                            index={index}
-                            onAnswer={(isCorrect) => updateProgress(question._id, isCorrect)}
-                            isCompleted={isQuestionCompleted(question._id)}
-                            isCorrect={isQuestionCorrect(question._id)}
-                            isAdmin={user?.email === ADMIN_EMAIL}
-                            onEdit={handleQuestionEdit}
-                            isEditing={state.editingQuestionId === question._id}
-                            onStartEditing={() => handleStartEditing(question._id)}
-                          />
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="empty"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-center py-12 bg-white rounded-xl border border-slate-200/60"
-                    >
-                      <Clock size={36} className="mx-auto text-slate-400 mb-2" />
-                      <h3 className="text-lg font-semibold text-slate-700">No questions available</h3>
-                      <p className="text-sm text-slate-500">No questions found for {state.activeDifficulty} difficulty.</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                          {isLoadingQuestions ? "Loading..." : "Load More Questions"}
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-12 bg-white rounded-lg border border-neutral-200">
+                    <Clock size={36} className="mx-auto text-neutral-400 mb-3" />
+                    <h3 className="text-lg font-semibold text-neutral-900 mb-2">No questions available</h3>
+                    <p className="text-sm text-neutral-600">No questions found for {activeDifficulty} difficulty.</p>
+                  </div>
+                )}
               </MathJax>
             </MathJaxContext>
-          </main>
-          <aside className="hidden lg:block space-y-4">
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white border border-slate-200/60 rounded-xl p-4"
-            >
-              <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                <Trophy size={16} className="mr-1 text-yellow-500" />
-                Your Stats
-                {stats.hasPendingUpdates && (
-                  <div className="ml-2 w-2 h-2 bg-orange-500 rounded-full animate-pulse" title="Updates pending sync" />
-                )}
-              </h2>
-              <div className="grid gap-3">
-                <StatCard 
-                  icon={Target}
-                  label="Completion"
-                  value={`${stats.completionPercentage}%`}
-                  color="blue"
-                  isPending={stats.hasPendingUpdates}
-                />
-                <StatCard 
-                  icon={CheckCircle2}
-                  label="Correct"
-                  value={stats.correct}
-                  color="green"
-                  isPending={stats.hasPendingUpdates}
-                />
-                <StatCard 
-                  icon={Star}
-                  label="Points"
-                  value={stats.points} 
-                  color="yellow"
-                  isPending={stats.hasPendingUpdates}
-                />
-                <StatCard 
-                  icon={CheckCircle2} 
-                  label="Accuracy"
-                  value={`${stats.accuracy}%`}
-                  color="purple"
-                  isPending={stats.hasPendingUpdates}
-                />
-              </div>
-              {stats.completionPercentage === 100 && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-4 bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-xl border border-green-200 text-center"
-                >
-                  <h3 className="font-bold text-green-800 text-sm">Completed!</h3>
-                  <p className="text-xs text-green-600">Great job finishing all questions!</p>
-                </motion.div>
-              )}
-              {state.syncStatus === 'error' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-4 bg-gradient-to-r from-red-50 to-rose-50 p-3 rounded-xl border border-red-200 text-center"
-                >
-                  <h3 className="font-bold text-red-800 text-sm">Sync Error</h3>
-                  <p className="text-xs text-red-600">Your progress will be retried automatically</p>
-                </motion.div>
-              )}
-            </motion.div>
-          </aside>
+          </div>
         </div>
       </div>
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: "#333",
-            color: "#fff",
-            borderRadius: "8px",
-            boxShadow: "0 3px 10px rgba(0, 0, 0, 0.2)",
-          },
-          success: { style: { background: "#10B981" } },
-          error: { style: { background: "#EF4444" } },
-        }}
-      />
+      <Toaster position="bottom-right" />
     </div>
+    </>
   );
 });
 

@@ -12,14 +12,17 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
+import { useArticleCategories } from '@/lib/hooks/useArticleCategories';
 
 const ITEMS_PER_PAGE = 25;
 
 const CategoryPageClient = ({ params }) => {
   const [category, setCategory] = React.useState(null);
   const [articles, setArticles] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Use shared hook for categories
+  const { categories } = useArticleCategories({ enabled: true });
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
@@ -58,24 +61,11 @@ const CategoryPageClient = ({ params }) => {
     }
   }, [category]);
 
-  const fetchCategories = React.useCallback(async () => {
-    try {
-      const response = await fetch('/api/articles/categories');
-      const result = await response.json();
-      if (result.success) {
-        setCategories(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  }, []);
-
   useEffect(() => {
     if (category) {
       fetchArticles();
-      fetchCategories();
     }
-  }, [category, fetchArticles, fetchCategories]);
+  }, [category, fetchArticles]);
 
   // Update URL with page parameter
   const updateURL = React.useCallback((page) => {
@@ -98,11 +88,13 @@ const CategoryPageClient = ({ params }) => {
   }, [searchTerm, sortBy, currentPage, updateURL]);
 
   const getCategoryColor = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return '#3B82F6';
     const cat = categories.find(c => c.slug === categorySlug);
     return cat?.color || '#3B82F6';
   };
 
   const getCategoryName = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return categorySlug;
     const cat = categories.find(c => c.slug === categorySlug);
     return cat?.name || categorySlug;
   };

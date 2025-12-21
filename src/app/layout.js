@@ -137,13 +137,21 @@ export default function RootLayout({ children }) {
         <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body>
-        <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+        <ClerkProvider 
+          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+          appearance={{
+            elements: {
+              formButtonPrimary: "bg-neutral-900 hover:bg-neutral-800 text-white font-semibold transition-colors",
+              formFieldInput: "border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900",
+            }
+          }}
+        >
           <AuthProvider>
             <AnalyticsInitializer />
             <AuthModalWrapper />
             <Navbar/>
             <ProfileModal />
-            <div className="pt-24 pb-16 md:pb-0">
+            <div className="pb-16 md:pb-0">
               {children}
             </div>
             <Footer />

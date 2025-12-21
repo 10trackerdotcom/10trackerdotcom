@@ -20,12 +20,15 @@ import {
 import toast from 'react-hot-toast';
 import { useUser } from '@clerk/nextjs';
 import RichTextEditor from '@/components/RichTextEditor';
+import { useArticleCategories, clearCategoriesCache } from '@/lib/hooks/useArticleCategories';
 
 const AdminArticlesPage = () => {
   const { user, isLoaded } = useUser();
   const [articles, setArticles] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Use shared hook for categories
+  const { categories, refetch: refetchCategories } = useArticleCategories({ enabled: true });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -43,10 +46,9 @@ const AdminArticlesPage = () => {
   // Check if user is admin
   const isAdmin = user?.emailAddresses?.[0]?.emailAddress === 'jain10gunjan@gmail.com';
 
-  // Fetch articles and categories
+  // Fetch articles
   useEffect(() => {
     fetchArticles();
-    fetchCategories();
   }, []);
 
   const fetchArticles = async () => {
@@ -61,18 +63,6 @@ const AdminArticlesPage = () => {
       toast.error('Failed to fetch articles');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch('/api/articles/categories');
-      const result = await response.json();
-      if (result.success) {
-        setCategories(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
     }
   };
 
@@ -310,7 +300,7 @@ const AdminArticlesPage = () => {
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
               >
                 <option value="">All Categories</option>
-                {categories.map(category => (
+                {categories && Array.isArray(categories) && categories.map(category => (
                   <option key={category.slug} value={category.slug}>
                     {category.name}
                   </option>
@@ -352,7 +342,8 @@ const AdminArticlesPage = () => {
                 });
                 const result = await res.json();
                 if (result.success) {
-                  await fetchCategories();
+                  clearCategoriesCache();
+                  await refetchCategories();
                   form.reset();
                 }
               } catch (e) {
@@ -379,7 +370,7 @@ const AdminArticlesPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
-                {categories.map((cat) => (
+                {categories && Array.isArray(categories) && categories.map((cat) => (
                   <tr key={cat.slug}>
                     <td className="px-4 py-2 text-sm text-neutral-800">{cat.name}</td>
                     <td className="px-4 py-2 text-sm text-neutral-500">{cat.slug}</td>
@@ -397,7 +388,8 @@ const AdminArticlesPage = () => {
                             const res = await fetch(`/api/articles/categories?slug=${encodeURIComponent(cat.slug)}`, { method: 'DELETE' });
                             const result = await res.json();
                             if (result.success) {
-                              await fetchCategories();
+                              clearCategoriesCache();
+                            await refetchCategories();
                             }
                           } catch (e) {
                             console.error(e);
@@ -572,7 +564,7 @@ const AdminArticlesPage = () => {
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
                   >
                     <option value="">Select Category</option>
-                    {categories.map(category => (
+                    {categories && Array.isArray(categories) && categories.map(category => (
                       <option key={category.slug} value={category.slug}>
                         {category.name}
                       </option>

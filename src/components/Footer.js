@@ -1,15 +1,25 @@
 "use client";
 import React, { useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Twitter, Instagram, Mail } from "lucide-react";
 import ReactGA from "react-ga4";
 
 const Footer = () => {
+  const pathname = usePathname();
+  const isAuthPage = pathname === '/sign-up' || pathname === '/sign-in';
+  
   useEffect(() => {
-    ReactGA.initialize("G-VYBMV6GVQQ");
-    ReactGA.send("pageview");
-    console.log("Sending the Google Analytics data");
-  }, []);
+    // Don't initialize GA on auth pages for better performance
+    if (!isAuthPage && typeof window !== 'undefined') {
+      try {
+        ReactGA.initialize("G-VYBMV6GVQQ");
+        ReactGA.send("pageview");
+      } catch (error) {
+        console.error("GA initialization error:", error);
+      }
+    }
+  }, [isAuthPage]);
 
   return (
     <footer className="bg-white border-t border-gray-100">

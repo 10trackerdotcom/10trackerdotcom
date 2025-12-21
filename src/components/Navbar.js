@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
@@ -19,31 +20,25 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
+import { useArticleCategories } from "@/lib/hooks/useArticleCategories";
 
 const Navbar = () => {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [categories, setCategories] = useState([]);
   const [showCategoryDrawer, setShowCategoryDrawer] = useState(false);
   const { user, signOut, setShowAuthModal, isAdmin, setShowProfileModal } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch('/api/articles/categories');
-      const result = await response.json();
-      if (result.success) {
-        setCategories(result.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
+  
+  // Check if we're on an auth page to prevent unnecessary API calls
+  const isAuthPage = pathname === '/sign-up' || pathname === '/sign-in';
+  
+  // Only fetch categories when drawer is opened AND not on auth pages
+  const { categories } = useArticleCategories({ 
+    enabled: showCategoryDrawer && !isAuthPage 
+  });
 
   const getCategoryColor = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return '#3B82F6';
     const category = categories.find(cat => cat.slug === categorySlug);
     return category?.color || '#3B82F6';
   };
@@ -87,7 +82,7 @@ const Navbar = () => {
                     </span>
                   </div>
                   <p className="text-sm md:text-base text-gray-700 italic font-light">
-                    Latest Updates in 10 Points
+                  {`Practice -> Track -> Achieve.`}
                   </p>
                 </motion.div>
               </Link>
@@ -136,13 +131,22 @@ const Navbar = () => {
                         animate={{ opacity: 1, y: 0 }}
                         className="absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-lg z-50"
                       >
+                        <Link
+                          href="/user-progress"
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          <div className="flex items-center">
+                            <BarChart2 size={16} className="mr-2" />
+                            My Progress
+                          </div>
+                        </Link>
                         <button
                           onClick={() => setShowProfileModal(true)}
                           className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
                           <div className="flex items-center">
                             <User size={16} className="mr-2" />
-                            Open Profile Modal
+                            Profile Settings
                           </div>
                         </button>
                         {isAdmin && (
@@ -169,12 +173,20 @@ const Navbar = () => {
                     )}
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setShowAuthModal(true)}
-                    className="px-4 py-2 rounded-full font-medium bg-gray-900 text-white hover:bg-black transition-colors"
-                  >
-                    Sign In
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href="/sign-in"
+                      className="px-4 py-2 rounded-lg font-medium bg-white border border-neutral-300 text-neutral-800 hover:bg-neutral-50 transition-colors"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/sign-up"
+                      className="px-4 py-2 rounded-lg font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors"
+                    >
+                      Sign Up
+                    </Link>
+                  </div>
                 )}
               </div>
             </div>
@@ -246,6 +258,14 @@ const Navbar = () => {
                       </p>
                     </div>
                   </div>
+                  <Link
+                    href="/user-progress"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center w-full px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
+                  >
+                    <BarChart2 size={18} className="mr-3 text-gray-600" />
+                    My Progress
+                  </Link>
                   <button
                     onClick={() => {
                       setShowProfileModal(true);
@@ -254,7 +274,7 @@ const Navbar = () => {
                     className="flex items-center w-full px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
                   >
                     <User size={18} className="mr-3 text-gray-600" />
-                    Profile
+                    Profile Settings
                   </button>
                   {isAdmin && (
                     <Link
@@ -280,24 +300,20 @@ const Navbar = () => {
                 </>
               ) : (
                 <div className="space-y-3 pt-2">
-                  <button
-                    onClick={() => {
-                      setShowAuthModal(true);
-                      setIsOpen(false);
-                    }}
-                    className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-gray-900 to-gray-800 text-white font-semibold text-base shadow-lg hover:shadow-xl transition-all duration-200 active:scale-[0.98]"
+                  <Link
+                    href="/sign-in"
+                    onClick={() => setIsOpen(false)}
+                    className="block w-full px-4 py-3 rounded-lg bg-neutral-900 text-white font-semibold text-base hover:bg-neutral-800 transition-all duration-200 active:scale-[0.98] text-center"
                   >
                     Sign In
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAuthModal(true);
-                      setIsOpen(false);
-                    }}
-                    className="w-full px-4 py-3 rounded-lg bg-white border-2 border-gray-300 text-gray-900 font-semibold text-base hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 active:scale-[0.98]"
+                  </Link>
+                  <Link
+                    href="/sign-up"
+                    onClick={() => setIsOpen(false)}
+                    className="block w-full px-4 py-3 rounded-lg bg-white border border-neutral-300 text-neutral-900 font-semibold text-base hover:bg-neutral-50 transition-all duration-200 active:scale-[0.98] text-center"
                   >
                     Sign Up
-                  </button>
+                  </Link>
                 </div>
               )}
             </div>
@@ -340,7 +356,7 @@ const Navbar = () => {
 
               {/* Drawer Content */}
               <div className="flex-1 overflow-y-auto px-6 py-6">
-                {categories.length > 0 ? (
+                {categories && Array.isArray(categories) && categories.length > 0 ? (
                   <div className="space-y-2">
                     {categories.map((category, index) => (
                       <motion.div

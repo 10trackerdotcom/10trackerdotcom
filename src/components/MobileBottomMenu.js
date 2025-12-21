@@ -1,33 +1,26 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, X, ChevronRight, Grid3x3 } from 'lucide-react';
+import { useArticleCategories } from '@/lib/hooks/useArticleCategories';
 
 const MobileBottomMenu = () => {
-  const [categories, setCategories] = useState([]);
   const [showCategories, setShowCategories] = useState(false);
   const pathname = usePathname();
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch('/api/articles/categories');
-      const result = await response.json();
-      if (result.success) {
-        setCategories(result.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
+  
+  // Check if we're on an auth page to prevent unnecessary API calls
+  const isAuthPage = pathname === '/sign-up' || pathname === '/sign-in';
+  
+  // Only fetch categories when drawer is opened AND not on auth pages
+  const { categories } = useArticleCategories({ 
+    enabled: showCategories && !isAuthPage 
+  });
 
   const getCategoryColor = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return '#3B82F6';
     const category = categories.find(cat => cat.slug === categorySlug);
     return category?.color || '#3B82F6';
   };
@@ -98,7 +91,7 @@ const MobileBottomMenu = () => {
 
               {/* Drawer Content */}
               <div className="flex-1 overflow-y-auto px-6 py-6">
-                {categories.length > 0 ? (
+                {categories && Array.isArray(categories) && categories.length > 0 ? (
                   <div className="space-y-2">
                     {categories.map((category, index) => (
                       <motion.div

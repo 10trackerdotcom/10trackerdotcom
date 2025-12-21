@@ -8,16 +8,18 @@ import {
   ArrowRight,
   BookOpen
 } from 'lucide-react';
+import { useArticleCategories } from '@/lib/hooks/useArticleCategories';
 
 const ArticlesSection = () => {
   const [articles, setArticles] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('');
+  
+  // Fetch categories using shared hook
+  const { categories } = useArticleCategories({ enabled: true });
 
   useEffect(() => {
     fetchArticles();
-    fetchCategories();
   }, []);
 
   const fetchArticles = async () => {
@@ -36,18 +38,6 @@ const ArticlesSection = () => {
     }
   };
 
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch('/api/articles/categories');
-      const result = await response.json();
-      if (result.success) {
-        setCategories(result.data);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
-
   // Ensure only latest 7 overall, then group those for display
   const latestSeven = [...articles]
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -62,7 +52,7 @@ const ArticlesSection = () => {
   }, {});
 
   // Display ALL categories that have content, in 3-column grid
-  const allCategories = (categories || [])
+  const allCategories = (Array.isArray(categories) ? categories : [])
     .map((cat) => ({
       category: cat.slug,
       name: cat.name,
@@ -86,11 +76,13 @@ const ArticlesSection = () => {
   };
 
   const getCategoryColor = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return '#3B82F6';
     const category = categories.find(cat => cat.slug === categorySlug);
     return category?.color || '#3B82F6';
   };
 
   const getCategoryName = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return categorySlug;
     const category = categories.find(cat => cat.slug === categorySlug);
     return category?.name || categorySlug;
   };
