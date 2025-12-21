@@ -549,7 +549,7 @@ const Pagetracker = memo(() => {
       <div className="bg-neutral-50 pt-4 overflow-x-hidden">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 w-full">
           {/* Header with Stats */}
-          <div className="mb-4">
+          <div className="mb-4 sm:mb-8 mt-16">
             <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900 mb-1">
               {topicName}
             </h1>
