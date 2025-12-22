@@ -16,7 +16,7 @@ const supabase = createClient(
 );
 
 // Memoized QuestionCard component
-const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
+const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
   const [state, setState] = useState({
     showSolution: false,
     selectedOption: null,
@@ -448,30 +448,30 @@ const QuestionCard = memo(({ question, index, onAnswer, isCompleted, onReport, o
                       <span className="font-semibold text-indigo-800 text-xs">Correct Answer: {questionData.correct_option}</span>
                     </div>
                   )}
-                  <MathJax hideUntilTypeset={"first"} inline dynamic>
-                    <div className="text-gray-700 text-xs break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
-                      {questionData.category?.includes("GATE") ? (
-                        <a
-                        href={questionData.solution}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
-                      >
-                        Discuss solution
-                      </a>
-                      ) : (
-                        // <div className="[&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: questionData.solution }} />
-                        <a
-                        href={questionData.solution}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
-                      >
-                        Discuss solution
-                      </a>
-                      )}
-                    </div>
-                  </MathJax>
+                  
+
+<MathJax hideUntilTypeset={"first"} inline dynamic>
+  <div className="text-gray-700 text-xs break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
+  {["gate-cse", "gate-me", "gate-da"].includes(
+    category.toLowerCase()
+    ) ? (
+      <a
+        href={questionData.solution}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 underline"
+      >
+        Discuss solution
+      </a>
+    ) : (
+      <p
+        dangerouslySetInnerHTML={{ __html: questionData.solution }}
+      >
+      </p>
+    )}
+  </div>
+</MathJax>
+
                 </div>
               )}
         </div>
