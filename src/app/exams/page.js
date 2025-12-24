@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { 
   BookOpen, 
   Trophy, 
@@ -16,40 +17,120 @@ import {
   Filter,
   X
 } from "lucide-react";
-import { getCachedData } from "@/lib/utils/apiCache";
+import { mergeExamData } from "@/data/examData";
+
+// Exam Card Component matching HomePage style
+function ExamCard({ exam }) {
+  const [imageError, setImageError] = useState(false);
+  const showImage = exam.image && !imageError;
+  const isActive = exam.active !== false; // Default to true if not specified
+  
+  // If inactive, render as disabled card
+  if (!isActive) {
+    return (
+      <div className="relative overflow-hidden bg-neutral-100 border border-neutral-200 rounded-xl flex flex-row items-center gap-4 p-4 h-24 opacity-60 cursor-not-allowed">
+        {/* Small Logo on Left - Grayed out */}
+        <div className={`relative w-16 h-16 flex-shrink-0 rounded-lg bg-gradient-to-br from-neutral-200 to-neutral-300 overflow-hidden ${exam.bg || ''}`}>
+          {showImage ? (
+            <Image
+              src={exam.image}
+              alt={exam.name}
+              fill
+              className="object-cover grayscale"
+              onError={() => setImageError(true)}
+              unoptimized
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-3xl opacity-50">
+              {exam.icon}
+            </div>
+          )}
+        </div>
+        
+        {/* Content on Right - Grayed out */}
+        <div className="flex-1 flex flex-col justify-center min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold text-neutral-500 mb-1 truncate">
+                {exam.name}
+              </h3>
+              <p className="text-neutral-400 text-xs line-clamp-1">
+                {exam.description || 'Topic-wise practice questions with detailed solutions'}
+              </p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-neutral-300 flex-shrink-0" />
+          </div>
+          <div className="flex items-center gap-3 text-xs text-neutral-400 mt-2">
+            <span className="flex items-center gap-1">
+              <FileText className="w-3.5 h-3.5" />
+              <span className="font-medium">{exam.count?.toLocaleString() || 0} Questions</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Active exam card
+  return (
+    <Link
+      href={`/${exam.slug}`}
+      className="group relative overflow-hidden bg-white border border-neutral-200 rounded-xl hover:border-neutral-300 hover:shadow-lg transition-all duration-300 flex flex-row items-center gap-4 p-4 h-24"
+    >
+      {/* Small Logo on Left */}
+      <div className={`relative w-16 h-16 flex-shrink-0 rounded-lg bg-gradient-to-br from-neutral-100 to-neutral-200 overflow-hidden ${exam.bg || ''}`}>
+        {showImage ? (
+          <Image
+            src={exam.image}
+            alt={exam.name}
+            fill
+            className="object-cover group-hover:scale-110 transition-transform duration-300"
+            onError={() => setImageError(true)}
+            unoptimized
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-3xl">
+            {exam.icon}
+          </div>
+        )}
+      </div>
+      
+      {/* Content on Right */}
+      <div className="flex-1 flex flex-col justify-center min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-bold text-neutral-900 mb-1 group-hover:text-neutral-700 transition-colors truncate">
+              {exam.name}
+            </h3>
+            <p className="text-neutral-600 text-xs line-clamp-1">
+              {exam.description || 'Topic-wise practice questions with detailed solutions'}
+            </p>
+          </div>
+          <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-1 transition-all flex-shrink-0" />
+        </div>
+        <div className="flex items-center gap-3 text-xs text-neutral-500 mt-2">
+          <span className="flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5" />
+            <span className="font-medium">{exam.count?.toLocaleString() || 0} Questions</span>
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 export default function ExamsPage() {
   const [examCategories, setExamCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("popular"); // popular, name, questions
   const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch exam categories with caching
+  // Use hardcoded exam data
   useEffect(() => {
-    const fetchExamCategories = async () => {
-      try {
-        const categories = await getCachedData(
-          'exam-categories',
-          async () => {
-            const response = await fetch('/api/exams/categories');
-            const result = await response.json();
-            if (result.success) {
-              return result.data || [];
-            }
-            return [];
-          },
-          5 * 60 * 1000 // 5 minutes cache
-        );
-        setExamCategories(categories);
-      } catch (error) {
-        console.error('Error fetching exam categories:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchExamCategories();
+    const hardcodedExams = mergeExamData([]); // Pass empty array since we're using hardcoded data
+    setExamCategories(hardcodedExams);
+    setLoading(false);
   }, []);
 
   // Filter and sort exams
@@ -60,7 +141,8 @@ export default function ExamsPage() {
     if (searchTerm) {
       filtered = filtered.filter(exam => 
         exam.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        exam.slug.toLowerCase().includes(searchTerm.toLowerCase())
+        exam.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (exam.description && exam.description.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
 
@@ -70,10 +152,14 @@ export default function ExamsPage() {
         case "name":
           return a.name.localeCompare(b.name);
         case "questions":
-          return b.count - a.count;
+          return (b.count || 0) - (a.count || 0);
         case "popular":
         default:
-          return b.count - a.count; // Most questions = most popular
+          // Sort by active first, then by count
+          if (a.active !== b.active) {
+            return a.active ? -1 : 1;
+          }
+          return (b.count || 0) - (a.count || 0);
       }
     });
 
@@ -123,7 +209,7 @@ export default function ExamsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6 max-w-2xl mx-auto">
               <div className="bg-white border border-neutral-200 rounded-xl p-4 sm:p-6 shadow-sm">
                 <div className="text-2xl sm:text-3xl font-bold mb-2 text-neutral-900">
-                  {stats.totalExams}
+                  3
                 </div>
                 <div className="text-neutral-600 text-xs sm:text-sm">Exams Available</div>
               </div>
@@ -246,55 +332,25 @@ export default function ExamsPage() {
             </div>
           ) : (
             <>
-              <div className="mb-6 sm:mb-8">
+              <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <p className="text-neutral-600 text-sm sm:text-base">
                   Showing <span className="font-semibold text-neutral-900">{filteredAndSortedExams.length}</span> exam{filteredAndSortedExams.length !== 1 ? 's' : ''}
                 </p>
+                <div className="flex items-center gap-4 text-xs text-neutral-500">
+                  <span className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <span>Active</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-neutral-300"></div>
+                    <span>Coming Soon</span>
+                  </span>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {filteredAndSortedExams.map((exam) => (
-                  <Link
-                    key={exam.slug}
-                    href={`/${exam.slug}`}
-                    className="group relative overflow-hidden bg-white border border-neutral-200 rounded-xl p-5 sm:p-6 hover:border-neutral-300 hover:shadow-lg transition-all duration-200 h-full flex flex-col"
-                  >
-                    {/* Icon and Arrow */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-neutral-100 flex items-center justify-center text-2xl sm:text-3xl flex-shrink-0 group-hover:scale-110 transition-transform duration-200">
-                        {exam.icon}
-                      </div>
-                      <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-1 transition-all duration-200 flex-shrink-0 mt-1" />
-                    </div>
-
-                    {/* Exam Name */}
-                    <h3 className="text-lg sm:text-xl font-bold text-neutral-900 mb-2 group-hover:text-neutral-800 transition-colors line-clamp-2">
-                      {exam.name}
-                    </h3>
-
-                    {/* Description */}
-                    <p className="text-neutral-600 text-sm mb-4 line-clamp-2 flex-grow">
-                      Topic-wise practice questions with detailed solutions and progress tracking
-                    </p>
-
-                    {/* Stats */}
-                    <div className="flex items-center gap-3 sm:gap-4 text-sm text-neutral-500 pt-4 border-t border-neutral-100 mt-auto">
-                      <span className="flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 flex-shrink-0" />
-                        <span className="font-medium text-neutral-700">
-                          {exam.count?.toLocaleString() || 0}
-                        </span>
-                        <span className="hidden sm:inline">Questions</span>
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <BarChart3 className="w-4 h-4 flex-shrink-0" />
-                        <span className="hidden sm:inline">Track Progress</span>
-                      </span>
-                    </div>
-
-                    {/* Hover Effect Gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-neutral-50/0 to-neutral-50/0 group-hover:from-neutral-50/50 group-hover:to-transparent transition-all duration-200 pointer-events-none rounded-xl" />
-                  </Link>
+                  <ExamCard key={exam.slug} exam={exam} />
                 ))}
               </div>
             </>

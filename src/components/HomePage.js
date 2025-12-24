@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Toaster } from "react-hot-toast";
 import { 
   BookOpen, 
@@ -14,6 +15,107 @@ import {
   FileText,
   Sparkles
 } from "lucide-react";
+import { mergeExamData } from "@/data/examData";
+
+// Exam Card Component with Image Support
+function ExamCard({ exam }) {
+  const [imageError, setImageError] = useState(false);
+  const showImage = exam.image && !imageError;
+  const isActive = exam.active !== false; // Default to true if not specified
+  
+  // If inactive, render as disabled card
+  if (!isActive) {
+    return (
+      <div className="relative overflow-hidden bg-neutral-100 border border-neutral-200 rounded-xl flex flex-row items-center gap-4 p-4 h-24 opacity-60 cursor-not-allowed">
+        {/* Small Logo on Left - Grayed out */}
+        <div className={`relative w-16 h-16 flex-shrink-0 rounded-lg bg-gradient-to-br from-neutral-200 to-neutral-300 overflow-hidden ${exam.bg || ''}`}>
+          {showImage ? (
+            <Image
+              src={exam.image}
+              alt={exam.name}
+              fill
+              className="object-cover grayscale"
+              onError={() => setImageError(true)}
+              unoptimized
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-3xl opacity-50">
+              {exam.icon}
+            </div>
+          )}
+        </div>
+        
+        {/* Content on Right - Grayed out */}
+        <div className="flex-1 flex flex-col justify-center min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold text-neutral-500 mb-1 truncate">
+                {exam.name}
+              </h3>
+              <p className="text-neutral-400 text-xs line-clamp-1">
+                {exam.description || 'Topic-wise practice questions with detailed solutions'}
+              </p>
+            </div>
+            <ArrowRight className="w-5 h-5 text-neutral-300 flex-shrink-0" />
+          </div>
+          <div className="flex items-center gap-3 text-xs text-neutral-400 mt-2">
+            <span className="flex items-center gap-1">
+              <FileText className="w-3.5 h-3.5" />
+              <span className="font-medium">{exam.count?.toLocaleString() || 0} Questions</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Active exam card
+  return (
+    <Link
+      href={`/${exam.slug}`}
+      className="group relative overflow-hidden bg-white border border-neutral-200 rounded-xl hover:border-neutral-300 hover:shadow-lg transition-all duration-300 flex flex-row items-center gap-4 p-4 h-24"
+    >
+      {/* Small Logo on Left */}
+      <div className={`relative w-16 h-16 flex-shrink-0 rounded-lg bg-gradient-to-br from-neutral-100 to-neutral-200 overflow-hidden ${exam.bg || ''}`}>
+        {showImage ? (
+          <Image
+            src={exam.image}
+            alt={exam.name}
+            fill
+            className="object-cover group-hover:scale-110 transition-transform duration-300"
+            onError={() => setImageError(true)}
+            unoptimized
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-3xl">
+            {exam.icon}
+          </div>
+        )}
+      </div>
+      
+      {/* Content on Right */}
+      <div className="flex-1 flex flex-col justify-center min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-bold text-neutral-900 mb-1 group-hover:text-neutral-700 transition-colors truncate">
+              {exam.name}
+            </h3>
+            <p className="text-neutral-600 text-xs line-clamp-1">
+              {exam.description || 'Topic-wise practice questions with detailed solutions'}
+            </p>
+          </div>
+          <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-1 transition-all flex-shrink-0" />
+        </div>
+        <div className="flex items-center gap-3 text-xs text-neutral-500 mt-2">
+          <span className="flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5" />
+            <span className="font-medium">{exam.count?.toLocaleString() || 0} Questions</span>
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 export default function HomePage() {
   const [examCategories, setExamCategories] = useState([]);
@@ -25,32 +127,25 @@ export default function HomePage() {
   const [loadingExams, setLoadingExams] = useState(true);
 
   useEffect(() => {
-    // Fetch exam categories from database
-    const fetchExamCategories = async () => {
-      try {
-        const response = await fetch('/api/exams/categories');
-        const result = await response.json();
-        if (result.success) {
-          setExamCategories(result.data || []);
-          // Calculate total questions from categories
-          const total = (result.data || []).reduce((sum, cat) => sum + (cat.count || 0), 0);
-          setExamStats(prev => ({ ...prev, totalQuestions: total }));
-        }
-      } catch (error) {
-        console.error('Error fetching exam categories:', error);
-      } finally {
-        setLoadingExams(false);
-      }
-    };
-
-    fetchExamCategories();
-
-    // Fetch stats (placeholder for now)
-    setExamStats({
-      totalQuestions: 5000,
+    // Use hardcoded exam data instead of fetching from API
+    const hardcodedExams = mergeExamData([]); // Pass empty array since we're using hardcoded data
+    setExamCategories(hardcodedExams);
+    
+    // Calculate total questions from all exams (active and inactive)
+    const total = hardcodedExams.reduce((sum, exam) => sum + (exam.count || 0), 0);
+    setExamStats(prev => ({ 
+      ...prev, 
+      totalQuestions: total 
+    }));
+    
+    setLoadingExams(false);
+    
+    // Set other stats (placeholder for now)
+    setExamStats(prev => ({
+      ...prev,
       totalUsers: 2000,
       dailyPractice: 2500,
-    });
+    }));
   }, []);
 
   return (
@@ -133,34 +228,9 @@ export default function HomePage() {
                 <p className="text-neutral-600">No exams available at the moment.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {examCategories.map((exam) => (
-                <Link
-                  key={exam.slug}
-                  href={`/${exam.slug}`}
-                  className="group relative overflow-hidden bg-white border border-neutral-200 rounded-xl p-6 hover:border-neutral-300 hover:shadow-md transition-all duration-200"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                  <div className="w-16 h-16 rounded-xl bg-neutral-100 flex items-center justify-center text-3xl">
-                    {exam.icon}
-                  </div>
-                    <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-1 transition-all" />
-                  </div>
-                  <h3 className="text-xl font-bold text-neutral-900 mb-2">{exam.name}</h3>
-                  <p className="text-neutral-600 text-sm mb-4">
-                    Topic-wise practice questions with detailed solutions
-                  </p>
-                  <div className="flex items-center gap-4 text-sm text-neutral-500">
-                    <span className="flex items-center gap-1">
-                      <FileText className="w-4 h-4" />
-                      {exam.count?.toLocaleString() || 0} Questions
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <BarChart3 className="w-4 h-4" />
-                      Track Progress
-                    </span>
-                  </div>
-                </Link>
+                  <ExamCard key={exam.slug} exam={exam} />
                 ))}
               </div>
             )}

@@ -46,7 +46,7 @@ const getCachedExamCategories = unstable_cache(
           'ssc': { icon: '📋', color: 'from-yellow-500 to-orange-500' },
         };
 
-        const config = categoryConfig[slug] || { 
+        const config =  { 
           icon: '📖', 
           color: 'from-neutral-500 to-neutral-600' 
         };

@@ -84,9 +84,6 @@ const Pagetracker = memo(() => {
   const [questions, setQuestions] = useState([]);
   const [counts, setCounts] = useState({ easy: 0, medium: 0, hard: 0 });
   const [activeDifficulty, setActiveDifficulty] = useState("easy");
-  const [selectedYear, setSelectedYear] = useState(null); // null means "All Years"
-  const [availableYears, setAvailableYears] = useState([]);
-  const [isLoadingYears, setIsLoadingYears] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [progress, setProgress] = useState({
@@ -149,49 +146,13 @@ const Pagetracker = memo(() => {
     }
   }, [category, pagetopic, getCached, setCached]);
 
-  // Fetch available years for current difficulty (optimized with caching)
-  const fetchAvailableYears = useCallback(async (difficulty) => {
-    if (!pagetopic || !category || !difficulty) return;
-
-    setIsLoadingYears(true);
-    try {
-      const cacheKey = `years-${category}-${pagetopic}-${difficulty}`;
-      const cached = getCached(cacheKey);
-      
-      if (cached) {
-        setAvailableYears(cached);
-        setIsLoadingYears(false);
-        return;
-      }
-
-      const response = await fetch(
-        `/api/questions/years?category=${encodeURIComponent(category)}&pagetopic=${encodeURIComponent(pagetopic)}&difficulty=${difficulty}`
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch years');
-      }
-
-      const { years } = await response.json();
-      const yearsData = years || [];
-      
-      setAvailableYears(yearsData);
-      setCached(cacheKey, yearsData);
-    } catch (error) {
-      console.error("Error fetching years:", error);
-      setAvailableYears([]);
-    } finally {
-      setIsLoadingYears(false);
-    }
-  }, [category, pagetopic, getCached, setCached]);
-
-  // Fetch questions with pagination and year filter
-  const fetchQuestions = useCallback(async (difficulty, page = 1, append = false, year = null) => {
+  // Fetch questions with pagination
+  const fetchQuestions = useCallback(async (difficulty, page = 1, append = false) => {
     if (!pagetopic || !category) return;
 
     setIsLoadingQuestions(true);
     try {
-      const cacheKey = `questions-${category}-${pagetopic}-${difficulty}-${year || 'all'}-${page}`;
+      const cacheKey = `questions-${category}-${pagetopic}-${difficulty}-${page}`;
       const cached = getCached(cacheKey);
       
       if (cached) {
@@ -205,19 +166,12 @@ const Pagetracker = memo(() => {
         return;
       }
 
-      let query = supabase
+      const { data, error } = await supabase
         .from("examtracker")
         .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, difficulty, year, subject")
         .eq("topic", pagetopic)
         .eq("category", category.toUpperCase())
-        .eq("difficulty", difficulty);
-
-      // Add year filter if selected
-      if (year) {
-        query = query.eq("year", year);
-      }
-
-      const { data, error } = await query
+        .eq("difficulty", difficulty)
         .order("_id")
         .range((page - 1) * QUESTIONS_PER_PAGE, page * QUESTIONS_PER_PAGE - 1);
 
@@ -486,43 +440,28 @@ const Pagetracker = memo(() => {
   const handleDifficultyChange = useCallback((difficulty) => {
     if (difficulty === activeDifficulty || isLoadingQuestions) return;
     setActiveDifficulty(difficulty);
-    setSelectedYear(null); // Reset year filter when difficulty changes
     setCurrentPage(1);
     setHasMore(true);
-    fetchAvailableYears(difficulty); // Fetch years for new difficulty
-    fetchQuestions(difficulty, 1, false, null);
-  }, [activeDifficulty, isLoadingQuestions, fetchQuestions, fetchAvailableYears]);
-
-  // Handle year change
-  const handleYearChange = useCallback((year) => {
-    if (year === selectedYear || isLoadingQuestions) return;
-    setSelectedYear(year);
-    setCurrentPage(1);
-    setHasMore(true);
-    fetchQuestions(activeDifficulty, 1, false, year);
-  }, [selectedYear, activeDifficulty, isLoadingQuestions, fetchQuestions]);
+    fetchQuestions(difficulty, 1, false);
+  }, [activeDifficulty, isLoadingQuestions, fetchQuestions]);
 
   // Load more questions
   const loadMore = useCallback(() => {
     if (!hasMore || isLoadingQuestions) return;
     const nextPage = currentPage + 1;
     setCurrentPage(nextPage);
-    fetchQuestions(activeDifficulty, nextPage, true, selectedYear);
-  }, [hasMore, isLoadingQuestions, currentPage, activeDifficulty, selectedYear, fetchQuestions]);
+    fetchQuestions(activeDifficulty, nextPage, true);
+  }, [hasMore, isLoadingQuestions, currentPage, activeDifficulty, fetchQuestions]);
 
   // Initial load
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      await Promise.all([
-        fetchCounts(), 
-        fetchAvailableYears(activeDifficulty),
-        fetchQuestions(activeDifficulty, 1, false, null)
-      ]);
+      await Promise.all([fetchCounts(), fetchQuestions(activeDifficulty, 1)]);
       setIsLoading(false);
     };
     load();
-  }, [fetchCounts, fetchAvailableYears, fetchQuestions, activeDifficulty]);
+  }, [fetchCounts, fetchQuestions, activeDifficulty]);
 
   // Load progress when user changes
   useEffect(() => {
@@ -671,45 +610,6 @@ const Pagetracker = memo(() => {
               ))}
             </div>
 
-            {/* Year Filter */}
-            {availableYears.length > 0 && (
-              <div className="mb-3">
-                <label className="block text-xs sm:text-sm font-medium text-neutral-700 mb-2">
-                  Filter by Year
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleYearChange(null)}
-                    disabled={isLoadingQuestions || isLoadingYears}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                      selectedYear === null
-                        ? "bg-neutral-900 text-white"
-                        : "bg-white text-neutral-700 border border-neutral-300 hover:bg-neutral-50"
-                    }`}
-                  >
-                    All Years
-                  </button>
-                  {availableYears.map((year) => (
-                    <button
-                      key={year}
-                      onClick={() => handleYearChange(year)}
-                      disabled={isLoadingQuestions || isLoadingYears}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                        selectedYear === year
-                          ? "bg-neutral-900 text-white"
-                          : "bg-white text-neutral-700 border border-neutral-300 hover:bg-neutral-50"
-                      }`}
-                    >
-                      {year}
-                    </button>
-                  ))}
-                </div>
-                {isLoadingYears && (
-                  <p className="text-xs text-neutral-500 mt-2">Loading years...</p>
-                )}
-              </div>
-            )}
-
             {/* Sign in prompt */}
             {!user && (
               <div className="bg-neutral-50 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -767,18 +667,7 @@ const Pagetracker = memo(() => {
                   <div className="text-center py-12 bg-white rounded-lg border border-neutral-200">
                     <Clock size={36} className="mx-auto text-neutral-400 mb-3" />
                     <h3 className="text-lg font-semibold text-neutral-900 mb-2">No questions available</h3>
-                    <p className="text-sm text-neutral-600">
-                      No questions found for {activeDifficulty} difficulty
-                      {selectedYear && ` in ${selectedYear}`}.
-                    </p>
-                    {selectedYear && (
-                      <button
-                        onClick={() => handleYearChange(null)}
-                        className="mt-4 px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors"
-                      >
-                        Show All Years
-                      </button>
-                    )}
+                    <p className="text-sm text-neutral-600">No questions found for {activeDifficulty} difficulty.</p>
                   </div>
                 )}
               </MathJax>

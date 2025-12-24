@@ -4,7 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@supabase/supabase-js";
 import toast, { Toaster } from "react-hot-toast";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
+import { ArrowRight, FileText } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import Navbar from "@/components/Navbar";
 import { getCachedData, invalidateCache } from "@/lib/utils/apiCache";
@@ -55,6 +57,8 @@ class ErrorBoundary extends React.Component {
 
 const Examtracker = () => {
   const [data, setData] = useState([]);
+  const [chapters, setChapters] = useState([]);
+  const [chapterTopics, setChapterTopics] = useState({}); // Store topics for each chapter for progress calculation
   const [userProgress, setUserProgress] = useState({});
   const { user, signInWithGoogle, setShowAuthModal } = useAuth();
   
@@ -64,6 +68,12 @@ const Examtracker = () => {
   const [showMobileOptions, setShowMobileOptions] = useState(false);
   const searchInputRef = useRef(null);
   const { category, subject } = useParams();
+  
+  // Check if category is a GATE exam
+  const isGateExam = useMemo(() => {
+    const cat = category?.toLowerCase();
+    return cat === 'gate-cse' || cat === 'gate-me' || cat === 'gate-ex';
+  }, [category]);
   
   // Properly decode and format subject from URL
   const decodedSubject = subject ? decodeURIComponent(subject) : null;
@@ -83,6 +93,7 @@ const Examtracker = () => {
   
   // Client-side cache key
   const cacheKey = useMemo(() => `subjects-${category}`, [category]);
+  const chaptersCacheKey = useMemo(() => `chapters-${category}-${subject}`, [category, subject]);
 
   // Update activeSubject when URL parameter changes
   useEffect(() => {
@@ -140,7 +151,75 @@ const fetchUserProgress = useCallback(
 
 
 
-  // Fetch subjects data with client-side caching
+  // Fetch chapters for non-GATE exams
+  const fetchChapters = useCallback(
+    async (forceRefresh = false) => {
+      setIsLoading(true);
+      
+      try {
+        if (forceRefresh) {
+          invalidateCache(chaptersCacheKey);
+        }
+
+        const encodedCategory = encodeURIComponent(category?.toUpperCase() || '');
+        const encodedSubject = subject ? encodeURIComponent(subject) : '';
+        const apiUrl = `/api/chapters/by-subject?category=${encodedCategory}&subject=${encodedSubject}`;
+        
+        const chaptersData = await getCachedData(
+          chaptersCacheKey,
+          async () => {
+            const response = await fetch(apiUrl);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch chapters: ${response.status}`);
+            }
+            const result = await response.json();
+            return result.success ? (result.data?.chapters || []) : [];
+          },
+          5 * 60 * 1000 // 5 minutes TTL
+        );
+        
+        setChapters(chaptersData || []);
+        
+        // Fetch topics for each chapter to calculate progress (async, non-blocking)
+        if (chaptersData && chaptersData.length > 0) {
+          const topicsMap = {};
+          // Fetch topics for all chapters in parallel
+          const topicPromises = chaptersData.map(async (chapter) => {
+            try {
+              const chapterSlug = chapter.slug || chapter.title.toLowerCase().replace(/\s+/g, "-");
+              const topicsUrl = `/api/topics/by-chapter?category=${encodedCategory}&subject=${encodedSubject}&chapter=${encodeURIComponent(chapterSlug)}`;
+              const topicsResponse = await fetch(topicsUrl);
+              if (topicsResponse.ok) {
+                const topicsResult = await topicsResponse.json();
+                if (topicsResult.success) {
+                  return { chapterKey: chapter.slug || chapter.title, topics: topicsResult.data?.topics || [] };
+                }
+              }
+            } catch (err) {
+              // Silently fail for individual chapters
+            }
+            return { chapterKey: chapter.slug || chapter.title, topics: [] };
+          });
+          
+          const topicsResults = await Promise.all(topicPromises);
+          topicsResults.forEach(({ chapterKey, topics }) => {
+            topicsMap[chapterKey] = topics;
+          });
+          setChapterTopics(topicsMap);
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Error fetching chapters:", error);
+        }
+        setChapters([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [category, subject, chaptersCacheKey]
+  );
+
+  // Fetch subjects/topics data for GATE exams (old version)
   const fetchData = useCallback(
     async (forceRefresh = false) => {
       setIsLoading(true);
@@ -151,9 +230,6 @@ const fetchUserProgress = useCallback(
           invalidateCache(cacheKey);
         }
 
-        // Fetch user progress separately (not inside fetchData to avoid duplicate calls)
-        // This will be handled by the useEffect hook below
-        
         // Use cached data or fetch fresh
         const subjectsData = await getCachedData(
           cacheKey,
@@ -294,39 +370,153 @@ const fetchUserProgress = useCallback(
     return sorted;
   }, [activeSubject, allSubtopics, searchTerm, sortBy, userProgress, data]);
 
+// Calculate chapter progress for non-GATE exams
+const chapterProgress = useMemo(() => {
+  if (isGateExam) return {};
+  
+  const progressMap = {};
+  chapters.forEach(chapter => {
+    const chapterKey = chapter.slug || chapter.title;
+    const topics = chapterTopics[chapterKey] || [];
+    
+    // Calculate progress from topics in this chapter
+    const totalQuestions = topics.reduce((sum, topic) => sum + (topic.count || 0), 0);
+    const completedQuestions = topics.reduce((sum, topic) => {
+      const topicProgress = userProgress[topic.title];
+      return sum + (topicProgress?.completedQuestions?.length || 0);
+    }, 0);
+    const correctAnswers = topics.reduce((sum, topic) => {
+      const topicProgress = userProgress[topic.title];
+      return sum + (topicProgress?.correctAnswers?.length || 0);
+    }, 0);
+    
+    const completedTopics = topics.filter(topic => {
+      const topicProgress = userProgress[topic.title];
+      return topicProgress && (topicProgress.completedQuestions?.length || 0) > 0;
+    }).length;
+    
+    progressMap[chapterKey] = {
+      totalQuestions: totalQuestions || chapter.count || 0,
+      completedQuestions,
+      correctAnswers,
+      completedTopics,
+      totalTopics: topics.length,
+      progressPercentage: (totalQuestions || chapter.count || 0) ? Math.round((completedQuestions / (totalQuestions || chapter.count || 0)) * 100) : 0,
+      accuracy: completedQuestions > 0 ? Math.round((correctAnswers / completedQuestions) * 100) : 0,
+      isCompleted: topics.length > 0 && completedTopics === topics.length && topics.length > 0
+    };
+  });
+  
+  return progressMap;
+}, [chapters, chapterTopics, userProgress, isGateExam]);
+
 // Updated progress calculation with correct field names
 const progress = useMemo(() => {
-  const totalTopics = allSubtopics.length;
-  const completedTopics = Object.keys(userProgress).filter(
-    (t) => (userProgress[t].completedQuestions?.length || 0) > 0
-  );
-  
-  const totalCompletedQuestions = Object.values(userProgress).reduce(
-    (acc, t) => acc + (t.completedQuestions?.length || 0), 0
-  );
-  
-  const totalCorrectAnswers = Object.values(userProgress).reduce(
-    (acc, t) => acc + (t.correctAnswers?.length || 0), 0
-  );
-
-  return {
-    completedCount: completedTopics.length,
-    completionPercentage: totalTopics ? Math.round((completedTopics.length / totalTopics) * 100) : 0,
-    totalCompletedQuestions,
-    totalCorrectAnswers,
-    questionCompletionPercentage: totalQuestions ? Math.round((totalCompletedQuestions / totalQuestions) * 100) : 0,
-    accuracy: totalCompletedQuestions > 0 ? Math.round((totalCorrectAnswers / totalCompletedQuestions) * 100) : 0
-  };
-}, [allSubtopics, userProgress, totalQuestions]);
-
-  // Effect to fetch data when component mounts or category changes
-  useEffect(() => {
-    fetchData(false);
+  if (isGateExam) {
+    // GATE exam progress (topics-based)
+    const totalTopics = allSubtopics.length;
+    const completedTopics = Object.keys(userProgress).filter(
+      (t) => (userProgress[t].completedQuestions?.length || 0) > 0
+    );
     
-    // Set up cache refresh interval (every 5 minutes - reduced frequency)
-    cacheRefreshInterval.current = setInterval(() => {
-      fetchData(true);
-    }, 5 * 60 * 1000); // 5 minutes instead of 30 seconds
+    const totalCompletedQuestions = Object.values(userProgress).reduce(
+      (acc, t) => acc + (t.completedQuestions?.length || 0), 0
+    );
+    
+    const totalCorrectAnswers = Object.values(userProgress).reduce(
+      (acc, t) => acc + (t.correctAnswers?.length || 0), 0
+    );
+
+    return {
+      completedCount: completedTopics.length,
+      completionPercentage: totalTopics ? Math.round((completedTopics.length / totalTopics) * 100) : 0,
+      totalCompletedQuestions,
+      totalCorrectAnswers,
+      questionCompletionPercentage: totalQuestions ? Math.round((totalCompletedQuestions / totalQuestions) * 100) : 0,
+      accuracy: totalCompletedQuestions > 0 ? Math.round((totalCorrectAnswers / totalCompletedQuestions) * 100) : 0
+    };
+  } else {
+    // Non-GATE exam progress (chapters-based)
+    const totalChapters = chapters.length;
+    const completedChapters = chapters.filter(chapter => {
+      const chapterKey = chapter.slug || chapter.title;
+      const progress = chapterProgress[chapterKey];
+      return progress && progress.isCompleted;
+    }).length;
+    
+    const totalQuestions = chapters.reduce((sum, chapter) => {
+      const chapterKey = chapter.slug || chapter.title;
+      const progress = chapterProgress[chapterKey];
+      return sum + (progress?.totalQuestions || chapter.count || 0);
+    }, 0);
+    
+    const totalCompletedQuestions = chapters.reduce((sum, chapter) => {
+      const chapterKey = chapter.slug || chapter.title;
+      const progress = chapterProgress[chapterKey];
+      return sum + (progress?.completedQuestions || 0);
+    }, 0);
+    
+    const totalCorrectAnswers = chapters.reduce((sum, chapter) => {
+      const chapterKey = chapter.slug || chapter.title;
+      const progress = chapterProgress[chapterKey];
+      return sum + (progress?.correctAnswers || 0);
+    }, 0);
+
+    return {
+      completedCount: completedChapters,
+      completionPercentage: totalChapters ? Math.round((completedChapters / totalChapters) * 100) : 0,
+      totalCompletedQuestions,
+      totalCorrectAnswers,
+      questionCompletionPercentage: totalQuestions ? Math.round((totalCompletedQuestions / totalQuestions) * 100) : 0,
+      accuracy: totalCompletedQuestions > 0 ? Math.round((totalCorrectAnswers / totalCompletedQuestions) * 100) : 0
+    };
+  }
+}, [allSubtopics, userProgress, totalQuestions, isGateExam, chapters, chapterProgress]);
+
+  // Filtered chapters for non-GATE exams
+  const filteredAndSortedChapters = useMemo(() => {
+    if (isGateExam) return [];
+    
+    let filtered = chapters;
+    
+    if (searchTerm) {
+      filtered = filtered.filter((chapter) =>
+        chapter.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    const sorted = filtered.sort((a, b) => {
+      const aProgress = chapterProgress[a.slug || a.title] || {};
+      const bProgress = chapterProgress[b.slug || b.title] || {};
+      
+      switch (sortBy) {
+        case "progress": 
+          return (bProgress.progressPercentage || 0) - (aProgress.progressPercentage || 0);
+        case "remaining": 
+          return ((aProgress.totalQuestions || 0) - (aProgress.completedQuestions || 0)) - ((bProgress.totalQuestions || 0) - (bProgress.completedQuestions || 0));
+        default: 
+          return a.title.localeCompare(b.title);
+      }
+    });
+    
+    return sorted;
+  }, [chapters, searchTerm, sortBy, chapterProgress, isGateExam]);
+
+  // Effect to fetch data when component mounts or category/subject changes
+  useEffect(() => {
+    if (isGateExam) {
+      // For GATE exams, fetch topics (old behavior)
+      fetchData(false);
+      cacheRefreshInterval.current = setInterval(() => {
+        fetchData(true);
+      }, 5 * 60 * 1000);
+    } else {
+      // For non-GATE exams, fetch chapters
+      fetchChapters(false);
+      cacheRefreshInterval.current = setInterval(() => {
+        fetchChapters(true);
+      }, 5 * 60 * 1000);
+    }
     
     // Cleanup interval on unmount
     return () => {
@@ -334,7 +524,7 @@ const progress = useMemo(() => {
         clearInterval(cacheRefreshInterval.current);
       }
     };
-  }, [fetchData]);
+  }, [fetchData, fetchChapters, isGateExam]);
 
   // Effect to fetch user progress when user changes
   useEffect(() => {
@@ -406,11 +596,16 @@ const progress = useMemo(() => {
           <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-neutral-900">{category?.toUpperCase()} Practice Tracker</h1>
-              <p className="text-sm sm:text-base text-neutral-600 mt-1">Track your progress across {allSubtopics.length} topics and {totalQuestions} questions</p>
+              <p className="text-sm sm:text-base text-neutral-600 mt-1">
+                {isGateExam 
+                  ? `Track your progress across ${allSubtopics.length} topics and ${totalQuestions} questions`
+                  : `Browse ${chapters.length} chapters for ${formattedSubject || 'this subject'}`
+                }
+              </p>
             </div>
             <div className="mt-4 sm:mt-0 flex items-center gap-2">
               <button 
-                onClick={() => fetchData(true)}
+                onClick={() => isGateExam ? fetchData(true) : fetchChapters(true)}
                 disabled={isLoading}
                 className="px-3 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 disabled:opacity-50 text-sm flex items-center gap-2 transition-colors"
                 aria-label="Refresh data"
@@ -444,7 +639,7 @@ const progress = useMemo(() => {
                     <div className="space-y-4">
                       <div>
                         <div className="flex justify-between text-sm mb-1">
-                          <span>Topics</span>
+                          <span>{isGateExam ? "Topics" : "Chapters"}</span>
                           <span>{progress.completionPercentage}%</span>
                         </div>
                         <div className="w-full bg-neutral-200 rounded-full h-2.5">
@@ -455,10 +650,25 @@ const progress = useMemo(() => {
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div>Topics: {progress.completedCount}/{allSubtopics.length}</div>
-                        <div>Questions: {progress.totalCompletedQuestions}/{totalQuestions}</div>
-                        <div>Correct: {progress.totalCorrectAnswers}</div>
-                        <div>Accuracy: {progress.accuracy}%</div>
+                        {isGateExam ? (
+                          <>
+                            <div>Topics: {progress.completedCount}/{allSubtopics.length}</div>
+                            <div>Questions: {progress.totalCompletedQuestions}/{totalQuestions}</div>
+                            <div>Correct: {progress.totalCorrectAnswers}</div>
+                            <div>Accuracy: {progress.accuracy}%</div>
+                          </>
+                        ) : (
+                          <>
+                            <div>Chapters: {progress.completedCount}/{chapters.length}</div>
+                            <div>Questions: {progress.totalCompletedQuestions}/{chapters.reduce((sum, c) => {
+                              const chapterKey = c.slug || c.title;
+                              const chapterProg = chapterProgress[chapterKey];
+                              return sum + (chapterProg?.totalQuestions || c.count || 0);
+                            }, 0)}</div>
+                            <div>Correct: {progress.totalCorrectAnswers}</div>
+                            <div>Accuracy: {progress.accuracy}%</div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -527,7 +737,7 @@ const progress = useMemo(() => {
                         <div className="space-y-4">
                           <div>
                             <div className="flex justify-between text-sm mb-1">
-                              <span>Topics</span>
+                              <span>{isGateExam ? "Topics" : "Chapters"}</span>
                               <span>{progress.completionPercentage}%</span>
                             </div>
                             <div className="w-full bg-neutral-200 rounded-full h-2.5">
@@ -538,10 +748,25 @@ const progress = useMemo(() => {
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>Topics: {progress.completedCount}/{allSubtopics.length}</div>
-                            <div>Questions: {progress.totalCompletedQuestions}/{totalQuestions}</div>
-                            <div>Correct: {progress.totalCorrectAnswers}</div>
-                            <div>Accuracy: {progress.accuracy}%</div>
+                            {isGateExam ? (
+                              <>
+                                <div>Topics: {progress.completedCount}/{allSubtopics.length}</div>
+                                <div>Questions: {progress.totalCompletedQuestions}/{totalQuestions}</div>
+                                <div>Correct: {progress.totalCorrectAnswers}</div>
+                                <div>Accuracy: {progress.accuracy}%</div>
+                              </>
+                            ) : (
+                              <>
+                                <div>Chapters: {progress.completedCount}/{chapters.length}</div>
+                                <div>Questions: {progress.totalCompletedQuestions}/{chapters.reduce((sum, c) => {
+                                  const chapterKey = c.slug || c.title;
+                                  const chapterProg = chapterProgress[chapterKey];
+                                  return sum + (chapterProg?.totalQuestions || c.count || 0);
+                                }, 0)}</div>
+                                <div>Correct: {progress.totalCorrectAnswers}</div>
+                                <div>Accuracy: {progress.accuracy}%</div>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -634,7 +859,92 @@ const progress = useMemo(() => {
                 />
               </Suspense>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {/* Render chapters for non-GATE exams, topics for GATE exams */}
+              {!isGateExam ? (
+                // Chapters view for non-GATE exams - matching topic card style
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  {filteredAndSortedChapters.map((chapter) => {
+                    const chapterSlug = chapter.slug || chapter.title.toLowerCase().replace(/\s+/g, "-");
+                    const chapterKey = chapter.slug || chapter.title;
+                    const progress = chapterProgress[chapterKey] || {
+                      totalQuestions: chapter.count || 0,
+                      completedQuestions: 0,
+                      correctAnswers: 0,
+                      completedTopics: 0,
+                      totalTopics: 0,
+                      progressPercentage: 0,
+                      accuracy: 0,
+                      isCompleted: false
+                    };
+                    
+                    const completedCount = progress.completedQuestions || 0;
+                    const totalQuestions = progress.totalQuestions || chapter.count || 0;
+                    const progressPercentage = totalQuestions ? Math.round((completedCount / totalQuestions) * 100) : 0;
+                    const isCompleted = progress.isCompleted;
+                    const accuracyPercentage = progress.accuracy || 0;
+                    
+                    return (
+                      <motion.div
+                        key={chapter.slug || chapter.title}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.2 }}
+                        className={`bg-white rounded-xl shadow-sm border ${
+                          isCompleted ? "border-green-200" : completedCount > 0 ? "border-neutral-300" : "border-neutral-200"
+                        } hover:shadow-md transition-shadow duration-200`}
+                      >
+                        <div className="p-4 sm:p-5">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h3 className="text-base sm:text-lg font-medium text-neutral-900 line-clamp-2">
+                                {chapter.title}
+                              </h3>
+                              <div className="text-xs sm:text-sm text-neutral-500">{chapter.subject || formattedSubject}</div>
+                            </div>
+                            {isCompleted && (
+                              <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
+                                Completed
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-sm">
+                              <span>{completedCount} of {totalQuestions} questions</span>
+                              <span>{progressPercentage}%</span>
+                            </div>
+                            <div className="w-full bg-neutral-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  isCompleted ? "bg-green-500" : completedCount > 0 ? "bg-neutral-800" : "bg-neutral-300"
+                                }`}
+                                style={{ width: `${progressPercentage}%` }}
+                              />
+                            </div>
+                            {completedCount > 0 && (
+                              <div className="flex justify-between text-xs text-neutral-500">
+                                <span>Accuracy: {accuracyPercentage}%</span>
+                                <span>Topics: {progress.completedTopics}/{progress.totalTopics}</span>
+                              </div>
+                            )}
+                            <Link
+                              href={`/${category}/${subject}/${chapterSlug}`}
+                              className={`block text-center py-2 rounded-lg border ${
+                                isCompleted 
+                                  ? "border-green-300 text-green-800 hover:bg-green-50" 
+                                  : "border-neutral-300 text-neutral-800 hover:bg-neutral-50"
+                              } transition-colors duration-150`}
+                            >
+                              View Topics
+                            </Link>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              ) : (
+                // Topics view for GATE exams (existing code)
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {/* // Updated topic card rendering with correct field names */}
 {filteredAndSortedTopics.map((topic) => {
   const topicProgress = userProgress[topic.title] || { 
@@ -705,15 +1015,22 @@ const progress = useMemo(() => {
                   );
                 })}
               </div>
+              )}
 
-              {filteredAndSortedTopics.length === 0 && (
+              {((isGateExam && filteredAndSortedTopics.length === 0) || (!isGateExam && filteredAndSortedChapters.length === 0)) && (
                 <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center border border-neutral-200">
                   <svg className="h-10 w-10 sm:h-12 sm:w-12 text-neutral-400 mx-auto mb-3 sm:mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h3 className="text-base sm:text-lg font-medium text-neutral-900 mb-2">No topics found</h3>
+                  <h3 className="text-base sm:text-lg font-medium text-neutral-900 mb-2">
+                    {isGateExam ? "No topics found" : "No chapters found"}
+                  </h3>
                   <p className="text-sm sm:text-base text-neutral-500 mb-4">
-                    {searchTerm ? `No topics match "${searchTerm}"` : activeSubject ? `No topics found for "${activeSubject}"` : "No topics available"}
+                    {searchTerm 
+                      ? `No ${isGateExam ? 'topics' : 'chapters'} match "${searchTerm}"` 
+                      : activeSubject 
+                        ? `No ${isGateExam ? 'topics' : 'chapters'} found for "${activeSubject}"` 
+                        : `No ${isGateExam ? 'topics' : 'chapters'} available`}
                   </p>
                   {/* Debug info in development */}
                   {process.env.NODE_ENV === 'development' && (

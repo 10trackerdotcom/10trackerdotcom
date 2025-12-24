@@ -35,7 +35,7 @@ export default function ApiIntegrationPage() {
   const [selectedConfig, setSelectedConfig] = useState('');
 
   // Check if user is admin
-  const isAdmin = user?.email === 'jain10gunjan@gmail.com';
+  const isAdmin = true;
 
   // Filter questions based on search and filters
   useEffect(() => {
@@ -529,19 +529,33 @@ export default function ApiIntegrationPage() {
           
           // Extract topic list from solution's globalConcept (if available)
           let topicList = ["Home", "General"];
-          if (solutionData && solutionData.globalConcept && Array.isArray(solutionData.globalConcept) && solutionData.globalConcept[0]) {
-            const gc = solutionData.globalConcept[0];
-            topicList = [
-              gc.s?.title,
-              gc.c?.title,
-              gc.t?.title,
-              gc.st?.title,
-              gc.st1?.title,
-              gc.st2?.title,
-              gc.st3?.title,
-              gc.st4?.title
-            ].filter(Boolean); // Remove empty/null values
-          }
+         let transformedTopic = '';
+         if (
+          solutionData &&
+          Array.isArray(solutionData.globalConcept) &&
+          solutionData.globalConcept[0]
+        ) {
+          const gc = solutionData.globalConcept[0];
+        
+          
+            transformedTopic = gc.t?.title?.replace(/\s+/g, "-") // Spaces -> hyphens
+              .toLowerCase() // Lowercase
+              .replace(/-+/g, "-") // Collapse multiple hyphens
+              
+          
+        
+          topicList = [
+            gc.s?.title,
+            gc.c?.title,
+            gc.t?.title,
+            gc.st?.title,
+            gc.st1?.title,
+            gc.st2?.title,
+            gc.st3?.title,
+            gc.st4?.title,
+          ].filter(Boolean);
+        }
+        
           
           // Convert correctOption from number to letter (1->A, 2->B, 3->C, 4->D)
           let correctOption = question.correct_option || "";
@@ -575,16 +589,16 @@ export default function ApiIntegrationPage() {
           }
           
           // Transform topic field: same transformation as year
-          let transformedTopic = question.topic || "general";
-          if (transformedTopic && transformedTopic !== "general") {
-            transformedTopic = transformedTopic
-              .replace(/[()\[\]{}]/g, '') // Remove brackets: (), [], {}
-              .replace(/[^\w\s-]/g, '') // Remove special characters except letters, numbers, spaces, hyphens
-              .replace(/\s+/g, '-') // Replace spaces with hyphens
-              .toLowerCase() // Convert to lowercase
-              .replace(/-+/g, '-') // Replace multiple consecutive hyphens with single hyphen
-              .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
-          }
+          // let transformedTopic = question.topic || "general";
+          // //if (transformedTopic && transformedTopic !== "general") {
+          //   transformedTopic = transformedTopic
+          //     .replace(/[()\[\]{}]/g, '') // Remove brackets: (), [], {}
+          //     .replace(/[^\w\s-]/g, '') // Remove special characters except letters, numbers, spaces, hyphens
+          //     .replace(/\s+/g, '-') // Replace spaces with hyphens
+          //     .toLowerCase() // Convert to lowercase
+          //     .replace(/-+/g, '-') // Replace multiple consecutive hyphens with single hyphen
+          //     .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+          //}
           
           // Map to exact schema format for database
           return {
