@@ -302,7 +302,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                             {opt}
                           </div>
                           <MathJax hideUntilTypeset={"first"} inline dynamic>
-                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">{optionText}</div>
+                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: optionText }} />
                           </MathJax>
                           <div className="flex-shrink-0">
                             {state.isAnswered && state.showFeedback && isCorrectOption && <Check size={14} className="text-green-500" />}
