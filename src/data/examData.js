@@ -12,7 +12,7 @@ export const examData = [
     active: true, // Active exam
   },
   {
-    slug: 'jee-mains',
+    slug: 'jee-main',
     name: 'JEE Mains',
     image: 'https://img.studydekho.com/uploads/c/2022/3/17509-c-whatsapp-image-2022-03-19-at-53432-pm-2.jpeg',
     icon: '⚛️',
