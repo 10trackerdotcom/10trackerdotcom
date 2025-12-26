@@ -46,6 +46,18 @@ export const examData = [
     active: true, // Inactive exam - will be grayed out
   },
   {
+    slug: 'bitsat',
+    name: 'BITSAT',
+    image: 'https://upload.wikimedia.org/wikipedia/en/thumb/d/d3/BITS_Pilani-Logo.svg/330px-BITS_Pilani-Logo.svg.png',
+    bg: 'bg-gray-200',
+    icon: '🧬',
+    color: 'from-indigo-500 to-blue-500',
+    description: 'Birla Institute of Technology and Science, Pilani',
+    category: 'Engineering',
+    count: 1500, // Hardcoded question count
+    active: true, // Inactive exam - will be grayed out
+  },
+  {
     slug: 'cat',
     name: 'CAT',
     image: 'https://static.toiimg.com/thumb/msid-95111352,width-1280,height-720,resizemode-4/95111352.jpg',
@@ -58,16 +70,16 @@ export const examData = [
     active: false, // Inactive exam - will be grayed out
   },
   {
-    slug: 'neet',
-    name: 'NEET',
-    image: '/exams/neet.png',
+    slug: 'neet-ug',
+    name: 'NEET UG',
+    image: 'https://e7.pngegg.com/pngimages/612/865/png-clipart-central-board-of-secondary-education-ugc-net-cbse-exam-class-10-neet-jee-main-school-label-logo-thumbnail.png',
     bg: 'bg-gray-200',
     icon: '🧬',
     color: 'from-indigo-500 to-blue-500',
     description: 'National Eligibility cum Entrance Test for Medical',
     category: 'Medical',
     count: 2800, // Hardcoded question count
-    active: false, // Inactive exam - will be grayed out
+    active: true, // Inactive exam - will be grayed out
   },
   {
     slug: 'ssc',
