@@ -408,6 +408,7 @@ const Pagetracker = () => {
                     filteredQuestions.map((question) => (
                       <QuestionCard
                         key={question._id}
+                        category="upsc-prelims"
                         question={question}
                         index={filteredQuestions.indexOf(question)}
                         onAnswer={(isCorrect) =>

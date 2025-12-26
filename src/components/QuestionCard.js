@@ -15,8 +15,28 @@ const supabase = createClient(
   { fetch: (...args) => fetch(...args) }
 );
 
+// Helper function to convert \n to <br /> for UPSC Prelims
+const convertNewlinesToBreaks = (text, isUpscPrelims) => {
+  if (!text || !isUpscPrelims) return text;
+  
+  let processed = String(text);
+  
+  // First handle escaped \n (literal backslash + n) - this is what comes from database as string
+  processed = processed.replace(/\\n/g, '<br />');
+  
+  // Then handle actual newline characters (Windows \r\n, Mac \r, Unix \n)
+  processed = processed.replace(/\r\n/g, '<br />'); // Windows line endings
+  processed = processed.replace(/\r/g, '<br />');     // Mac line endings
+  processed = processed.replace(/\n/g, '<br />');      // Unix line endings
+  
+  return processed;
+};
+
 // Memoized QuestionCard component
 const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
+  // Check if this is UPSC Prelims
+  const isUpscPrelims = category?.toLowerCase() === 'upsc-prelims' || category?.toLowerCase() === 'upscprelims';
+  
   const [state, setState] = useState({
     showSolution: false,
     selectedOption: null,
@@ -230,9 +250,9 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
           ) : (
             <MathJax hideUntilTypeset={"first"} inline dynamic>
               <div className="text-gray-800 text-sm leading-relaxed break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
-                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: questionData.question }} />
+                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(questionData.question, isUpscPrelims) }} />
                 {questionData.questionextratext && (
-                  <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: questionData.questionextratext }} />
+                  <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(questionData.questionextratext, isUpscPrelims) }} />
                 )}
                 {(questionData.category === "GATE-CSE" || questionData.category === "CAT") && questionData.questionCode && (
                   <div className="mt-3 rounded-lg overflow-x-auto shadow-sm border border-gray-200/50 max-w-full">
@@ -302,7 +322,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                             {opt}
                           </div>
                           <MathJax hideUntilTypeset={"first"} inline dynamic>
-                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: optionText }} />
+                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(optionText, isUpscPrelims) }} />
                           </MathJax>
                           <div className="flex-shrink-0">
                             {state.isAnswered && state.showFeedback && isCorrectOption && <Check size={14} className="text-green-500" />}
@@ -453,7 +473,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
 <MathJax hideUntilTypeset={"first"} inline dynamic>
   <div className="text-gray-700 text-xs break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
   {["gate-cse", "gate-me", "gate-da"].includes(
-    category.toLowerCase()
+    category?.toLowerCase() || ""
     ) ? (
       <a
         href={questionData.solution}
@@ -465,7 +485,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
       </a>
     ) : (
       <p
-        dangerouslySetInnerHTML={{ __html: questionData.solution }}
+        dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(questionData.solution, isUpscPrelims) }}
       >
       </p>
     )}

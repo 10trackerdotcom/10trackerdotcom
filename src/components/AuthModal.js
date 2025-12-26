@@ -157,7 +157,7 @@ const AuthModal = ({ isOpen, onClose, onGoogleSignIn, categoryName = "exam" }) =
     >
       {/* Modal Container */}
       <div
-        className="bg-white w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-5xl rounded-2xl shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh] transition-all duration-300"
+        className="bg-white w-full max-w-sm sm:max-w-sm md:max-w-md lg:max-w-5xl rounded-2xl shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh] transition-all duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Layout Container */}

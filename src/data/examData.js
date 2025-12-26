@@ -34,6 +34,18 @@ export const examData = [
     active: true, // Active exam
   },
   {
+    slug: 'upsc-prelims',
+    name: 'UPSC Prelims',
+    image: 'https://dhurina.net/en/wp-content/uploads/2024/07/desktop-wallpaper-upsc-logo-upsc.jpg',
+    icon: '📚',
+    bg: 'bg-gray-200',
+    color: 'from-orange-500 to-red-500',
+    description: 'Union Public Service Commission - Civil Services Prelims Exam',
+    category: 'Civil Services',
+    count: 2100, // Hardcoded question count
+    active: true, // Inactive exam - will be grayed out
+  },
+  {
     slug: 'cat',
     name: 'CAT',
     image: 'https://static.toiimg.com/thumb/msid-95111352,width-1280,height-720,resizemode-4/95111352.jpg',
@@ -43,18 +55,6 @@ export const examData = [
     description: 'Common Admission Test for MBA programs',
     category: 'Management',
     count: 1500, // Hardcoded question count
-    active: false, // Inactive exam - will be grayed out
-  },
-  {
-    slug: 'upsc',
-    name: 'UPSC',
-    image: '/exams/upsc.png',
-    icon: '📚',
-    bg: 'bg-gray-200',
-    color: 'from-orange-500 to-red-500',
-    description: 'Union Public Service Commission - Civil Services',
-    category: 'Civil Services',
-    count: 2200, // Hardcoded question count
     active: false, // Inactive exam - will be grayed out
   },
   {

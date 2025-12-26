@@ -138,8 +138,8 @@ export default function HomePage() {
       totalQuestions: total 
     }));
     
-    setLoadingExams(false);
-    
+        setLoadingExams(false);
+
     // Set other stats (placeholder for now)
     setExamStats(prev => ({
       ...prev,

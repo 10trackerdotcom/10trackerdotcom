@@ -112,7 +112,7 @@ const getCachedChapters = (category, subject) => {
     [`chapters-by-subject-${category}-${subject}`],
     {
       tags: ["examtracker"],
-      revalidate: 300, // 5 minutes cache
+      revalidate: 10, // 5 minutes cache
     }
   )();
 };
