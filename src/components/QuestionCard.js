@@ -15,6 +15,14 @@ const supabase = createClient(
   { fetch: (...args) => fetch(...args) }
 );
 
+// Helper function to convert [latex] tags to $ for MathJax
+const convertLatexTags = (text) => {
+  if (!text) return text;
+  return String(text)
+    .replace(/\[latex\]/g, '$')
+    .replace(/\[\/latex\]/g, '$');
+};
+
 // Helper function to convert \n to <br /> for UPSC Prelims
 const convertNewlinesToBreaks = (text, isUpscPrelims) => {
   if (!text || !isUpscPrelims) return text;
@@ -250,9 +258,9 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
           ) : (
             <MathJax hideUntilTypeset={"first"} inline dynamic>
               <div className="text-gray-800 text-sm leading-relaxed break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
-                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(questionData.question, isUpscPrelims) }} />
+                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(questionData.question), isUpscPrelims) }} />
                 {questionData.questionextratext && (
-                  <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(questionData.questionextratext, isUpscPrelims) }} />
+                  <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(questionData.questionextratext), isUpscPrelims) }} />
                 )}
                 {(questionData.category === "GATE-CSE" || questionData.category === "CAT") && questionData.questionCode && (
                   <div className="mt-3 rounded-lg overflow-x-auto shadow-sm border border-gray-200/50 max-w-full">
@@ -322,7 +330,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                             {opt}
                           </div>
                           <MathJax hideUntilTypeset={"first"} inline dynamic>
-                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(optionText, isUpscPrelims) }} />
+                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(optionText), isUpscPrelims) }} />
                           </MathJax>
                           <div className="flex-shrink-0">
                             {state.isAnswered && state.showFeedback && isCorrectOption && <Check size={14} className="text-green-500" />}
@@ -485,7 +493,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
       </a>
     ) : (
       <p
-        dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(questionData.solution, isUpscPrelims) }}
+        dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(questionData.solution), isUpscPrelims) }}
       >
       </p>
     )}
