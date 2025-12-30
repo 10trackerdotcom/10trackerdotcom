@@ -23,6 +23,31 @@ const convertLatexTags = (text) => {
     .replace(/\[\/latex\]/g, '$');
 };
 
+// Helper function to convert relative image URLs to absolute URLs
+const convertRelativeImageUrls = (text) => {
+  if (!text) return text;
+  const textStr = String(text);
+  
+  // Check if the text contains /wp-content/uploads/GATE
+  if (textStr.includes('/wp-content/uploads/GATE')) {
+    // Replace relative paths in img src attributes
+    let processed = textStr.replace(
+      /(<img[^>]*src=["'])(\/wp-content\/uploads\/GATE[^"']*)(["'])/gi,
+      '$1https://practicepaper.in$2$3'
+    );
+    
+    // Replace relative paths that are not in img tags (standalone URLs)
+    // processed = processed.replace(
+    //   /(^|[^"'])(\/wp-content\/uploads\/GATE[^\s<>"']+)/g,
+    //   '$1https://practicepaper.in$2'
+    // );
+    
+    return processed;
+  }
+  
+  return textStr;
+};
+
 // Helper function to convert \n to <br /> for UPSC Prelims
 const convertNewlinesToBreaks = (text, isUpscPrelims) => {
   if (!text || !isUpscPrelims) return text;
@@ -258,9 +283,9 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
           ) : (
             <MathJax hideUntilTypeset={"first"} inline dynamic>
               <div className="text-gray-800 text-sm leading-relaxed break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
-                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(questionData.question), isUpscPrelims) }} />
+                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(questionData.question)), isUpscPrelims) }} />
                 {questionData.questionextratext && (
-                  <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(questionData.questionextratext), isUpscPrelims) }} />
+                  <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(questionData.questionextratext)), isUpscPrelims) }} />
                 )}
                 {(questionData.category === "GATE-CSE" || questionData.category === "CAT") && questionData.questionCode && (
                   <div className="mt-3 rounded-lg overflow-x-auto shadow-sm border border-gray-200/50 max-w-full">
@@ -275,6 +300,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                   </SyntaxHighlighter>
                 </div>
               )}
+              {console.log(questionData)}
                 {(questionData.category === "GATE-CSE" || questionData.category === "CAT") && questionData.questionImage && (
                   <div className="mt-3 flex justify-center max-w-full overflow-hidden">
                     <Image
@@ -330,7 +356,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                             {opt}
                           </div>
                           <MathJax hideUntilTypeset={"first"} inline dynamic>
-                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(optionText), isUpscPrelims) }} />
+                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(optionText)), isUpscPrelims) }} />
                           </MathJax>
                           <div className="flex-shrink-0">
                             {state.isAnswered && state.showFeedback && isCorrectOption && <Check size={14} className="text-green-500" />}
@@ -484,7 +510,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
     category?.toLowerCase() || ""
     ) ? (
       <a
-        href={questionData.solution}
+        href={convertRelativeImageUrls(questionData.solution)}
         target="_blank"
         rel="noopener noreferrer"
         className="text-blue-600 underline"
@@ -493,7 +519,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
       </a>
     ) : (
       <p
-        dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(questionData.solution), isUpscPrelims) }}
+        dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(questionData.solution)), isUpscPrelims) }}
       >
       </p>
     )}
