@@ -18,16 +18,17 @@ const ADMIN_EMAIL = "jain10gunjan@gmail.com";
 
 const ReportedQuestions = () => {
   const [reportedQuestions, setReportedQuestions] = useState([]);
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [editingQuestion, setEditingQuestion] = useState(null);
 
-  useEffect(() => {
-    console.log("useEffect")
-      if (user?.email === ADMIN_EMAIL) {
-        fetchReportedQuestions();
-      }
+  // Get user email from Clerk user object
+  const userEmail = user?.primaryEmailAddress?.emailAddress || user?.email;
 
-   }, [user]);
+  useEffect(() => {
+    if (!loading && userEmail === ADMIN_EMAIL) {
+      fetchReportedQuestions();
+    }
+  }, [userEmail, loading]);
 
   const fetchReportedQuestions = async () => {
     try {
@@ -104,7 +105,17 @@ const ReportedQuestions = () => {
     setEditingQuestion(null);
   };
 
-  if (!user || user.email !== ADMIN_EMAIL) {
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="p-8 bg-white rounded-xl shadow-lg text-gray-600 font-semibold text-lg">
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || userEmail !== ADMIN_EMAIL) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="p-8 bg-white rounded-xl shadow-lg text-red-600 font-semibold text-lg">

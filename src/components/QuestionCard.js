@@ -7,6 +7,7 @@ import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import { createClient } from "@supabase/supabase-js";
+import { useAuth } from "@/app/context/AuthContext";
 
 // Supabase client (browser)
 const supabase = createClient(
@@ -67,6 +68,7 @@ const convertNewlinesToBreaks = (text, isUpscPrelims) => {
 
 // Memoized QuestionCard component
 const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
+  const { user } = useAuth();
   // Check if this is UPSC Prelims
   const isUpscPrelims = category?.toLowerCase() === 'upsc-prelims' || category?.toLowerCase() === 'upscprelims';
   
@@ -130,8 +132,66 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
     onAnswer(false);
   }, [onAnswer]);
 
-  // Report disabled per request
-  const handleReport = useCallback(() => {}, []);
+  const handleReport = useCallback(() => {
+    setState((prev) => ({ ...prev, showReportForm: !prev.showReportForm }));
+  }, []);
+
+  const handleReportSubmit = useCallback(async () => {
+    if (!state.reportReason.trim()) {
+      toast.error("Please provide a reason for reporting");
+      return;
+    }
+
+    const questionId = question._id || question.id;
+    const topic = question.topic || question.chapter || category;
+
+    if (onReport) {
+      // Use the provided onReport callback
+      onReport(questionId, state.reportReason.trim(), topic);
+      setState((prev) => ({ 
+        ...prev, 
+        showReportForm: false, 
+        reportReason: "" 
+      }));
+      toast.success("Question reported successfully");
+    } else {
+      // Default behavior: report directly to Supabase
+      try {
+        if (!user) {
+          toast.error("Please sign in to report questions");
+          return;
+        }
+
+        // Get user email from Clerk user object
+        const userEmail = user?.primaryEmailAddress?.emailAddress || user?.email;
+        
+        if (!userEmail) {
+          toast.error("Unable to get user email. Please sign in again.");
+          return;
+        }
+
+        const { error } = await supabase.from("reported_questions").insert({
+          question_id: questionId,
+          topic: topic || category || "unknown",
+          user_id: userEmail,
+          reason: state.reportReason.trim(),
+          reported_at: new Date().toISOString(),
+        });
+
+        if (error) throw error;
+
+        setState((prev) => ({ 
+          ...prev, 
+          showReportForm: false, 
+          reportReason: "" 
+        }));
+        toast.success("Question reported successfully");
+      } catch (error) {
+        console.error("Report error:", error);
+        toast.error("Failed to report question. Please try again.");
+      }
+    }
+  }, [onReport, question, category, state.reportReason]);
 
   const handleSaveEdit = useCallback(async () => {
     if (!isAdmin) return;
@@ -240,7 +300,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
               {questionData.year && (
                 <div className="px-2 py-1 rounded-lg bg-white/80 text-xs font-semibold text-gray-700 border border-gray-200/60">{questionData.year}</div>
               )}
-              {!state.isAnswered && !questionData.options_A && (
+              {!state.isAnswered && (
                 <button 
                   onClick={handleSkip}
                   className="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium flex items-center space-x-1 transition-colors"
@@ -256,6 +316,14 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                   <span>Edit</span>
                 </button>
               )}
+              <button 
+                onClick={handleReport}
+                className="px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium flex items-center space-x-1 transition-colors"
+                title="Report question"
+              >
+                <AlertTriangle size={12} />
+                <span>Report</span>
+              </button>
               <div className={`px-2 py-1 rounded-lg text-xs font-semibold border ${state.isAnswered ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                 {state.isAnswered ? (
                   <div className="flex items-center space-x-1">
@@ -300,7 +368,6 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                   </SyntaxHighlighter>
                 </div>
               )}
-              {console.log(questionData)}
                 {(questionData.category === "GATE-CSE" || questionData.category === "CAT") && questionData.questionImage && (
                   <div className="mt-3 flex justify-center max-w-full overflow-hidden">
                     <Image
@@ -317,11 +384,19 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
               </div>
             </MathJax>
           )}
-          {questionData.options_A && (
-            <div className="mt-4 space-y-2">
-                  {["A", "B", "C", "D"].map((opt, optIndex) => {
-                const optionText = questionData[`options_${opt}`];
-                    if (!optionText) return null;
+          {(() => {
+            const hasOptions = ["A", "B", "C", "D"].some(opt => {
+              const optionText = questionData[`options_${opt}`];
+              return optionText && String(optionText).trim().length > 0;
+            });
+            
+            if (!hasOptions) return null;
+            
+            return (
+              <div className="mt-4 space-y-2">
+                {["A", "B", "C", "D"].map((opt, optIndex) => {
+                  const optionText = questionData[`options_${opt}`];
+                  if (!optionText || String(optionText).trim().length === 0) return null;
                 const isSelected = state.selectedOption === opt;
                 const isCorrectOption = opt === questionData.correct_option;
                 const optionClass = state.isAnswered && state.showFeedback
@@ -369,7 +444,8 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                     );
                   })}
                 </div>
-              )}
+            );
+          })()}
           {questionData.options_A && !state.isAnswered && state.selectedOption && !isEditing && (
             <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200/50">
               <label className="block text-xs font-semibold text-gray-700 mb-1 uppercase">Confidence Level</label>
@@ -536,14 +612,47 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
   return (
     <div className="space-y-4">
       {renderQuestionCard(question, index)}
-      {false && (
-              <AnimatePresence>
-          {state.showReportForm && !state.isAnswered && (
-            <motion.div />
-                )}
-              </AnimatePresence>
-          )}
-        </div>
+      <AnimatePresence>
+        {state.showReportForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg"
+          >
+            <h3 className="text-sm font-semibold text-red-800 mb-2 flex items-center">
+              <AlertTriangle size={14} className="mr-2" />
+              Report Question
+            </h3>
+            <p className="text-xs text-red-700 mb-3">
+              Please provide a reason for reporting this question. This helps us improve the quality of our content.
+            </p>
+            <textarea
+              value={state.reportReason}
+              onChange={(e) => setState((prev) => ({ ...prev, reportReason: e.target.value }))}
+              placeholder="E.g., Incorrect answer, unclear question, typo, etc."
+              className="w-full p-3 border-2 border-red-200 rounded-lg focus:ring-2 focus:ring-red-300/30 focus:border-red-400 bg-white text-sm resize-none"
+              rows={4}
+            />
+            <div className="flex items-center justify-end gap-2 mt-3">
+              <button
+                onClick={handleReport}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReportSubmit}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+              >
+                Submit Report
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 });
 
