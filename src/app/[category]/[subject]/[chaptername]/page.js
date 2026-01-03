@@ -295,8 +295,8 @@ const ChapterTopicsPage = () => {
             </Link>
           </div>
 
-          <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
+          <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex-1 min-w-0">
               <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-neutral-900">
                 {formattedChapterName || 'Chapter Topics'}
               </h1>
@@ -304,27 +304,36 @@ const ChapterTopicsPage = () => {
                 Track your progress across {topics.length} topics and {progress.totalQuestions} questions
               </p>
             </div>
-            <div className="mt-4 sm:mt-0 flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:mt-0">
+              <Link
+                href={`/${category}/${subject}/${chaptername}/practice`}
+                className="flex-1 sm:flex-none px-4 py-2.5 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 text-sm font-medium transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
+              >
+                <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span className="hidden xs:inline">Practice Chapter</span>
+                <span className="xs:hidden">Practice Chapter Wise</span>
+              </Link>
               <button 
                 onClick={() => fetchChapterTopics()}
                 disabled={isLoading}
-                className="px-3 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 disabled:opacity-50 text-sm flex items-center gap-2 transition-colors"
+                className="px-3 py-2.5 bg-white border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 disabled:opacity-50 text-sm flex items-center gap-2 transition-colors flex-shrink-0"
                 aria-label="Refresh data"
               >
-                <svg className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className={`h-4 w-4 flex-shrink-0 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                {isLoading ? 'Refreshing...' : 'Refresh'}
+                <span className="hidden sm:inline">{isLoading ? 'Refreshing...' : 'Refresh'}</span>
               </button>
               <button 
                 onClick={() => setShowMobileOptions(true)} 
-                className="md:hidden px-4 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg flex items-center justify-center"
+                className="md:hidden px-3 py-2.5 bg-white border border-neutral-300 text-neutral-800 rounded-lg flex items-center justify-center flex-shrink-0"
                 aria-label="Show options and progress"
               >
-                <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                 </svg>
-                Options & Progress
               </button>
             </div>
           </div>

@@ -18,6 +18,9 @@ import {
   Mail,
   Grid3x3,
   ChevronRight,
+  GraduationCap,
+  BookMarked,
+  Newspaper,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useArticleCategories } from "@/lib/hooks/useArticleCategories";
@@ -33,7 +36,7 @@ const Navbar = () => {
   const isAuthPage = pathname === '/sign-up' || pathname === '/sign-in';
   
   // Only fetch categories when drawer is opened AND not on auth pages
-  const { categories } = useArticleCategories({ 
+  const { categories, loading: categoriesLoading } = useArticleCategories({ 
     enabled: showCategoryDrawer && !isAuthPage 
   });
 
@@ -58,8 +61,13 @@ const Navbar = () => {
 
   const mainNavItems = [
     { name: "Home", path: "/", icon: <Home size={18} /> },
+    { name: "Exams", path: "/exams", icon: <GraduationCap size={18} /> },
+    { name: "Articles", path: "/articles", icon: <Newspaper size={18} /> },
     { name: "About Us", path: "/about-us", icon: <Info size={18} /> },
     { name: "Contact Us", path: "/contact-us", icon: <Mail size={18} /> },
+  ];
+
+  const footerNavItems = [
     { name: "Privacy Policy", path: "/privacy-policy", icon: <Shield size={18} /> },
     { name: "Terms of Service", path: "/terms-and-services", icon: <FileText size={18} /> },
     { name: "Disclaimer", path: "/disclaimer", icon: <FileText size={18} /> },
@@ -214,6 +222,7 @@ const Navbar = () => {
             className="md:hidden fixed top-20 left-0 right-0 bg-white shadow-xl border-t border-gray-100 z-50"
           >
             <div className="px-4 pt-4 pb-6 space-y-1 max-h-[calc(100vh-5rem)] overflow-y-auto">
+              {/* Main Navigation Items */}
               {mainNavItems.map((item) => (
                 <Link
                   key={item.name}
@@ -226,7 +235,17 @@ const Navbar = () => {
                 </Link>
               ))}
 
-              {/* Categories Button */}
+              {/* User Progress - Show for all users */}
+              <Link
+                href="/user-progress"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
+              >
+                <BarChart2 size={18} className="mr-3 text-gray-600" />
+                My Progress
+              </Link>
+
+              {/* Article Categories Button */}
               <button
                 onClick={() => {
                   setIsOpen(false);
@@ -235,7 +254,7 @@ const Navbar = () => {
                 className="flex items-center w-full px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
               >
                 <Grid3x3 size={18} className="mr-3 text-gray-600" />
-                Categories
+                Article Categories
                 <ChevronRight size={18} className="ml-auto text-gray-400" />
               </button>
 
@@ -258,14 +277,6 @@ const Navbar = () => {
                       </p>
                     </div>
                   </div>
-                  <Link
-                    href="/user-progress"
-                    onClick={() => setIsOpen(false)}
-                    className="flex items-center w-full px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
-                  >
-                    <BarChart2 size={18} className="mr-3 text-gray-600" />
-                    My Progress
-                  </Link>
                   <button
                     onClick={() => {
                       setShowProfileModal(true);
@@ -316,6 +327,23 @@ const Navbar = () => {
                   </Link>
                 </div>
               )}
+
+              {/* Footer Navigation Items */}
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="space-y-1">
+                  {footerNavItems.map((item) => (
+                    <Link
+                      key={item.name}
+                      href={item.path}
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center px-4 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
+                    >
+                      <span className="mr-3 text-gray-500">{item.icon}</span>
+                      {item.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
           </motion.div>
         )}
@@ -356,7 +384,32 @@ const Navbar = () => {
 
               {/* Drawer Content */}
               <div className="flex-1 overflow-y-auto px-6 py-6">
-                {categories && Array.isArray(categories) && categories.length > 0 ? (
+                {categoriesLoading ? (
+                  // Enhanced Shimmer/Skeleton Loading UI
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 bg-white overflow-hidden relative"
+                      >
+                        {/* Shimmer overlay effect */}
+                        <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
+                        {/* Color dot shimmer */}
+                        <div className="w-4 h-4 rounded-full bg-neutral-200 flex-shrink-0 animate-pulse"></div>
+                        {/* Text shimmer */}
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-neutral-200 rounded w-3/4 animate-pulse"></div>
+                          <div className="h-3 bg-neutral-100 rounded w-1/2 animate-pulse"></div>
+                        </div>
+                        {/* Arrow shimmer */}
+                        <div className="w-5 h-5 bg-neutral-200 rounded animate-pulse"></div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : categories && Array.isArray(categories) && categories.length > 0 ? (
                   <div className="space-y-2">
                     {categories.map((category, index) => (
                       <motion.div
