@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Instagram, Youtube, Video, Image as ImageIcon, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -46,9 +46,9 @@ const SocialMediaEmbed = ({ embed, onRemove, isEditable = false }) => {
       }
     } else if (embed.url) {
       // Try to generate embed code from URL
-      generateEmbedFromUrl(embed.url, embed.type);
+      generateEmbedFromUrl(embed.url, embed.type, embed.caption);
     }
-  }, [embed]);
+  }, [embed, generateEmbedFromUrl]);
 
   // Process Instagram embeds when HTML is set
   useEffect(() => {
@@ -59,7 +59,17 @@ const SocialMediaEmbed = ({ embed, onRemove, isEditable = false }) => {
     }
   }, [embedHtml, embed.type]);
 
-  const generateEmbedFromUrl = (url, type) => {
+  const extractInstagramId = useCallback((url) => {
+    const match = url.match(/instagram\.com\/(?:p|reel)\/([A-Za-z0-9_-]+)/);
+    return match ? match[1] : null;
+  }, []);
+
+  const extractYouTubeId = useCallback((url) => {
+    const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    return match ? match[1] : null;
+  }, []);
+
+  const generateEmbedFromUrl = useCallback((url, type, caption = '') => {
     try {
       if (type === 'instagram' || type === 'reel') {
         // Instagram embed - use proper blockquote format
@@ -89,23 +99,13 @@ const SocialMediaEmbed = ({ embed, onRemove, isEditable = false }) => {
         }
       } else if (type === 'image') {
         // Image embed
-        setEmbedHtml(`<img src="${url}" alt="${embed.caption || ''}" style="max-width: 100%; height: auto; border-radius: 8px;" />`);
+        setEmbedHtml(`<img src="${url}" alt="${caption || ''}" style="max-width: 100%; height: auto; border-radius: 8px;" />`);
       }
     } catch (err) {
       setError('Failed to generate embed');
       console.error('Embed generation error:', err);
     }
-  };
-
-  const extractInstagramId = (url) => {
-    const match = url.match(/instagram\.com\/(?:p|reel)\/([A-Za-z0-9_-]+)/);
-    return match ? match[1] : null;
-  };
-
-  const extractYouTubeId = (url) => {
-    const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
-    return match ? match[1] : null;
-  };
+  }, [extractInstagramId, extractYouTubeId]);
 
   const getIcon = () => {
     switch (embed.type) {

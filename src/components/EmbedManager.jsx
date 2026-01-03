@@ -217,7 +217,7 @@ const EmbedManager = ({ embeds = [], onChange }) => {
 
         {embeds.length === 0 && !showAddForm && (
           <p className="text-sm text-neutral-500 text-center py-4">
-            No embeds added. Click "Add Embed" to add social media content.
+            No embeds added. Click &quot;Add Embed&quot; to add social media content.
           </p>
         )}
       </div>
