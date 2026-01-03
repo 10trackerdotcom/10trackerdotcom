@@ -105,6 +105,33 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
     }
   }, [article.social_media_embeds]);
 
+  // Load Twitter embed script globally if there are Twitter embeds
+  React.useEffect(() => {
+    const hasTwitterEmbeds = article.social_media_embeds?.some(
+      embed => embed.type === 'twitter'
+    );
+
+    if (hasTwitterEmbeds) {
+      // Check if script already exists
+      if (!document.querySelector('script[src="https://platform.twitter.com/widgets.js"]')) {
+        const script = document.createElement('script');
+        script.src = 'https://platform.twitter.com/widgets.js';
+        script.async = true;
+        script.charset = 'utf-8';
+        script.onload = () => {
+          // Process all Twitter embeds after script loads
+          if (window.twttr) {
+            window.twttr.widgets.load();
+          }
+        };
+        document.body.appendChild(script);
+      } else if (window.twttr) {
+        // Script already loaded, just process embeds
+        window.twttr.widgets.load();
+      }
+    }
+  }, [article.social_media_embeds]);
+
   return (
     <>
       {/* JSON-LD Structured Data */}
@@ -151,16 +178,27 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
       <style jsx global>{`
         .article-content {
           line-height: 1.6;
-          font-size: 1rem;
+          font-size: 1.125rem; /* 18px on mobile */
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+        }
+        @media (min-width: 768px) {
+          .article-content {
+            font-size: 1rem; /* 16px on larger screens */
+          }
         }
         .article-content p {
           margin: 1rem 0;
           color: #3c4043;
           line-height: 1.6;
+          font-size: 1.125rem; /* 18px on mobile */
+        }
+        @media (min-width: 768px) {
+          .article-content p {
+            font-size: 1rem; /* 16px on larger screens */
+          }
         }
         .article-content h1 {
-          font-size: 2rem;
+          font-size: 2.25rem; /* Larger on mobile */
           font-weight: 400;
           color: #202124;
           margin: 2rem 0 1rem 0;
@@ -168,26 +206,46 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           border-bottom: 1px solid #dadce0;
           padding-bottom: 0.5rem;
         }
+        @media (min-width: 768px) {
+          .article-content h1 {
+            font-size: 2rem; /* 32px on larger screens */
+          }
+        }
         .article-content h2 {
-          font-size: 1.5rem;
+          font-size: 1.75rem; /* Larger on mobile */
           font-weight: 400;
           color: #202124;
           margin: 1.5rem 0 0.75rem 0;
           line-height: 1.3;
         }
+        @media (min-width: 768px) {
+          .article-content h2 {
+            font-size: 1.5rem; /* 24px on larger screens */
+          }
+        }
         .article-content h3 {
-          font-size: 1.25rem;
+          font-size: 1.375rem; /* Larger on mobile */
           font-weight: 500;
           color: #202124;
           margin: 1.25rem 0 0.5rem 0;
           line-height: 1.4;
         }
+        @media (min-width: 768px) {
+          .article-content h3 {
+            font-size: 1.25rem; /* 20px on larger screens */
+          }
+        }
         .article-content h4 {
-          font-size: 1.125rem;
+          font-size: 1.25rem; /* Larger on mobile */
           font-weight: 500;
           color: #202124;
           margin: 1rem 0 0.5rem 0;
           line-height: 1.4;
+        }
+        @media (min-width: 768px) {
+          .article-content h4 {
+            font-size: 1.125rem; /* 18px on larger screens */
+          }
         }
         .article-content ul, .article-content ol {
           padding-left: 1.5rem;
@@ -198,11 +256,23 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           list-style-type: disc;
           margin: 0.5rem 0;
           line-height: 1.6;
+          font-size: 1.125rem; /* 18px on mobile */
+        }
+        @media (min-width: 768px) {
+          .article-content ul li {
+            font-size: 1rem; /* 16px on larger screens */
+          }
         }
         .article-content ol li {
           list-style-type: decimal;
           margin: 0.5rem 0;
           line-height: 1.6;
+          font-size: 1.125rem; /* 18px on mobile */
+        }
+        @media (min-width: 768px) {
+          .article-content ol li {
+            font-size: 1rem; /* 16px on larger screens */
+          }
         }
         .article-content ul li::marker, .article-content ol li::marker {
           color: #5f6368;
@@ -222,6 +292,12 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           border: 1px solid #dadce0;
           padding: 0.75rem;
           text-align: left;
+          font-size: 1.125rem; /* 18px on mobile */
+        }
+        @media (min-width: 768px) {
+          .article-content table td, .article-content table th {
+            font-size: 1rem; /* 16px on larger screens */
+          }
         }
         .article-content table th {
           background-color: #f8f9fa;
@@ -262,6 +338,12 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           color: #3c4043;
           background-color: #f8f9fa;
           border-radius: 4px;
+          font-size: 1.125rem; /* 18px on mobile */
+        }
+        @media (min-width: 768px) {
+          .article-content blockquote {
+            font-size: 1rem; /* 16px on larger screens */
+          }
         }
         .article-content code {
           background-color: #f1f3f4;
@@ -456,6 +538,54 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                     </p>
                   )}
 
+                  {/* Social Media Embeds - At Top */}
+                  {(() => {
+                    // Handle different data formats
+                    let embeds = article.social_media_embeds;
+                    
+                    // If it's a string, try to parse it
+                    if (typeof embeds === 'string') {
+                      try {
+                        embeds = JSON.parse(embeds);
+                      } catch (e) {
+                        console.error('❌ Failed to parse embeds string:', e);
+                        embeds = [];
+                      }
+                    }
+                    
+                    // If it's null or undefined, set to empty array
+                    if (embeds === null || embeds === undefined) {
+                      embeds = [];
+                    }
+                    
+                    // Ensure it's an array
+                    if (!Array.isArray(embeds)) {
+                      embeds = [];
+                    }
+                    
+                    // Check if embeds exist and have content
+                    const hasEmbeds = embeds && Array.isArray(embeds) && embeds.length > 0;
+                    
+                    if (!hasEmbeds) {
+                      return null;
+                    }
+                    
+                    return (
+                      <div className="mb-8 pb-8 border-b border-neutral-200">
+                        <div className="space-y-6">
+                          {embeds.map((embed, index) => {
+                            if (!embed || typeof embed !== 'object') {
+                              return null;
+                            }
+                            return (
+                              <SocialMediaEmbed key={index} embed={embed} />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Article Meta */}
                   <div className="flex items-center justify-between text-sm text-neutral-600 mb-10 pb-8 border-b border-neutral-200">
                     <div className="flex items-center gap-6 flex-wrap">
@@ -488,76 +618,6 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                     className="article-content"
                     dangerouslySetInnerHTML={{ __html: article.content }}
                   />
-
-                  {/* Social Media Embeds */}
-                  {(() => {
-                    // Debug: Always log to see what we're getting
-                    console.log('🔍 Full Article Object:', article);
-                    console.log('🔍 Social Media Embeds Field:', {
-                      value: article.social_media_embeds,
-                      type: typeof article.social_media_embeds,
-                      isArray: Array.isArray(article.social_media_embeds),
-                      isNull: article.social_media_embeds === null,
-                      isUndefined: article.social_media_embeds === undefined,
-                      length: article.social_media_embeds?.length,
-                      stringified: JSON.stringify(article.social_media_embeds)
-                    });
-                    
-                    // Handle different data formats
-                    let embeds = article.social_media_embeds;
-                    
-                    // If it's a string, try to parse it
-                    if (typeof embeds === 'string') {
-                      try {
-                        embeds = JSON.parse(embeds);
-                        console.log('📝 Parsed string to JSON:', embeds);
-                      } catch (e) {
-                        console.error('❌ Failed to parse embeds string:', e);
-                        embeds = [];
-                      }
-                    }
-                    
-                    // If it's null or undefined, set to empty array
-                    if (embeds === null || embeds === undefined) {
-                      console.log('⚠️ Embeds is null/undefined, setting to empty array');
-                      embeds = [];
-                    }
-                    
-                    // Ensure it's an array
-                    if (!Array.isArray(embeds)) {
-                      console.log('⚠️ Embeds is not an array, converting:', embeds);
-                      embeds = [];
-                    }
-                    
-                    // Check if embeds exist and have content
-                    const hasEmbeds = embeds && Array.isArray(embeds) && embeds.length > 0;
-                    
-                    if (!hasEmbeds) {
-                      console.log('ℹ️ No embeds to display - array is empty');
-                      // Don't show anything if no embeds - clean UI
-                      return null;
-                    }
-                    
-                    console.log('✅ Rendering embeds:', embeds);
-                    
-                    return (
-                      <div className="mt-10 pt-8 border-t border-neutral-200">
-                        <h3 className="text-lg font-semibold text-neutral-900 mb-6">Social Media Content</h3>
-                        <div className="space-y-6">
-                          {embeds.map((embed, index) => {
-                            console.log(`📦 Rendering embed ${index}:`, embed);
-                            if (!embed || typeof embed !== 'object') {
-                              console.warn(`⚠️ Invalid embed at index ${index}:`, embed);
-                              return null;
-                            }
-                            return (
-                              <SocialMediaEmbed key={index} embed={embed} />
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
 
                   {/* Tags */}
                   {article.tags && article.tags.length > 0 && (
@@ -625,17 +685,17 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                               </span>
                             </div>
 
-                            <h3 className="text-base font-semibold text-neutral-900 mb-2 line-clamp-2 group-hover:text-neutral-700 transition-colors leading-snug" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
+                            <h3 className="text-lg sm:text-base font-semibold text-neutral-900 mb-2 line-clamp-2 group-hover:text-neutral-700 transition-colors leading-snug" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}>
                               {relatedArticle.title}
                             </h3>
                             
                             {relatedArticle.excerpt && (
-                              <p className="text-sm text-neutral-600 mb-4 line-clamp-2 leading-relaxed">
+                              <p className="text-base sm:text-sm text-neutral-600 mb-4 line-clamp-2 leading-relaxed">
                                 {relatedArticle.excerpt}
                               </p>
                             )}
 
-                            <div className="flex items-center justify-between text-xs text-neutral-500 mb-4">
+                            <div className="flex items-center justify-between text-sm sm:text-xs text-neutral-500 mb-4">
                               <div className="flex items-center gap-1.5">
                                 <Calendar className="w-3.5 h-3.5" />
                                 {formatDate(relatedArticle.created_at)}

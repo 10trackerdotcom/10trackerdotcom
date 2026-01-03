@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, X, Instagram, Youtube, Video, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { Plus, X, Instagram, Youtube, Video, Image as ImageIcon, Trash2, Twitter } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const EmbedManager = ({ embeds = [], onChange }) => {
@@ -16,6 +16,7 @@ const EmbedManager = ({ embeds = [], onChange }) => {
   const embedTypes = [
     { value: 'instagram', label: 'Instagram Post', icon: Instagram },
     { value: 'reel', label: 'Instagram Reel', icon: Instagram },
+    { value: 'twitter', label: 'Twitter/X Post', icon: Twitter },
     { value: 'youtube', label: 'YouTube Video', icon: Youtube },
     { value: 'video', label: 'Other Video', icon: Video },
     { value: 'image', label: 'Image', icon: ImageIcon }
@@ -99,7 +100,7 @@ const EmbedManager = ({ embeds = [], onChange }) => {
                 type="url"
                 value={formData.url}
                 onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                placeholder="https://instagram.com/p/..."
+                placeholder="https://instagram.com/p/... or https://twitter.com/..."
                 className="w-full px-3 py-2 text-sm border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800"
               />
             </div>
