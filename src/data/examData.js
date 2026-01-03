@@ -23,28 +23,6 @@ export const examData = [
     active: true, // Active exam
   },
   {
-    slug: 'gate-me',
-    name: 'GATE ME',
-    image: 'https://www.spinoneducation.com/wp-content/uploads/2022/02/Gate.webp',
-    icon: '💻',
-    color: 'from-gray-500 to-cyan-500',
-    description: 'Graduate Aptitude Test in Engineering - Computer Science',
-    category: 'Engineering',
-    count: 2500, // Hardcoded question count
-    active: true, // Active exam
-  },
-  {
-    slug: 'gate-da',
-    name: 'GATE DA',
-    image: 'https://www.spinoneducation.com/wp-content/uploads/2022/02/Gate.webp',
-    icon: '💻',
-    color: 'from-gray-500 to-cyan-500',
-    description: 'Graduate Aptitude Test in Engineering - Computer Science',
-    category: 'Engineering',
-    count: 2200, // Hardcoded question count
-    active: true, // Active exam
-  },
-  {
     slug: 'gate-ee',
     name: 'GATE EE',
     image: 'https://www.spinoneducation.com/wp-content/uploads/2022/02/Gate.webp',
@@ -53,17 +31,6 @@ export const examData = [
     description: 'Graduate Aptitude Test in Engineering - Computer Science',
     category: 'Engineering',
     count: 2800, // Hardcoded question count
-    active: true, // Active exam
-  },
-  {
-    slug: 'gate-ce',
-    name: 'GATE CE',
-    image: 'https://www.spinoneducation.com/wp-content/uploads/2022/02/Gate.webp',
-    icon: '💻',
-    color: 'from-gray-500 to-cyan-500',
-    description: 'Graduate Aptitude Test in Engineering - Computer Science',
-    category: 'Engineering',
-    count: 2400, // Hardcoded question count
     active: true, // Active exam
   },
   {
