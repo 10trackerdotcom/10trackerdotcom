@@ -151,12 +151,38 @@ export default async function ArticlePage({ params }) {
   const { slug } = await params;
   
   try {
-    // Fetch the main article
-    const { data: article, error: articleError } = await supabase
+    // Fetch the main article - try both view and direct table
+    let { data: article, error: articleError } = await supabase
       .from('published_articles')
       .select('*')
       .eq('slug', slug)
       .single();
+    
+    // If view doesn't have social_media_embeds, fetch directly from articles table
+    if (article && !article.hasOwnProperty('social_media_embeds')) {
+      console.log('⚠️ View missing social_media_embeds, fetching from articles table');
+      const { data: directArticle } = await supabase
+        .from('articles')
+        .select('social_media_embeds')
+        .eq('id', article.id)
+        .single();
+      
+      if (directArticle) {
+        article.social_media_embeds = directArticle.social_media_embeds;
+      }
+    }
+    
+    // Debug log
+    if (article) {
+      console.log('📄 Server-side: Fetched article:', {
+        id: article.id,
+        title: article.title,
+        hasSocialMediaEmbeds: article.hasOwnProperty('social_media_embeds'),
+        socialMediaEmbeds: article.social_media_embeds,
+        socialMediaEmbedsType: typeof article.social_media_embeds,
+        allKeys: Object.keys(article)
+      });
+    }
 
     if (articleError || !article) {
     return (

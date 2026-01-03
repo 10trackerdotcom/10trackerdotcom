@@ -55,7 +55,7 @@ export async function PUT(request, { params }) {
 
     const { id } = await params;
     const body = await request.json();
-    const { title, content, excerpt, category, tags, featured_image_url, is_featured, status } = body;
+    const { title, content, excerpt, category, tags, featured_image_url, is_featured, status, social_media_embeds } = body;
 
     const updateData = {};
     if (title) updateData.title = title;
@@ -66,6 +66,7 @@ export async function PUT(request, { params }) {
     if (featured_image_url) updateData.featured_image_url = featured_image_url;
     if (typeof is_featured === 'boolean') updateData.is_featured = is_featured;
     if (status) updateData.status = status;
+    if (social_media_embeds !== undefined) updateData.social_media_embeds = social_media_embeds;
 
     const { data, error } = await supabase
       .from('articles')

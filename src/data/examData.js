@@ -112,54 +112,54 @@ export const examData = [
     count: 1500, // Hardcoded question count
     active: true, // Inactive exam - will be grayed out
   },
-  {
-    slug: 'cat',
-    name: 'CAT',
-    image: 'https://static.toiimg.com/thumb/msid-95111352,width-1280,height-720,resizemode-4/95111352.jpg',
-    icon: '📊',
-    bg: 'bg-gray-200',
-    color: 'from-purple-500 to-pink-500',
-    description: 'Common Admission Test for MBA programs',
-    category: 'Management',
-    count: 1500, // Hardcoded question count
-    active: false, // Inactive exam - will be grayed out
-  },
-  {
-    slug: 'neet-ug',
-    name: 'NEET UG',
-    image: 'https://e7.pngegg.com/pngimages/612/865/png-clipart-central-board-of-secondary-education-ugc-net-cbse-exam-class-10-neet-jee-main-school-label-logo-thumbnail.png',
-    bg: 'bg-gray-200',
-    icon: '🧬',
-    color: 'from-indigo-500 to-blue-500',
-    description: 'National Eligibility cum Entrance Test for Medical',
-    category: 'Medical',
-    count: 2800, // Hardcoded question count
-    active: true, // Inactive exam - will be grayed out
-  },
-  {
-    slug: 'ssc',
-    name: 'SSC',
-    image: '/exams/ssc.png',
-    bg: 'bg-gray-200',
-    icon: '📋',
-    color: 'from-yellow-500 to-orange-500',
-    description: 'Staff Selection Commission - Government Jobs',
-    category: 'Government Jobs',
-    count: 1900, // Hardcoded question count
-    active: false, // Inactive exam - will be grayed out
-  },
-  {
-    slug: 'aptitude',
-    name: 'Aptitude',
-    bg: 'bg-gray-200',
-    image: '/exams/aptitude.png',
-    icon: '🧮',
-    color: 'from-violet-500 to-purple-500',
-    description: 'General Aptitude and Reasoning Practice',
-    category: 'General',
-    count: 1200, // Hardcoded question count
-    active: false, // Inactive exam - will be grayed out
-  },
+  // {
+  //   slug: 'cat',
+  //   name: 'CAT',
+  //   image: 'https://static.toiimg.com/thumb/msid-95111352,width-1280,height-720,resizemode-4/95111352.jpg',
+  //   icon: '📊',
+  //   bg: 'bg-gray-200',
+  //   color: 'from-purple-500 to-pink-500',
+  //   description: 'Common Admission Test for MBA programs',
+  //   category: 'Management',
+  //   count: 1500, // Hardcoded question count
+  //   active: false, // Inactive exam - will be grayed out
+  // },
+  // {
+  //   slug: 'neet-ug',
+  //   name: 'NEET UG',
+  //   image: 'https://e7.pngegg.com/pngimages/612/865/png-clipart-central-board-of-secondary-education-ugc-net-cbse-exam-class-10-neet-jee-main-school-label-logo-thumbnail.png',
+  //   bg: 'bg-gray-200',
+  //   icon: '🧬',
+  //   color: 'from-indigo-500 to-blue-500',
+  //   description: 'National Eligibility cum Entrance Test for Medical',
+  //   category: 'Medical',
+  //   count: 2800, // Hardcoded question count
+  //   active: true, // Inactive exam - will be grayed out
+  // },
+  // {
+  //   slug: 'ssc',
+  //   name: 'SSC',
+  //   image: '/exams/ssc.png',
+  //   bg: 'bg-gray-200',
+  //   icon: '📋',
+  //   color: 'from-yellow-500 to-orange-500',
+  //   description: 'Staff Selection Commission - Government Jobs',
+  //   category: 'Government Jobs',
+  //   count: 1900, // Hardcoded question count
+  //   active: false, // Inactive exam - will be grayed out
+  // },
+  // {
+  //   slug: 'aptitude',
+  //   name: 'Aptitude',
+  //   bg: 'bg-gray-200',
+  //   image: '/exams/aptitude.png',
+  //   icon: '🧮',
+  //   color: 'from-violet-500 to-purple-500',
+  //   description: 'General Aptitude and Reasoning Practice',
+  //   category: 'General',
+  //   count: 1200, // Hardcoded question count
+  //   active: false, // Inactive exam - will be grayed out
+  // },
 ];
 
 // Helper function to merge API data with static exam data (kept for backward compatibility)

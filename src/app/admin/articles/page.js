@@ -21,6 +21,7 @@ import toast from 'react-hot-toast';
 import { useUser } from '@clerk/nextjs';
 import RichTextEditor from '@/components/RichTextEditor';
 import { useArticleCategories, clearCategoriesCache } from '@/lib/hooks/useArticleCategories';
+import EmbedManager from '@/components/EmbedManager';
 
 const AdminArticlesPage = () => {
   const { user, isLoaded } = useUser();
@@ -40,7 +41,8 @@ const AdminArticlesPage = () => {
     category: '',
     tags: '',
     featured_image_url: '',
-    is_featured: false
+    is_featured: false,
+    social_media_embeds: []
   });
 
   // Check if user is admin
@@ -82,7 +84,8 @@ const AdminArticlesPage = () => {
         },
         body: JSON.stringify({
           ...formData,
-          tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+          tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+          social_media_embeds: formData.social_media_embeds || []
         })
       });
 
@@ -117,7 +120,8 @@ const AdminArticlesPage = () => {
         },
         body: JSON.stringify({
           ...formData,
-          tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
+          tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+          social_media_embeds: formData.social_media_embeds || []
         })
       });
 
@@ -171,12 +175,28 @@ const AdminArticlesPage = () => {
       category: '',
       tags: '',
       featured_image_url: '',
-      is_featured: false
+      is_featured: false,
+      social_media_embeds: []
     });
   };
 
   const openEditModal = (article) => {
     setEditingArticle(article);
+    
+    // Handle social_media_embeds - ensure it's always an array
+    let embeds = article.social_media_embeds;
+    if (typeof embeds === 'string') {
+      try {
+        embeds = JSON.parse(embeds);
+      } catch (e) {
+        console.error('Failed to parse social_media_embeds:', e);
+        embeds = [];
+      }
+    }
+    if (!Array.isArray(embeds)) {
+      embeds = [];
+    }
+    
     setFormData({
       title: article.title,
       content: article.content,
@@ -184,8 +204,17 @@ const AdminArticlesPage = () => {
       category: article.category,
       tags: article.tags?.join(', ') || '',
       featured_image_url: article.featured_image_url || '',
-      is_featured: article.is_featured || false
+      is_featured: article.is_featured || false,
+      social_media_embeds: embeds
     });
+    
+    console.log('📝 Loading article for edit:', {
+      id: article.id,
+      title: article.title,
+      embeds: embeds,
+      embedsCount: embeds.length
+    });
+    
     setShowCreateModal(true);
   };
 
@@ -623,6 +652,14 @@ const AdminArticlesPage = () => {
                     onChange={(e) => setFormData({ ...formData, featured_image_url: e.target.value })}
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
                     placeholder="https://example.com/image.jpg"
+                  />
+                </div>
+
+                {/* Social Media Embeds */}
+                <div>
+                  <EmbedManager
+                    embeds={formData.social_media_embeds || []}
+                    onChange={(embeds) => setFormData({ ...formData, social_media_embeds: embeds })}
                   />
                 </div>
 

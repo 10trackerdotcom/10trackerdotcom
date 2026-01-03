@@ -60,7 +60,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { title, content, excerpt, category, tags, featured_image_url, is_featured } = body;
+    const { title, content, excerpt, category, tags, featured_image_url, is_featured, social_media_embeds } = body;
 
     if (!title || !content || !category) {
       return Response.json(
@@ -79,6 +79,7 @@ export async function POST(request) {
         tags: tags || [],
         featured_image_url,
         is_featured: is_featured || false,
+        social_media_embeds: social_media_embeds || [],
         author_email: 'jain10gunjan@gmail.com',
         status: 'published'
       })

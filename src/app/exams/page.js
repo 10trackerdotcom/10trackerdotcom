@@ -209,7 +209,7 @@ export default function ExamsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6 max-w-2xl mx-auto">
               <div className="bg-white border border-neutral-200 rounded-xl p-4 sm:p-6 shadow-sm">
                 <div className="text-2xl sm:text-3xl font-bold mb-2 text-neutral-900">
-                  4
+                  {examCategories.length}
                 </div>
                 <div className="text-neutral-600 text-xs sm:text-sm">Exams Available</div>
               </div>

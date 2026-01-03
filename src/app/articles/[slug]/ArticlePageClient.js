@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { trackContentEvent, trackSocialShare } from '@/lib/analytics';
+import SocialMediaEmbed from '@/components/SocialMediaEmbed';
 
 const ArticlePageClient = ({ article, relatedArticles }) => {
   const formatDate = (dateString) => {
@@ -77,6 +78,32 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
       trackContentEvent('viewed', 'article', article.id);
     }
   }, [article]);
+
+  // Load Instagram embed script globally if there are Instagram embeds
+  React.useEffect(() => {
+    const hasInstagramEmbeds = article.social_media_embeds?.some(
+      embed => embed.type === 'instagram' || embed.type === 'reel'
+    );
+
+    if (hasInstagramEmbeds) {
+      // Check if script already exists
+      if (!document.querySelector('script[src="https://www.instagram.com/embed.js"]')) {
+        const script = document.createElement('script');
+        script.src = 'https://www.instagram.com/embed.js';
+        script.async = true;
+        script.onload = () => {
+          // Process all Instagram embeds after script loads
+          if (window.instgrm) {
+            window.instgrm.Embeds.process();
+          }
+        };
+        document.body.appendChild(script);
+      } else if (window.instgrm) {
+        // Script already loaded, just process embeds
+        window.instgrm.Embeds.process();
+      }
+    }
+  }, [article.social_media_embeds]);
 
   return (
     <>
@@ -461,6 +488,76 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                     className="article-content"
                     dangerouslySetInnerHTML={{ __html: article.content }}
                   />
+
+                  {/* Social Media Embeds */}
+                  {(() => {
+                    // Debug: Always log to see what we're getting
+                    console.log('🔍 Full Article Object:', article);
+                    console.log('🔍 Social Media Embeds Field:', {
+                      value: article.social_media_embeds,
+                      type: typeof article.social_media_embeds,
+                      isArray: Array.isArray(article.social_media_embeds),
+                      isNull: article.social_media_embeds === null,
+                      isUndefined: article.social_media_embeds === undefined,
+                      length: article.social_media_embeds?.length,
+                      stringified: JSON.stringify(article.social_media_embeds)
+                    });
+                    
+                    // Handle different data formats
+                    let embeds = article.social_media_embeds;
+                    
+                    // If it's a string, try to parse it
+                    if (typeof embeds === 'string') {
+                      try {
+                        embeds = JSON.parse(embeds);
+                        console.log('📝 Parsed string to JSON:', embeds);
+                      } catch (e) {
+                        console.error('❌ Failed to parse embeds string:', e);
+                        embeds = [];
+                      }
+                    }
+                    
+                    // If it's null or undefined, set to empty array
+                    if (embeds === null || embeds === undefined) {
+                      console.log('⚠️ Embeds is null/undefined, setting to empty array');
+                      embeds = [];
+                    }
+                    
+                    // Ensure it's an array
+                    if (!Array.isArray(embeds)) {
+                      console.log('⚠️ Embeds is not an array, converting:', embeds);
+                      embeds = [];
+                    }
+                    
+                    // Check if embeds exist and have content
+                    const hasEmbeds = embeds && Array.isArray(embeds) && embeds.length > 0;
+                    
+                    if (!hasEmbeds) {
+                      console.log('ℹ️ No embeds to display - array is empty');
+                      // Don't show anything if no embeds - clean UI
+                      return null;
+                    }
+                    
+                    console.log('✅ Rendering embeds:', embeds);
+                    
+                    return (
+                      <div className="mt-10 pt-8 border-t border-neutral-200">
+                        <h3 className="text-lg font-semibold text-neutral-900 mb-6">Social Media Content</h3>
+                        <div className="space-y-6">
+                          {embeds.map((embed, index) => {
+                            console.log(`📦 Rendering embed ${index}:`, embed);
+                            if (!embed || typeof embed !== 'object') {
+                              console.warn(`⚠️ Invalid embed at index ${index}:`, embed);
+                              return null;
+                            }
+                            return (
+                              <SocialMediaEmbed key={index} embed={embed} />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Tags */}
                   {article.tags && article.tags.length > 0 && (

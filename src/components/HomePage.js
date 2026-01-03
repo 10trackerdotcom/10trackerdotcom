@@ -252,13 +252,7 @@ export default function HomePage() {
                   Start Practicing
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
-                <Link
-                  href="/contests"
-                  className="px-8 py-4 bg-white border-2 border-neutral-300 text-neutral-800 rounded-xl font-semibold text-lg hover:bg-neutral-50 hover:border-neutral-400 transition-all duration-200 shadow-sm hover:shadow-md flex items-center gap-2"
-                >
-                  <Trophy className="w-5 h-5" />
-                  Join Contests
-                </Link>
+                 
               </motion.div>
 
               {/* Enhanced Stats */}
