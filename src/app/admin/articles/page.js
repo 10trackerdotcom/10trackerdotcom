@@ -19,7 +19,9 @@ import {
   Sparkles,
   Loader2,
   Copy,
-  Check
+  Check,
+  Globe,
+  Briefcase
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useUser } from '@clerk/nextjs';
@@ -33,11 +35,13 @@ const AdminArticlesPage = () => {
   const [loading, setLoading] = useState(true);
   
   // Use shared hook for categories
-  const { categories, refetch: refetchCategories } = useArticleCategories({ enabled: true });
+  const { categories, loading: categoriesLoading, error: categoriesError, refetch: refetchCategories } = useArticleCategories({ enabled: true });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showScrapeModal, setShowScrapeModal] = useState(false);
+  const [showTechJobModal, setShowTechJobModal] = useState(false);
   const [editingArticle, setEditingArticle] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
@@ -56,6 +60,20 @@ const AdminArticlesPage = () => {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState(null);
   const [copied, setCopied] = useState({});
+
+  // Article scraping state
+  const [scrapeUrl, setScrapeUrl] = useState('');
+  const [scrapedArticle, setScrapedArticle] = useState(null);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeError, setScrapeError] = useState(null);
+  const [scrapeCopied, setScrapeCopied] = useState({});
+
+  // Tech job scraping state
+  const [techJobUrl, setTechJobUrl] = useState('');
+  const [scrapedTechJob, setScrapedTechJob] = useState(null);
+  const [scrapingTechJob, setScrapingTechJob] = useState(false);
+  const [techJobError, setTechJobError] = useState(null);
+  const [techJobCopied, setTechJobCopied] = useState({});
 
   // Check if user is admin
   const isAdmin = user?.emailAddresses?.[0]?.emailAddress === 'jain10gunjan@gmail.com';
@@ -199,6 +217,20 @@ const AdminArticlesPage = () => {
     setCopied({});
   };
 
+  const resetScrapeForm = () => {
+    setScrapeUrl('');
+    setScrapedArticle(null);
+    setScrapeError(null);
+    setScrapeCopied({});
+  };
+
+  const resetTechJobForm = () => {
+    setTechJobUrl('');
+    setScrapedTechJob(null);
+    setTechJobError(null);
+    setTechJobCopied({});
+  };
+
   const handleGenerateArticle = async () => {
     if (!headline.trim()) {
       setGenerateError('Please enter a headline');
@@ -257,6 +289,142 @@ const AdminArticlesPage = () => {
     resetGenerateForm();
   };
 
+  const handleScrapeArticle = async () => {
+    if (!scrapeUrl.trim()) {
+      setScrapeError('Please enter a URL');
+      return;
+    }
+
+    setScraping(true);
+    setScrapeError(null);
+    setScrapedArticle(null);
+
+    try {
+      const response = await fetch('/api/scrape-article', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: scrapeUrl }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to scrape article');
+      }
+
+      if (data.success) {
+        setScrapedArticle(data);
+        toast.success('Article scraped successfully');
+      } else {
+        throw new Error(data.error || 'Failed to scrape article');
+      }
+    } catch (err) {
+      setScrapeError(err.message || 'An error occurred while scraping the article');
+      toast.error(err.message || 'Failed to scrape article');
+    } finally {
+      setScraping(false);
+    }
+  };
+
+  const handleUseScrapedArticle = () => {
+    if (!scrapedArticle?.data) return;
+
+    // Populate form with scraped content
+    setFormData({
+      title: scrapedArticle.data.title,
+      content: scrapedArticle.data.finalVersion,
+      excerpt: scrapedArticle.data.excerpt || scrapedArticle.data.description || '',
+      category: formData.category || '',
+      tags: formData.tags || '',
+      featured_image_url: formData.featured_image_url || '',
+      is_featured: formData.is_featured || false,
+      social_media_embeds: formData.social_media_embeds || []
+    });
+
+    // Close scrape modal and open create modal
+    setShowScrapeModal(false);
+    setShowCreateModal(true);
+    resetScrapeForm();
+  };
+
+  const handleScrapeCopy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setScrapeCopied({ ...scrapeCopied, [key]: true });
+    setTimeout(() => {
+      setScrapeCopied({ ...scrapeCopied, [key]: false });
+    }, 2000);
+  };
+
+  const handleTechJobScrape = async () => {
+    if (!techJobUrl.trim()) {
+      setTechJobError('Please enter a job URL');
+      return;
+    }
+
+    setScrapingTechJob(true);
+    setTechJobError(null);
+    setScrapedTechJob(null);
+
+    try {
+      const response = await fetch('/api/scrape-tech-job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: techJobUrl }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to scrape tech job');
+      }
+
+      if (data.success) {
+        setScrapedTechJob(data);
+        toast.success('Tech job scraped successfully');
+      } else {
+        throw new Error(data.error || 'Failed to scrape tech job');
+      }
+    } catch (err) {
+      setTechJobError(err.message || 'An error occurred while scraping the tech job');
+      toast.error(err.message || 'Failed to scrape tech job');
+    } finally {
+      setScrapingTechJob(false);
+    }
+  };
+
+  const handleUseScrapedTechJob = () => {
+    if (!scrapedTechJob?.data) return;
+
+    // Populate form with scraped content
+    setFormData({
+      title: scrapedTechJob.data.title,
+      content: scrapedTechJob.data.finalVersion,
+      excerpt: scrapedTechJob.data.excerpt || scrapedTechJob.data.description || '',
+      category: formData.category || '',
+      tags: formData.tags || '',
+      featured_image_url: scrapedTechJob.data.companyImage || formData.featured_image_url || '',
+      is_featured: formData.is_featured || false,
+      social_media_embeds: formData.social_media_embeds || []
+    });
+
+    // Close tech job modal and open create modal
+    setShowTechJobModal(false);
+    setShowCreateModal(true);
+    resetTechJobForm();
+  };
+
+  const handleTechJobCopy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setTechJobCopied({ ...techJobCopied, [key]: true });
+    setTimeout(() => {
+      setTechJobCopied({ ...techJobCopied, [key]: false });
+    }, 2000);
+  };
+
   const handleCopy = (text, key) => {
     navigator.clipboard.writeText(text);
     setCopied({ ...copied, [key]: true });
@@ -312,6 +480,16 @@ const AdminArticlesPage = () => {
   const closeGenerateModal = () => {
     setShowGenerateModal(false);
     resetGenerateForm();
+  };
+
+  const closeScrapeModal = () => {
+    setShowScrapeModal(false);
+    resetScrapeForm();
+  };
+
+  const closeTechJobModal = () => {
+    setShowTechJobModal(false);
+    resetTechJobForm();
   };
 
   const filteredArticles = articles.filter(article => {
@@ -417,24 +595,43 @@ const AdminArticlesPage = () => {
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                disabled={categoriesLoading}
               >
                 <option value="">All Categories</option>
-                {categories && Array.isArray(categories) && categories.map(category => (
-                  <option key={category.slug} value={category.slug}>
-                    {category.name}
-                  </option>
-                ))}
+                {categories && Array.isArray(categories) && categories.length > 0 ? (
+                  categories.map(category => (
+                    <option key={category.slug} value={category.slug}>
+                      {category.name}
+                    </option>
+                  ))
+                ) : !categoriesLoading ? (
+                  <option value="" disabled>No categories</option>
+                ) : null}
               </select>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               <button
                 onClick={() => setShowGenerateModal(true)}
                 className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 flex items-center gap-2 shadow-sm"
               >
                 <Sparkles className="w-4 h-4" />
                 Generate Article
+              </button>
+              <button
+                onClick={() => setShowScrapeModal(true)}
+                className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 flex items-center gap-2 shadow-sm"
+              >
+                <Globe className="w-4 h-4" />
+                Scrape Article
+              </button>
+              <button
+                onClick={() => setShowTechJobModal(true)}
+                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all duration-200 flex items-center gap-2 shadow-sm"
+              >
+                <Briefcase className="w-4 h-4" />
+                Add Tech Job
               </button>
               <button
                 onClick={() => setShowCreateModal(true)}
@@ -879,6 +1076,438 @@ const AdminArticlesPage = () => {
         </div>
       )}
 
+      {/* Scrape Article Modal */}
+      {showScrapeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            <div className="p-6 border-b border-neutral-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Globe className="w-6 h-6 text-green-600" />
+                  <h2 className="text-xl font-semibold text-neutral-900">
+                    Scrape Article from URL
+                  </h2>
+                </div>
+                <button
+                  onClick={closeScrapeModal}
+                  className="p-2 text-neutral-400 hover:text-neutral-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Input Section */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-2">
+                      Enter Article URL
+                    </label>
+                    <input
+                      type="url"
+                      value={scrapeUrl}
+                      onChange={(e) => setScrapeUrl(e.target.value)}
+                      placeholder="https://sarkariresult.com.cm/bpsc-project-manager-recruitment-2026/"
+                      className="w-full p-4 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleScrapeArticle}
+                    disabled={scraping || !scrapeUrl.trim()}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold transition-colors"
+                  >
+                    {scraping ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Scraping Article...
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="w-5 h-5" />
+                        Scrape Article
+                      </>
+                    )}
+                  </button>
+                  {scrapeError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                      {scrapeError}
+                    </div>
+                  )}
+                </div>
+
+                {/* Output Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-neutral-900">Scraped Article</h3>
+                  {scrapedArticle ? (
+                    <div className="space-y-4">
+                      {/* Title */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm font-semibold text-neutral-700">Title</label>
+                          <button
+                            onClick={() => handleScrapeCopy(scrapedArticle.data.title, 'title')}
+                            className="flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900"
+                          >
+                            {scrapeCopied.title ? (
+                              <>
+                                <Check className="w-3 h-3" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                Copy
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-neutral-900 font-semibold">
+                          {scrapedArticle.data.title}
+                        </div>
+                      </div>
+
+                      {/* Excerpt */}
+                      {scrapedArticle.data.excerpt && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-semibold text-neutral-700">Excerpt</label>
+                            <button
+                              onClick={() => handleScrapeCopy(scrapedArticle.data.excerpt, 'excerpt')}
+                              className="flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900"
+                            >
+                              {scrapeCopied.excerpt ? (
+                                <>
+                                  <Check className="w-3 h-3" />
+                                  Copied!
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  Copy
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-neutral-700 text-sm">
+                            {scrapedArticle.data.excerpt}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Use Article Button */}
+                      <button
+                        onClick={handleUseScrapedArticle}
+                        className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-semibold transition-colors"
+                      >
+                        <Save className="w-4 h-4" />
+                        Use This Article
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-neutral-300 rounded-lg p-8 text-center text-neutral-400">
+                      Scraped article will appear here
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Article Preview */}
+              {scrapedArticle && (
+                <div className="mt-6 border-t border-neutral-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-neutral-900">Article Preview</h3>
+                    <button
+                      onClick={() => handleScrapeCopy(scrapedArticle.data.finalVersion, 'content')}
+                      className="flex items-center gap-2 text-sm text-neutral-600 hover:text-neutral-900 font-medium"
+                    >
+                      {scrapeCopied.content ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Copied HTML!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy HTML
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="border border-neutral-300 rounded-lg p-6 bg-white">
+                    <style dangerouslySetInnerHTML={{__html: `
+                      .article-content {
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                        line-height: 1.8;
+                        color: #1f2937;
+                      }
+                      .article-content p {
+                        margin-bottom: 1.5rem;
+                        color: #374151;
+                        font-size: 1rem;
+                        line-height: 1.8;
+                      }
+                      .article-content p:last-child {
+                        margin-bottom: 0;
+                      }
+                      .article-content h1, .article-content h2, .article-content h3, .article-content h4, .article-content h5, .article-content h6 {
+                        font-weight: 700;
+                        margin-top: 2rem;
+                        margin-bottom: 1rem;
+                        color: #111827;
+                      }
+                      .article-content h1 {
+                        font-size: 2rem;
+                      }
+                      .article-content h2 {
+                        font-size: 1.75rem;
+                      }
+                      .article-content h3 {
+                        font-size: 1.5rem;
+                      }
+                      .article-content h4 {
+                        font-size: 1.25rem;
+                      }
+                      .article-content h5 {
+                        font-size: 1.125rem;
+                      }
+                      .article-content h6 {
+                        font-size: 1rem;
+                      }
+                      .article-content ul, .article-content ol {
+                        margin: 1.5rem 0;
+                        padding-left: 1.75rem;
+                      }
+                      .article-content li {
+                        margin-bottom: 0.75rem;
+                        color: #374151;
+                        line-height: 1.7;
+                      }
+                      .article-content strong {
+                        font-weight: 700;
+                        color: #111827;
+                      }
+                      .article-content table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 1.5rem 0;
+                      }
+                      .article-content table th,
+                      .article-content table td {
+                        border: 1px solid #d1d5db;
+                        padding: 0.75rem;
+                        text-align: left;
+                      }
+                      .article-content table th {
+                        background-color: #f3f4f6;
+                        font-weight: 600;
+                      }
+                      .article-content span {
+                        display: inline;
+                      }
+                      .article-content div {
+                        margin-bottom: 1rem;
+                      }
+                    `}} />
+                    <div className="prose prose-lg max-w-none prose-neutral prose-headings:text-neutral-900 prose-p:text-neutral-700 prose-a:text-blue-600 prose-strong:text-neutral-900">
+                      <h1 className="text-3xl font-bold mb-4 text-neutral-900">{scrapedArticle.data.title}</h1>
+                      {scrapedArticle.data.excerpt && (
+                        <p className="text-lg text-neutral-600 mb-6 italic">{scrapedArticle.data.excerpt}</p>
+                      )}
+                      <div 
+                        className="prose prose-lg max-w-none prose-neutral prose-headings:text-neutral-900 prose-p:text-neutral-700 prose-a:text-blue-600 prose-strong:text-neutral-900"
+                        dangerouslySetInnerHTML={{ __html: scrapedArticle.data.finalVersion }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Scrape Tech Job Modal */}
+      {showTechJobModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto"
+          >
+            <div className="p-6 border-b border-neutral-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Briefcase className="w-6 h-6 text-purple-600" />
+                  <h2 className="text-xl font-semibold text-neutral-900">
+                    Scrape Tech Job from URL
+                  </h2>
+                </div>
+                <button
+                  onClick={closeTechJobModal}
+                  className="p-2 text-neutral-400 hover:text-neutral-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Input Section */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-2">
+                      Enter Job URL
+                    </label>
+                    <input
+                      type="url"
+                      value={techJobUrl}
+                      onChange={(e) => setTechJobUrl(e.target.value)}
+                      placeholder="https://www.jobfound.org/job/..."
+                      className="w-full p-4 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    />
+                  </div>
+                  <button
+                    onClick={handleTechJobScrape}
+                    disabled={scrapingTechJob || !techJobUrl.trim()}
+                    className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold transition-colors"
+                  >
+                    {scrapingTechJob ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Scraping Tech Job...
+                      </>
+                    ) : (
+                      <>
+                        <Briefcase className="w-5 h-5" />
+                        Scrape Tech Job
+                      </>
+                    )}
+                  </button>
+                  {techJobError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                      {techJobError}
+                    </div>
+                  )}
+                </div>
+
+                {/* Output Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-neutral-900">Scraped Tech Job</h3>
+                  {scrapedTechJob ? (
+                    <div className="space-y-4">
+                      {/* Title */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm font-semibold text-neutral-700">Title</label>
+                          <button
+                            onClick={() => handleTechJobCopy(scrapedTechJob.data.title, 'title')}
+                            className="flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900"
+                          >
+                            {techJobCopied.title ? (
+                              <>
+                                <Check className="w-3 h-3" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                Copy
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-neutral-900 font-semibold">
+                          {scrapedTechJob.data.title}
+                        </div>
+                      </div>
+
+                      {/* Excerpt */}
+                      {scrapedTechJob.data.excerpt && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-semibold text-neutral-700">Excerpt</label>
+                            <button
+                              onClick={() => handleTechJobCopy(scrapedTechJob.data.excerpt, 'excerpt')}
+                              className="flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900"
+                            >
+                              {techJobCopied.excerpt ? (
+                                <>
+                                  <Check className="w-3 h-3" />
+                                  Copied!
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  Copy
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-lg text-neutral-700 text-sm">
+                            {scrapedTechJob.data.excerpt}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Use Article Button */}
+                      <button
+                        onClick={handleUseScrapedTechJob}
+                        className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-semibold transition-colors"
+                      >
+                        <Save className="w-4 h-4" />
+                        Use This Job
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="border border-neutral-300 rounded-lg p-8 text-center text-neutral-400">
+                      Scraped tech job will appear here
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Job Preview */}
+              {scrapedTechJob && (
+                <div className="mt-6 border-t border-neutral-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-neutral-900">Job Preview</h3>
+                    <button
+                      onClick={() => handleTechJobCopy(scrapedTechJob.data.finalVersion, 'content')}
+                      className="flex items-center gap-2 text-sm text-neutral-600 hover:text-neutral-900 font-medium"
+                    >
+                      {techJobCopied.content ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Copied HTML!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy HTML
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="border border-neutral-300 rounded-lg p-6 bg-white">
+                    <div 
+                      className="prose prose-lg max-w-none prose-neutral prose-headings:text-neutral-900 prose-p:text-neutral-700 prose-a:text-blue-600 prose-strong:text-neutral-900"
+                      dangerouslySetInnerHTML={{ __html: scrapedTechJob.data.finalVersion }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Create/Edit Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -928,14 +1557,24 @@ const AdminArticlesPage = () => {
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                    disabled={categoriesLoading}
                   >
-                    <option value="">Select Category</option>
-                    {categories && Array.isArray(categories) && categories.map(category => (
-                      <option key={category.slug} value={category.slug}>
-                        {category.name}
-                      </option>
-                    ))}
+                    <option value="">
+                      {categoriesLoading ? 'Loading categories...' : 'Select Category'}
+                    </option>
+                    {categories && Array.isArray(categories) && categories.length > 0 ? (
+                      categories.map(category => (
+                        <option key={category.slug} value={category.slug}>
+                          {category.name}
+                        </option>
+                      ))
+                    ) : !categoriesLoading ? (
+                      <option value="" disabled>No categories available</option>
+                    ) : null}
                   </select>
+                  {categoriesError && (
+                    <p className="mt-1 text-sm text-red-600">Error loading categories. Please refresh.</p>
+                  )}
                 </div>
 
                 {/* Excerpt */}

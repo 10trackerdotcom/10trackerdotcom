@@ -111,7 +111,7 @@ export default function ArticlesPage() {
         seoDescription="Browse all articles, latest updates, exam tips, and preparation strategies on 10tracker."
       />
       <Navbar />
-      <div className="min-h-screen bg-white pt-20">
+      <div className="min-h-screen bg-white pt-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
           {/* Header */}
           <motion.div

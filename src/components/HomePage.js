@@ -17,25 +17,16 @@ import {
   Sparkles,
   Users,
   Target,
-  Award
+  Award,
+  Briefcase,
+  ClipboardCheck,
+  Bell,
+  Search,
+  Clock,
+  Eye
 } from "lucide-react";
 import { mergeExamData } from "@/data/examData";
-import dynamic from "next/dynamic";
-
-// Lazy load ArticlesSection for better performance
-const ArticlesSection = dynamic(() => import("@/components/ArticlesSection"), {
-  ssr: true,
-  loading: () => (
-    <div className="py-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-neutral-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-neutral-600">Loading articles...</p>
-        </div>
-      </div>
-    </div>
-  ),
-});
+import { useArticleCategories } from "@/lib/hooks/useArticleCategories";
 
 // Enhanced Exam Card Component
 function ExamCard({ exam, index }) {
@@ -157,6 +148,11 @@ export default function HomePage() {
     dailyPractice: 0,
   });
   const [loadingExams, setLoadingExams] = useState(true);
+  const [articles, setArticles] = useState([]);
+  const [loadingArticles, setLoadingArticles] = useState(true);
+  
+  // Fetch categories using shared hook
+  const { categories } = useArticleCategories({ enabled: true });
 
   useEffect(() => {
     // Use hardcoded exam data
@@ -174,6 +170,46 @@ export default function HomePage() {
     
     setLoadingExams(false);
   }, []);
+
+  useEffect(() => {
+    fetchArticles();
+  }, []);
+
+  const fetchArticles = async () => {
+    try {
+      const response = await fetch('/api/articles?limit=15');
+      const result = await response.json();
+      if (result.success) {
+        const sorted = [...(result.data || [])]
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setArticles(sorted);
+      }
+    } catch (error) {
+      console.error('Error fetching articles:', error);
+    } finally {
+      setLoadingArticles(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const getCategoryColor = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return '#3B82F6';
+    const category = categories.find(cat => cat.slug === categorySlug);
+    return category?.color || '#3B82F6';
+  };
+
+  const getCategoryName = (categorySlug) => {
+    if (!categories || !Array.isArray(categories)) return categorySlug;
+    const category = categories.find(cat => cat.slug === categorySlug);
+    return category?.name || categorySlug;
+  };
 
   // Animation variants
   const containerVariants = {
@@ -225,20 +261,21 @@ export default function HomePage() {
               
               <motion.h1
                 variants={itemVariants}
-                className="text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 leading-tight text-neutral-900 tracking-tight"
+                className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold mb-6 leading-tight text-neutral-900 tracking-tight"
               >
-                Master Competitive Exams with
-                <span className="block mt-3 bg-gradient-to-r from-neutral-900 to-neutral-700 bg-clip-text text-transparent">
+                Your Gateway to Success
+                <span className="block mt-3 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 bg-clip-text text-transparent">
                   10tracker
                 </span>
               </motion.h1>
               
               <motion.p
                 variants={itemVariants}
-                className="text-xl sm:text-2xl text-neutral-600 mb-10 max-w-3xl mx-auto leading-relaxed font-light"
+                className="text-lg sm:text-xl lg:text-2xl text-neutral-600 mb-10 max-w-3xl mx-auto leading-relaxed font-light"
               >
-                Practice smarter, track better, achieve more. Get daily problems, 
-                contest challenges, and comprehensive exam preparation all in one place.
+                Latest Information • Job Updates • Results • Exam Preparation
+                <br className="hidden sm:block" />
+                <span className="text-base sm:text-lg">Everything you need in one place</span>
               </motion.p>
 
               <motion.div
@@ -295,10 +332,212 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Blog/Articles Section - Integrated */}
-        <section className="py-20 bg-white border-b border-neutral-200">
+        {/* Latest Articles & Updates Section - Table View */}
+        <section className="py-16 sm:py-20 bg-gradient-to-b from-white via-neutral-50/30 to-white border-b border-neutral-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <ArticlesSection />
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-12 sm:mb-16"
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-neutral-200 shadow-sm mb-4">
+                <TrendingUp className="w-4 h-4 text-neutral-700" />
+                <span className="text-sm font-medium text-neutral-700">Latest Updates & Information</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-neutral-900 mb-4 tracking-tight">
+                Latest Articles
+              </h2>
+              <p className="text-lg sm:text-xl text-neutral-600 max-w-2xl mx-auto font-light">
+                Stay informed with the latest articles, updates, and exam preparation tips
+              </p>
+            </motion.div>
+
+            {loadingArticles ? (
+              <div className="text-center py-16">
+                <div className="w-10 h-10 border-4 border-neutral-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-neutral-600">Loading articles...</p>
+              </div>
+            ) : articles.length === 0 ? (
+              <div className="text-center py-16 bg-white border border-neutral-200 rounded-2xl">
+                <FileText className="w-16 h-16 text-neutral-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-neutral-900 mb-2">No articles available</h3>
+                <p className="text-neutral-600">Check back soon for latest updates</p>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Table */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                  className="hidden md:block bg-white border border-neutral-200 rounded-2xl shadow-sm overflow-hidden mb-8"
+                >
+                  <table className="w-full">
+                    <thead className="bg-neutral-50 border-b border-neutral-200">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Title</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Category</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Date</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">Views</th>
+                        <th className="px-6 py-4 text-right text-xs font-semibold text-neutral-700 uppercase tracking-wider">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200">
+                      {articles.map((article, index) => (
+                        <motion.tr
+                          key={article.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          whileInView={{ opacity: 1, x: 0 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.3, delay: index * 0.02 }}
+                          className="hover:bg-neutral-50 transition-colors"
+                        >
+                          <td className="px-6 py-4">
+                            <Link
+                              href={`/articles/${article.slug}`}
+                              className="group block"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-semibold text-neutral-900 group-hover:text-neutral-700 transition-colors line-clamp-2 mb-1">
+                                    {article.title}
+                                    {article.is_featured && (
+                                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                                        Featured
+                                      </span>
+                                    )}
+                                  </div>
+                                  {article.excerpt && (
+                                    <p className="text-xs text-neutral-500 line-clamp-1">
+                                      {article.excerpt}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </Link>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold"
+                              style={{
+                                backgroundColor: `${getCategoryColor(article.category)}20`,
+                                color: getCategoryColor(article.category)
+                              }}
+                            >
+                              {getCategoryName(article.category)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-1.5 text-sm text-neutral-600">
+                              <Calendar className="w-4 h-4 text-neutral-400" />
+                              {formatDate(article.created_at)}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-1.5 text-sm text-neutral-600">
+                              <Eye className="w-4 h-4 text-neutral-400" />
+                              {article.view_count || 0}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <Link
+                              href={`/articles/${article.slug}`}
+                              className="inline-flex items-center gap-1 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors group"
+                            >
+                              View
+                              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                            </Link>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </motion.div>
+
+                {/* Mobile Cards */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                  className="md:hidden space-y-4 mb-8"
+                >
+                  {articles.map((article, index) => (
+                    <motion.div
+                      key={article.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                    >
+                      <Link
+                        href={`/articles/${article.slug}`}
+                        className="block bg-white border border-neutral-200 rounded-xl p-5 hover:shadow-lg transition-all duration-300"
+                      >
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-base font-semibold text-neutral-900 mb-2 line-clamp-2">
+                              {article.title}
+                            </h3>
+                            {article.excerpt && (
+                              <p className="text-sm text-neutral-500 mb-3 line-clamp-2">
+                                {article.excerpt}
+                              </p>
+                            )}
+                          </div>
+                          {article.is_featured && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 flex-shrink-0">
+                              Featured
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-4 text-xs text-neutral-500">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {formatDate(article.created_at)}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Eye className="w-3.5 h-3.5" />
+                              {article.view_count || 0}
+                            </div>
+                          </div>
+                          <span
+                            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0"
+                            style={{
+                              backgroundColor: `${getCategoryColor(article.category)}20`,
+                              color: getCategoryColor(article.category)
+                            }}
+                          >
+                            {getCategoryName(article.category)}
+                          </span>
+                        </div>
+                      </Link>
+                    </motion.div>
+                  ))}
+                </motion.div>
+
+                {/* View All Button */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                  className="text-center"
+                >
+                  <Link
+                    href="/articles"
+                    className="inline-flex items-center gap-2 px-8 py-4 bg-neutral-900 text-white rounded-xl font-semibold hover:bg-neutral-800 transition-all duration-200 shadow-lg hover:shadow-xl"
+                  >
+                    View All Articles
+                    <ArrowRight className="w-5 h-5" />
+                  </Link>
+                </motion.div>
+              </>
+            )}
           </div>
         </section>
 
