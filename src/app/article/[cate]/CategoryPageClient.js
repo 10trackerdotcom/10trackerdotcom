@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { useArticleCategories } from '@/lib/hooks/useArticleCategories';
+import AdSense from '@/components/AdSense';
 
 const ITEMS_PER_PAGE = 25;
 
@@ -242,6 +243,11 @@ const CategoryPageClient = ({ params }) => {
           </div>
         </div>
 
+        {/* AdSense Ad - Top */}
+        <div className="mb-6">
+          <AdSense />
+        </div>
+
         {/* Search and Sort */}
         <div className="mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
@@ -371,6 +377,11 @@ const CategoryPageClient = ({ params }) => {
                   </div>
                 </Link>
               ))}
+            </div>
+
+            {/* AdSense Ad - Before Pagination */}
+            <div className="my-6">
+              <AdSense />
             </div>
 
             {/* Pagination */}

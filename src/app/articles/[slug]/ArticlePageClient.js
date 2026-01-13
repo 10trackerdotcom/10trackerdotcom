@@ -16,6 +16,7 @@ import {
 import Link from 'next/link';
 import { trackContentEvent, trackSocialShare } from '@/lib/analytics';
 import SocialMediaEmbed from '@/components/SocialMediaEmbed';
+import AdSense from '@/components/AdSense';
 
 const ArticlePageClient = ({ article, relatedArticles }) => {
   const formatDate = (dateString) => {
@@ -538,6 +539,11 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                     </p>
                   )}
 
+                  {/* AdSense Ad - Top */}
+                  <div className="my-8">
+                    <AdSense />
+                  </div>
+
                   {/* Social Media Embeds - At Top */}
                   {(() => {
                     // Handle different data formats
@@ -619,6 +625,11 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                     dangerouslySetInnerHTML={{ __html: article.content }}
                   />
 
+                  {/* AdSense Ad - After Content */}
+                  <div className="my-8">
+                    <AdSense />
+                  </div>
+
                   {/* Tags */}
                   {article.tags && article.tags.length > 0 && (
                     <div className="mt-10 pt-8 border-t border-neutral-200">
@@ -636,6 +647,11 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                     </div>
                   )}
                 </motion.article>
+
+                {/* AdSense Ad - Before Related Articles */}
+                <div className="my-8">
+                  <AdSense />
+                </div>
 
                 {/* Related Articles */}
                 {relatedArticles.length > 0 && (

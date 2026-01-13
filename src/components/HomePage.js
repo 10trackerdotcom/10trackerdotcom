@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { mergeExamData } from "@/data/examData";
 import { useArticleCategories } from "@/lib/hooks/useArticleCategories";
+import AdSense from "@/components/AdSense";
 
 // Enhanced Exam Card Component
 function ExamCard({ exam, index }) {
@@ -601,6 +602,13 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* AdSense Ad - After Hero */}
+        <div className="py-8 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <AdSense />
+          </div>
+        </div>
+
         {/* Features Section */}
         <section className="py-20 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -718,6 +726,13 @@ export default function HomePage() {
             </motion.div>
           </div>
         </section>
+
+        {/* AdSense Ad - After Features */}
+        <div className="py-8 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <AdSense />
+          </div>
+        </div>
 
         {/* Premium CTA Section */}
         <section className="py-24 bg-gradient-to-br from-neutral-50 via-white to-neutral-50 border-t border-neutral-200 relative overflow-hidden">
