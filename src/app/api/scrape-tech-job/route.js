@@ -44,27 +44,27 @@ function generateHTML(jobData, applyUrl) {
     <div>
         <!-- Header -->
         <div>
-            <h1 style="margin: 0 0 8px 0; padding: 0;">${jobData.title || 'Job Title'}</h1>
+            <h1>${jobData.title || 'Job Title'}</h1>
         </div>
         
         <!-- Main Content -->
         <div>
             <!-- Job Overview -->
             <div>
-                <h2 style="margin: 12px 0 6px 0; padding: 0;">Job Overview</h2>
-                <p style="margin: 2px 0; padding: 0;"><strong>Company:</strong> ${jobData.hiringOrganization?.name || 'N/A'}</p>
-                <p style="margin: 2px 0; padding: 0;"><strong>Employment Type:</strong> ${jobData.employmentType || 'N/A'}</p>
-                <p style="margin: 2px 0; padding: 0;"><strong>Location:</strong> ${jobData.jobLocationType === 'TELECOMMUTE' ? 'Remote' : (jobData.jobLocation || 'N/A')}${jobData.applicantLocationRequirements?.length > 0 ? ` (${jobData.applicantLocationRequirements.map(loc => loc.name).join(', ')})` : ''}</p>
-                <p style="margin: 2px 0; padding: 0;"><strong>Salary:</strong> ${formatSalary(jobData.baseSalary)}${jobData.baseSalary?.currency ? ` (${jobData.baseSalary.currency})` : ''}</p>
-                <p style="margin: 2px 0; padding: 0;"><strong>Date Posted:</strong> ${formatDate(jobData.datePosted)}</p>
-                <p style="margin: 2px 0; padding: 0;"><strong>Experience Required:</strong> ${jobData.experienceRequirements ? `${jobData.experienceRequirements} year(s)` : 'Not specified'}</p>
-                ${jobData.validThrough ? `<p style="margin: 2px 0; padding: 0;"><strong>Valid Through:</strong> ${formatDate(jobData.validThrough)}</p>` : ''}
+                <h2>Job Overview</h2>
+                <p><strong>Company:</strong> ${jobData.hiringOrganization?.name || 'N/A'}</p>
+                <p><strong>Employment Type:</strong> ${jobData.employmentType || 'N/A'}</p>
+                <p><strong>Location:</strong> ${jobData.jobLocationType === 'TELECOMMUTE' ? 'Remote' : (jobData.jobLocation || 'N/A')}${jobData.applicantLocationRequirements?.length > 0 ? ` (${jobData.applicantLocationRequirements.map(loc => loc.name).join(', ')})` : ''}</p>
+                <p><strong>Salary:</strong> ${formatSalary(jobData.baseSalary)}${jobData.baseSalary?.currency ? ` (${jobData.baseSalary.currency})` : ''}</p>
+                <p><strong>Date Posted:</strong> ${formatDate(jobData.datePosted)}</p>
+                <p><strong>Experience Required:</strong> ${jobData.experienceRequirements ? `${jobData.experienceRequirements} year(s)` : 'Not specified'}</p>
+                ${jobData.validThrough ? `<p><strong>Valid Through:</strong> ${formatDate(jobData.validThrough)}</p>` : ''}
             </div>
             
             <!-- Skills -->
             ${jobData.skills ? `
-            <h2 style="margin: 12px 0 6px 0; padding: 0;">Required Skills</h2>
-            <div style="margin: 0; padding: 0;">
+            <h2>Required Skills</h2>
+            <div>
                 ${jobData.skills.split(',').map(skill => 
                     `<span>${skill.trim()}</span>`
                 ).join(', ')}
@@ -73,41 +73,41 @@ function generateHTML(jobData, applyUrl) {
             
             <!-- Qualifications -->
             ${jobData.qualifications ? `
-            <h2 style="margin: 12px 0 6px 0; padding: 0;">Qualifications</h2>
-            <ul style="margin: 0 0 8px 0; padding-left: 20px;">
+            <h2>Qualifications</h2>
+            <ul>
                 ${jobData.qualifications.split(',').map(qual => 
-                    `<li style="margin: 1px 0; padding: 0;">${qual.trim()}</li>`
+                    `<li>${qual.trim()}</li>`
                 ).join('')}
             </ul>
             ` : ''}
             
             <!-- Responsibilities -->
             ${jobData.responsibilities ? `
-            <h2 style="margin: 12px 0 6px 0; padding: 0;">Responsibilities</h2>
-            <ul style="margin: 0 0 8px 0; padding-left: 20px;">
+            <h2>Responsibilities</h2>
+            <ul>
                 ${jobData.responsibilities.split(',').map(resp => 
-                    `<li style="margin: 1px 0; padding: 0;">${resp.trim()}</li>`
+                    `<li>${resp.trim()}</li>`
                 ).join('')}
             </ul>
             ` : ''}
             
             <!-- Job Benefits -->
             ${jobData.jobBenefits ? `
-            <h2 style="margin: 12px 0 6px 0; padding: 0;">Benefits</h2>
-            <ul style="margin: 0 0 8px 0; padding-left: 20px;">
+            <h2>Benefits</h2>
+            <ul>
                 ${jobData.jobBenefits.split(',').map(benefit => 
-                    `<li style="margin: 1px 0; padding: 0;">${benefit.trim()}</li>`
+                    `<li>${benefit.trim()}</li>`
                 ).join('')}
             </ul>
             ` : ''}
             
             <!-- Apply Button -->
             ${applyUrl ? `
-            <div style="margin: 12px 0 0 0; padding: 8px 0 0 0; border-top: 1px solid #ddd; text-align: center;">
-                <a href="${applyUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 4px;">
+            <div>
+                <a href="${applyUrl}" target="_blank" rel="noopener noreferrer">
                     Apply Now
                 </a>
-                <p style="margin: 6px 0 0 0; padding: 0; font-size: 14px; color: #666;">
+                <p>
                     You will be redirected to the company's application page
                 </p>
             </div>

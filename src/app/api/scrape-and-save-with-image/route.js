@@ -1,14 +1,36 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export async function POST(request) {
   try {
-    const { url } = await request.json();
+    const { url, category, image_url } = await request.json();
     
+    // Validate required parameters
     if (!url) {
       return NextResponse.json(
         { success: false, error: 'URL is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!category) {
+      return NextResponse.json(
+        { success: false, error: 'Category is required' },
+        { status: 400 }
+      );
+    }
+
+    // image_url is optional, but if provided, validate it's a valid URL
+    if (image_url && !image_url.match(/^https?:\/\/.+/)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid image URL format' },
         { status: 400 }
       );
     }
@@ -126,8 +148,6 @@ export async function POST(request) {
         text.includes("whatsapp") ||
         text.includes("telegram") ||
         text.includes("follow now")
-        // text.includes("apply online") ||
-        // text.includes("click here")
       );
     }).remove();
 
@@ -518,7 +538,7 @@ export async function POST(request) {
       cleaned = cleaned.replace(/",\s*$/g, '');
       // Remove ", " at the very beginning
       cleaned = cleaned.replace(/^",\s*"/g, '');
-      cleaned = cleaned.replace(/^",\s*/g, '');
+      cleaned = cleaned.replace(/^",\s*$/g, '');
       
       // Remove double commas
       cleaned = cleaned.replace(/,\s*,\s*/g, ',');
@@ -578,34 +598,88 @@ export async function POST(request) {
     // Extract excerpt/description (plain text version)
     const excerpt = description ? 
       cheerio.load(`<div>${description}</div>`)("div").text().trim().substring(0, 200) + '...' :
-      (shortDetails ? shortDetails.substring(0, 200) + '...' : '');
+      (shortDetails ? shortDetails.substring(0, 200) + '...' : (title.substring(0, 200) + '...'));
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        title,
-        content: finalVersion,
-        excerpt: excerpt || title.substring(0, 200) + '...',
-        description: description || null,
-        shortDetails: shortDetails || null,
-        importantDates: importantDatesHTML ? { html: importantDatesHTML } : null,
-        applicationFee: applicationFeeHTML ? { html: applicationFeeHTML } : null,
-        ageLimitsAndEligibility: ageEligibilityHTML ? { html: ageEligibilityHTML } : null,
-        totalPost: totalPostHTML ? { html: totalPostHTML } : null,
-        vacancyDetails: tables,
-        finalVersion
+    // Validate that we have content before saving
+    if (!title || !finalVersion || finalVersion.trim().length < 50) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Failed to extract sufficient content from the URL. Title or content is missing or too short.' 
+        },
+        { status: 400 }
+      );
+    }
+
+    /* =========================
+       SAVE TO DATABASE
+       ========================= */
+
+    try {
+      const { data: savedArticle, error: dbError } = await supabase
+        .from('articles')
+        .insert({
+          title,
+          content: finalVersion,
+          excerpt: excerpt || title.substring(0, 200) + '...',
+          category,
+          tags: [],
+          featured_image_url: image_url || null, // Use provided image_url or null
+          is_featured: false,
+          social_media_embeds: [],
+          author_email: 'jain10gunjan@gmail.com',
+          status: 'published'
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Failed to save article to database',
+            details: dbError.message 
+          },
+          { status: 500 }
+        );
       }
-    });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Article scraped and saved successfully',
+        data: {
+          id: savedArticle.id,
+          title: savedArticle.title,
+          slug: savedArticle.slug,
+          category: savedArticle.category,
+          excerpt: savedArticle.excerpt,
+          featured_image_url: savedArticle.featured_image_url,
+          created_at: savedArticle.created_at,
+          url: `/articles/${savedArticle.slug}`
+        }
+      });
+
+    } catch (dbError) {
+      console.error('Error saving article:', dbError);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Failed to save article to database',
+          details: dbError.message 
+        },
+        { status: 500 }
+      );
+    }
 
   } catch (error) {
     console.error('Scraping error:', error);
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || 'Failed to scrape article'
+        error: error.message || 'Failed to scrape and save article'
       },
       { status: 500 }
     );
   }
 }
-

@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { createClient } from '@supabase/supabase-js';
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // ---------------- helpers ----------------
 const countWords = (text = "") =>
@@ -81,9 +87,22 @@ const convertToHtml = (article) => {
 // ---------------- API ----------------
 export async function POST(req) {
   try {
-    const { headline } = await req.json();
+    const { headline, category, image_url } = await req.json();
+    
     if (!headline) {
       return NextResponse.json({ error: "Headline is required" }, { status: 400 });
+    }
+
+    if (!category) {
+      return NextResponse.json({ error: "Category is required" }, { status: 400 });
+    }
+
+    // image_url is optional, but if provided, validate it's a valid URL
+    if (image_url && !image_url.match(/^https?:\/\/.+/)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid image URL format' },
+        { status: 400 }
+      );
     }
 
     /* =====================================================
@@ -205,27 +224,141 @@ ${articleJson.article}
 
     const articleHtml = convertToHtml(articleJson.article);
 
+    // Extract excerpt from description or article
+    const excerpt = articleJson.description || articleJson.article.substring(0, 200) + '...';
+
     /* =====================================================
-       FINAL RESPONSE
+       STEP 4: SUGGEST SUBREDDIT (ROUND-ROBIN)
        ===================================================== */
-    return NextResponse.json({
-      success: true,
-      data: {
-        title: articleJson.title,
-        description: articleJson.description,
-        article: articleJson.article,
-        articleHtml
-      },
-      meta: {
-        wordCount: words,
-        verified: true,
-        webSearchUsed: 1,
-        stepsUsed: 3
-      },
-      cost: {
-        realistic_range_inr: "₹0.18 – ₹0.25 per article"
+    const subreddits = [
+      'r/delhi',
+      'r/bangalore',
+      'r/mumbai',
+      'r/chennai',
+      'r/hyderabad',
+      'r/Kerala',
+      'r/kolkata',
+      'r/TamilNadu',
+      'r/pune',
+      'r/Maharashtra',
+      'r/bihar',
+      'r/ahmedabad',
+      'r/lucknow',
+      'r/Goa',
+      'r/Uttarakhand',
+      'r/assam',
+      'r/gurgaon',
+      'r/karnataka',
+      'r/Rajasthan',
+      'r/HimachalPradesh',
+      'r/Chandigarh',
+      'r/gujarat',
+      'r/Odisha',
+      'r/uttarpradesh',
+      'r/Northeastindia',
+      'r/indianews',
+      'r/indiadiscussion'
+    ];
+
+    let suggestedSubreddit = null;
+    try {
+      // Get current tracking record
+      const { data: trackingData } = await supabase
+        .from('subreddit_tracking')
+        .select('last_index')
+        .eq('id', 1)
+        .single();
+
+      // Calculate next index (round-robin)
+      const currentIndex = trackingData 
+        ? ((trackingData.last_index + 1) % subreddits.length)
+        : 0;
+
+      // Get the next subreddit in round-robin
+      suggestedSubreddit = subreddits[currentIndex];
+
+      // Update the tracking record (upsert will create if doesn't exist)
+      const { error: updateError } = await supabase
+        .from('subreddit_tracking')
+        .upsert({ id: 1, last_index: currentIndex }, { onConflict: 'id' });
+
+      if (updateError) {
+        console.error('Error updating subreddit tracking:', updateError);
+        // Fallback to first subreddit if update fails
+        suggestedSubreddit = subreddits[0];
       }
-    });
+    } catch (subredditError) {
+      console.error('Error in subreddit round-robin:', subredditError);
+      // Fallback to first subreddit on error
+      suggestedSubreddit = subreddits[0];
+    }
+
+    /* =====================================================
+       SAVE TO DATABASE
+       ===================================================== */
+    try {
+      const { data: savedArticle, error: dbError } = await supabase
+        .from('articles')
+        .insert({
+          title: headline,
+          content: articleHtml,
+          excerpt: excerpt.substring(0, 500), // Limit excerpt length
+          category,
+          tags: [],
+          featured_image_url: image_url,
+          is_featured: false,
+          social_media_embeds: [],
+          author_email: 'jain10gunjan@gmail.com',
+          status: 'published'
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Failed to save article to database',
+            details: dbError.message 
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Article generated and saved successfully',
+        data: {
+          id: savedArticle.id,
+          title: savedArticle.title,
+          slug: savedArticle.slug,
+          category: savedArticle.category,
+          excerpt: savedArticle.excerpt,
+          featured_image_url: savedArticle.featured_image_url,
+          created_at: savedArticle.created_at,
+          url: `/articles/${savedArticle.slug}`,
+          suggested_subreddit: suggestedSubreddit
+        },
+        meta: {
+          wordCount: words,
+          verified: true,
+          webSearchUsed: 1,
+          stepsUsed: 4
+        }
+      });
+
+    } catch (dbError) {
+      console.error('Error saving article:', dbError);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Failed to save article to database',
+          details: dbError.message 
+        },
+        { status: 500 }
+      );
+    }
 
   } catch (err) {
     console.error(err);
@@ -234,11 +367,4 @@ ${articleJson.article}
       { status: 500 }
     );
   }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    message: "POST a headline to generate a verified news article",
-    example: { headline: "Netflix and Warner Bros acquisition news" }
-  });
 }
