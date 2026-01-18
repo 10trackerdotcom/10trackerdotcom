@@ -16,14 +16,76 @@ const countWords = (text = "") =>
   text.trim().split(/\s+/).length;
 
 const safeJsonParse = (text) => {
+  // Helper to clean and fix common JSON issues
+  const cleanJson = (jsonStr) => {
+    // Remove markdown code blocks
+    let cleaned = jsonStr.replace(/```json/gi, "").replace(/```/g, "").trim();
+    
+    // Try to extract JSON object if there's extra text
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      cleaned = match[0];
+    }
+    
+    // Fix common JSON issues
+    // Remove trailing commas before } or ]
+    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+    
+    return cleaned;
+  };
+
   try {
-    return JSON.parse(
-      text.replace(/```json/gi, "").replace(/```/g, "").trim()
-    );
-  } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("Invalid JSON from model");
-    return JSON.parse(match[0]);
+    // First attempt: direct parse after basic cleaning
+    const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+    return JSON.parse(cleaned);
+  } catch (firstError) {
+    try {
+      // Second attempt: extract JSON object and clean
+      const cleaned = cleanJson(text);
+      return JSON.parse(cleaned);
+    } catch (secondError) {
+      // Third attempt: try to find and parse just the JSON object with more aggressive cleaning
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) {
+        console.error("JSON parse error - no JSON object found in:", text.substring(0, 200));
+        throw new Error("Invalid JSON from model: No JSON object found");
+      }
+      
+      try {
+        let cleaned = cleanJson(match[0]);
+        
+        // More aggressive cleaning: try to fix unescaped newlines and quotes
+        // Replace unescaped newlines in string values
+        cleaned = cleaned.replace(/("(?:[^"\\]|\\.)*")\s*\n\s*/g, '$1 ');
+        
+        // Remove trailing commas more aggressively
+        cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+        
+        return JSON.parse(cleaned);
+      } catch (thirdError) {
+        // Log the problematic JSON for debugging
+        const jsonPreview = match[0].substring(0, 500);
+        console.error("JSON parse error - problematic JSON:", jsonPreview);
+        console.error("Parse error details:", thirdError.message);
+        console.error("Full text preview:", text.substring(0, 300));
+        
+        // Last resort: try to manually construct a minimal valid JSON
+        // Extract title, description, and article fields if possible
+        const titleMatch = text.match(/"title"\s*:\s*"([^"]*)"/) || text.match(/"title"\s*:\s*'([^']*)'/);
+        const descMatch = text.match(/"description"\s*:\s*"([^"]*)"/) || text.match(/"description"\s*:\s*'([^']*)'/);
+        const articleMatch = text.match(/"article"\s*:\s*"([^"]*)"/) || text.match(/"article"\s*:\s*'([^']*)'/);
+        
+        if (titleMatch || descMatch || articleMatch) {
+          return {
+            title: titleMatch ? titleMatch[1] : "",
+            description: descMatch ? descMatch[1] : "",
+            article: articleMatch ? articleMatch[1] : ""
+          };
+        }
+        
+        throw new Error(`Invalid JSON from model: ${thirdError.message}`);
+      }
+    }
   }
 };
 
