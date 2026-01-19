@@ -1,4 +1,6 @@
 // Hardcoded exam data with question counts and active status
+import generalAptitudeImage from '../assests/general-aptitude-logo.jpeg';
+
 export const examData = [
   {
     slug: 'gate-cse',
@@ -79,18 +81,18 @@ export const examData = [
     count: 1500, // Hardcoded question count
     active: true, // Inactive exam - will be grayed out
   },
-  // {
-  //   slug: 'cat',
-  //   name: 'CAT',
-  //   image: 'https://static.toiimg.com/thumb/msid-95111352,width-1280,height-720,resizemode-4/95111352.jpg',
-  //   icon: '📊',
-  //   bg: 'bg-gray-200',
-  //   color: 'from-purple-500 to-pink-500',
-  //   description: 'Common Admission Test for MBA programs',
-  //   category: 'Management',
-  //   count: 1500, // Hardcoded question count
-  //   active: false, // Inactive exam - will be grayed out
-  // },
+  {
+    slug: 'general-aptitude',
+    name: 'General Aptitude',
+    image: generalAptitudeImage,
+    icon: '📊',
+    bg: 'bg-gray-200',
+    color: 'from-purple-500 to-pink-500',
+    description: 'General Aptitude and Reasoning Practice. Quantitative Aptitude and Verbal Ability.',
+    category: 'General',
+    count: 24000, // Hardcoded question count
+    active: true, // Inactive exam - will be grayed out
+  },
   // {
   //   slug: 'neet-ug',
   //   name: 'NEET UG',

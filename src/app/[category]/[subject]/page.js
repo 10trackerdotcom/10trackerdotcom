@@ -72,7 +72,7 @@ const Examtracker = () => {
   // Check if category is a GATE exam
   const isGateExam = useMemo(() => {
     const cat = category?.toLowerCase();
-    return cat === 'gate-cse' || cat === 'gate-me' || cat === 'gate-ex' || cat === 'upsc-prelims' || cat === 'gate-ec' || cat === 'gate-ee' || cat === 'gate-da' || cat === 'gate-me' || cat === 'quant-aptitude' || cat === 'verbal-reasoning' || cat === 'non-verbal-reasoning' || cat === 'verbal-ability';
+    return cat === 'gate-cse' || cat === 'gate-me' || cat === 'gate-ex' || cat === 'upsc-prelims' || cat === 'gate-ec' || cat === 'gate-ee' || cat === 'gate-da' || cat === 'gate-me' || cat === 'general-aptitude' || cat === 'verbal-reasoning' || cat === 'non-verbal-reasoning' || cat === 'verbal-ability';
   }, [category]);
   
   // Properly decode and format subject from URL
