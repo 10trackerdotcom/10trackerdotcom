@@ -39,32 +39,98 @@ if (typeof window !== 'undefined') {
 // Function to get FCM token
 export const getFCMToken = async () => {
   try {
+    // Check if we're in browser
+    if (typeof window === 'undefined') {
+      console.error('getFCMToken called on server side');
+      throw new Error('getFCMToken can only be called in the browser');
+    }
+
+    // Check if browser supports notifications
+    if (!('Notification' in window)) {
+      console.error('Browser does not support notifications');
+      throw new Error('Browser does not support notifications');
+    }
+
+    // Check permission
+    if (Notification.permission !== 'granted') {
+      console.error('Notification permission not granted. Current permission:', Notification.permission);
+      throw new Error(`Notification permission not granted. Current: ${Notification.permission}`);
+    }
+
+    // Check if service worker is registered
+    if (!('serviceWorker' in navigator)) {
+      console.error('Service Worker not supported');
+      throw new Error('Service Worker not supported in this browser');
+    }
+
+    // Wait for service worker to be ready
+    let registration;
+    try {
+      registration = await navigator.serviceWorker.ready;
+      console.log('Service Worker is ready:', registration);
+    } catch (swError) {
+      console.error('Service Worker not ready:', swError);
+      throw new Error('Service Worker is not ready. Please ensure it is registered.');
+    }
+
+    // Initialize messaging if not already done
     if (!messaging) {
       const supported = await isSupported();
       if (!supported) {
-        console.log('FCM is not supported in this browser');
-        return null;
+        console.error('FCM is not supported in this browser');
+        throw new Error('FCM is not supported in this browser');
       }
       messaging = getMessaging(app);
+      console.log('Firebase Messaging initialized');
     }
 
+    // Check VAPID key
     const vapidKey = process.env.NEXT_PUBLIC_FCM_VAPID_KEY;
     if (!vapidKey) {
-      console.error('VAPID key is not set. Please set NEXT_PUBLIC_FCM_VAPID_KEY in your .env file');
-      return null;
+      console.error('VAPID key is not set. Please set NEXT_PUBLIC_FCM_VAPID_KEY in your .env.local file');
+      throw new Error('VAPID key is not set. Please set NEXT_PUBLIC_FCM_VAPID_KEY in your .env.local file');
     }
 
-    const token = await getToken(messaging, { vapidKey });
+    if (vapidKey.length < 80) {
+      console.warn('VAPID key seems too short. Expected length: ~87 characters. Got:', vapidKey.length);
+    }
+
+    console.log('Requesting FCM token with VAPID key (first 20 chars):', vapidKey.substring(0, 20) + '...');
+
+    // Request token
+    const token = await getToken(messaging, { 
+      vapidKey,
+      serviceWorkerRegistration: registration 
+    });
+
     if (token) {
-      console.log('FCM Token:', token);
+      console.log('✅ FCM Token obtained successfully:', token.substring(0, 50) + '...');
       return token;
     } else {
-      console.log('No registration token available. Request permission to generate one.');
-      return null;
+      console.error('No registration token available. This usually means:');
+      console.error('1. Service worker is not properly registered');
+      console.error('2. VAPID key is incorrect');
+      console.error('3. Firebase project configuration mismatch');
+      throw new Error('No registration token available. Check service worker registration and VAPID key.');
     }
   } catch (err) {
-    console.error('An error occurred while retrieving token:', err);
-    return null;
+    console.error('❌ Error getting FCM token:', err);
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      stack: err.stack
+    });
+    
+    // Provide helpful error messages
+    if (err.message?.includes('VAPID')) {
+      throw new Error('VAPID key error: ' + err.message + '. Please check NEXT_PUBLIC_FCM_VAPID_KEY in .env.local');
+    } else if (err.message?.includes('service worker') || err.message?.includes('Service Worker')) {
+      throw new Error('Service Worker error: ' + err.message + '. Make sure firebase-messaging-sw.js is accessible.');
+    } else if (err.message?.includes('permission')) {
+      throw new Error('Permission error: ' + err.message);
+    } else {
+      throw new Error('Failed to get FCM token: ' + (err.message || 'Unknown error'));
+    }
   }
 };
 

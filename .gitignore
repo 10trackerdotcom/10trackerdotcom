@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# Firebase service account (contains sensitive credentials)
+service_account.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*

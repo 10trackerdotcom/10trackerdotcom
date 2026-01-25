@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import debounce from "lodash/debounce";
 import dynamic from "next/dynamic";
@@ -25,7 +25,7 @@ const supabase = createClient(
 );
 
 const ADMIN_EMAIL = "jain10gunjan@gmail.com";
-const QUESTIONS_PER_PAGE = 10; // Reduced initial load
+const QUESTIONS_PER_PAGE = 5; // Reduced initial load
 const BATCH_DELAY = 3000; // Increased delay for less frequent updates
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 
@@ -78,6 +78,8 @@ const Pagetracker = memo(() => {
   }), []);
 
   const { category, pagetopic } = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { user, setShowAuthModal } = useAuth();
 
   // Simplified state
@@ -91,8 +93,11 @@ const Pagetracker = memo(() => {
     correct: [],
     points: 0
   });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const pageFromUrl = searchParams?.get("page");
+    const parsed = parseInt(pageFromUrl || "1", 10);
+    return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+  });
 
   // Refs for optimization
   const pendingUpdatesRef = useRef(new Map());
@@ -147,7 +152,7 @@ const Pagetracker = memo(() => {
   }, [category, pagetopic, getCached, setCached]);
 
   // Fetch questions with pagination
-  const fetchQuestions = useCallback(async (difficulty, page = 1, append = false) => {
+  const fetchQuestions = useCallback(async (difficulty, page = 1) => {
     if (!pagetopic || !category) return;
 
     setIsLoadingQuestions(true);
@@ -156,36 +161,24 @@ const Pagetracker = memo(() => {
       const cached = getCached(cacheKey);
       
       if (cached) {
-        if (append) {
-          setQuestions(prev => [...prev, ...cached]);
-        } else {
-          setQuestions(cached);
-        }
-        setHasMore(cached.length === QUESTIONS_PER_PAGE);
+        setQuestions(cached);
         setIsLoadingQuestions(false);
         return;
       }
 
       const { data, error } = await supabase
         .from("examtracker")
-        .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, difficulty, year, subject")
+        .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, difficulty, year, subject, order_index, directionHTML")
         .eq("topic", pagetopic)
         .eq("category", category.toUpperCase())
         .eq("difficulty", difficulty)
-        .order("_id")
+        .order("order_index", { ascending: true })
         .range((page - 1) * QUESTIONS_PER_PAGE, page * QUESTIONS_PER_PAGE - 1);
 
       if (error) throw error;
 
       const questionsData = data || [];
-      
-      if (append) {
-        setQuestions(prev => [...prev, ...questionsData]);
-      } else {
-        setQuestions(questionsData);
-      }
-      
-      setHasMore(questionsData.length === QUESTIONS_PER_PAGE);
+      setQuestions(questionsData);
       setCached(cacheKey, questionsData);
     } catch (error) {
       console.error("Error fetching questions:", error);
@@ -321,7 +314,7 @@ const Pagetracker = memo(() => {
       // Save merged progress - use upsert with proper conflict handling
       const progressData = {
         user_id: user.id,
-        email: user.email,
+        email: user?.emailAddresses[0]?.emailAddress,
         topic: pagetopic,
         completedquestions: mergedCompleted,
         correctanswers: mergedCorrect,
@@ -357,7 +350,7 @@ const Pagetracker = memo(() => {
               completedquestions: mergedCompleted,
               correctanswers: mergedCorrect,
               points: mergedPoints,
-              email: user.email,
+              email: user?.emailAddresses[0]?.emailAddress,
             })
             .eq("user_id", user.id)
             .eq("topic", pagetopic)
@@ -441,27 +434,30 @@ const Pagetracker = memo(() => {
     if (difficulty === activeDifficulty || isLoadingQuestions) return;
     setActiveDifficulty(difficulty);
     setCurrentPage(1);
-    setHasMore(true);
-    fetchQuestions(difficulty, 1, false);
-  }, [activeDifficulty, isLoadingQuestions, fetchQuestions]);
-
-  // Load more questions
-  const loadMore = useCallback(() => {
-    if (!hasMore || isLoadingQuestions) return;
-    const nextPage = currentPage + 1;
-    setCurrentPage(nextPage);
-    fetchQuestions(activeDifficulty, nextPage, true);
-  }, [hasMore, isLoadingQuestions, currentPage, activeDifficulty, fetchQuestions]);
+    // Update URL to first page (remove ?page or set to 1)
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("page");
+    const query = params.toString();
+    router.push(query ? `?${query}` : "?", { scroll: false });
+  }, [activeDifficulty, isLoadingQuestions, router, searchParams]);
 
   // Initial load
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      await Promise.all([fetchCounts(), fetchQuestions(activeDifficulty, 1)]);
+      await Promise.all([fetchCounts(), fetchQuestions(activeDifficulty, currentPage)]);
       setIsLoading(false);
     };
     load();
-  }, [fetchCounts, fetchQuestions, activeDifficulty]);
+  }, [fetchCounts, fetchQuestions, activeDifficulty, currentPage]);
+
+  // Sync current page with URL changes
+  useEffect(() => {
+    const pageFromUrl = searchParams.get("page");
+    const parsed = parseInt(pageFromUrl || "1", 10);
+    const page = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setCurrentPage(page);
+  }, [searchParams]);
 
   // Load progress when user changes
   useEffect(() => {
@@ -511,6 +507,44 @@ const Pagetracker = memo(() => {
     };
   }, [questions, progress]);
 
+  // Pagination helpers
+  const totalQuestionsForDifficulty = useMemo(
+    () => counts[activeDifficulty] || 0,
+    [counts, activeDifficulty]
+  );
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalQuestionsForDifficulty / QUESTIONS_PER_PAGE) || 1),
+    [totalQuestionsForDifficulty]
+  );
+
+  const goToPage = useCallback(
+    (page) => {
+      if (
+        page === currentPage ||
+        page < 1 ||
+        page > totalPages ||
+        isLoadingQuestions
+      ) {
+        return;
+      }
+
+      // Update local state
+      setCurrentPage(page);
+
+      // Update URL ?page=
+      const params = new URLSearchParams(searchParams.toString());
+      if (page === 1) {
+        // For first page, allow both / and ?page=1 – we choose to keep URL clean
+        params.delete("page");
+      } else {
+        params.set("page", String(page));
+      }
+      const query = params.toString();
+      router.push(query ? `?${query}` : "?", { scroll: false });
+    },
+    [currentPage, totalPages, isLoadingQuestions, router, searchParams]
+  );
+
   // Format topic name
   const topicName = useMemo(() => 
     pagetopic?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) || "",
@@ -554,7 +588,7 @@ const Pagetracker = memo(() => {
               {topicName}
             </h1>
             <p className="text-xs sm:text-sm text-neutral-600 mb-4">
-              {stats.total} questions available
+              {totalQuestionsForDifficulty} questions available
             </p>
             
             {/* Stats Row */}
@@ -649,16 +683,26 @@ const Pagetracker = memo(() => {
                         isAdmin={user?.email === ADMIN_EMAIL}
                       />
                     ))}
-                    
-                    {/* Load More */}
-                    {hasMore && (
-                      <div className="text-center py-4">
+                    {/* Pagination controls */}
+                    {totalPages > 1 && (
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 text-sm text-neutral-700">
                         <button
-                          onClick={loadMore}
-                          disabled={isLoadingQuestions}
-                          className="px-6 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 transition-colors"
+                          onClick={() => goToPage(currentPage - 1)}
+                          disabled={currentPage === 1 || isLoadingQuestions}
+                          className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
                         >
-                          {isLoadingQuestions ? "Loading..." : "Load More Questions"}
+                          Previous
+                        </button>
+                        <span className="text-xs sm:text-sm">
+                          Page <span className="font-semibold">{currentPage}</span> of{" "}
+                          <span className="font-semibold">{totalPages}</span>
+                        </span>
+                        <button
+                          onClick={() => goToPage(currentPage + 1)}
+                          disabled={currentPage === totalPages || isLoadingQuestions}
+                          className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
+                        >
+                          Next
                         </button>
                       </div>
                     )}

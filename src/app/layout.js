@@ -10,6 +10,7 @@ import AuthModalWrapper from "@/components/AuthModalWrapper";
 import ProfileModal from "@/components/ProfileModal";
 import AnalyticsInitializer from "@/components/AnalyticsInitializer";
 import FCMNotificationProvider from "@/components/FCMNotificationProvider";
+// import NotificationEnrollment from "@/components/NotificationEnrollment"; // Temporarily disabled
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -158,6 +159,7 @@ export default function RootLayout({ children }) {
               </div>
               <Footer />
               <MobileBottomMenu />
+              {/* <NotificationEnrollment /> Temporarily disabled */}
               <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
             </FCMNotificationProvider>
           </AuthProvider>

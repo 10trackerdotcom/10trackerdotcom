@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useArticleCategories } from "@/lib/hooks/useArticleCategories";
+// import { NotificationButton } from "@/components/NotificationEnrollment"; // Temporarily disabled
 
 const Navbar = () => {
   const pathname = usePathname();
@@ -118,6 +119,7 @@ const Navbar = () => {
 
               {/* Integrated Auth component */}
               <div className="flex items-center gap-3 pl-3 ml-3 border-l border-gray-200">
+                {/* <NotificationButton /> Temporarily disabled */}
                 {typeof window !== "undefined" && user ? (
                   <div className="relative">
                     <div className="flex items-center gap-3">
@@ -244,6 +246,12 @@ const Navbar = () => {
                 <BarChart2 size={18} className="mr-3 text-gray-600" />
                 My Progress
               </Link>
+
+              {/* Notification Button - Mobile - Temporarily disabled */}
+              {/* <NotificationButton 
+                showLabel={true}
+                className="flex items-center w-full px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
+              /> */}
 
               {/* Article Categories Button */}
               <button

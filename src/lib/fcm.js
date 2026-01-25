@@ -44,38 +44,88 @@ export const useFCMToken = () => {
   }, []);
 
   const requestPermission = async () => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined') {
+      console.error('requestPermission called on server side');
+      return false;
+    }
 
     if (!('Notification' in window)) {
       console.log('This browser does not support notifications');
+      alert('Your browser does not support notifications');
       return false;
     }
 
     try {
+      console.log('Requesting notification permission...');
       const permission = await Notification.requestPermission();
+      console.log('Permission result:', permission);
       setPermission(permission);
 
       if (permission === 'granted') {
+        console.log('Permission granted! Setting up FCM...');
+        
         // Register service worker
         if ('serviceWorker' in navigator) {
           try {
             const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-            console.log('Service Worker registered:', registration);
+            console.log('Service Worker registered successfully:', registration);
           } catch (error) {
             console.error('Service Worker registration failed:', error);
+            alert('Failed to register service worker. Please check console for details.');
+            return false;
           }
+        } else {
+          console.warn('Service Worker not supported');
         }
 
+        // Wait a bit for service worker to fully activate
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         // Get FCM token
-        const fcmToken = await getFCMToken();
-        setToken(fcmToken);
-        return true;
+        try {
+          console.log('Attempting to get FCM token...');
+          const fcmToken = await getFCMToken();
+          if (fcmToken) {
+            console.log('✅ FCM Token obtained successfully');
+            setToken(fcmToken);
+            return true;
+          } else {
+            console.error('❌ Failed to get FCM token - token is null');
+            const errorMsg = 'Permission granted but failed to get notification token.\n\n' +
+              'Possible causes:\n' +
+              '1. VAPID key not set or incorrect (check NEXT_PUBLIC_FCM_VAPID_KEY in .env.local)\n' +
+              '2. Service worker not properly registered\n' +
+              '3. Firebase project configuration mismatch\n\n' +
+              'Check browser console for detailed error messages.';
+            alert(errorMsg);
+            return false;
+          }
+        } catch (tokenError) {
+          console.error('❌ Error getting FCM token:', tokenError);
+          console.error('Full error:', tokenError);
+          
+          // Show detailed error message
+          const errorMsg = 'Permission granted but failed to get notification token.\n\n' +
+            'Error: ' + tokenError.message + '\n\n' +
+            'Common fixes:\n' +
+            '1. Check NEXT_PUBLIC_FCM_VAPID_KEY in .env.local\n' +
+            '2. Restart dev server after adding env variable\n' +
+            '3. Verify firebase-messaging-sw.js is accessible\n' +
+            '4. Check browser console for more details';
+          alert(errorMsg);
+          return false;
+        }
+      } else if (permission === 'denied') {
+        console.log('Notification permission denied by user');
+        alert('Notification permission was denied. You can enable it in your browser settings.');
+        return false;
       } else {
-        console.log('Notification permission denied');
+        console.log('Notification permission dismissed by user');
         return false;
       }
     } catch (error) {
       console.error('Error requesting notification permission:', error);
+      alert('An error occurred while requesting permission: ' + error.message);
       return false;
     }
   };
