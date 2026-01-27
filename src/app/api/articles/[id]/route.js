@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminAuth } from '@/middleware/adminAuth';
+import { postToSteinHQ } from '@/lib/steinhq';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -55,7 +56,14 @@ export async function PUT(request, { params }) {
 
     const { id } = await params;
     const body = await request.json();
-    const { title, content, excerpt, category, tags, featured_image_url, is_featured, status, social_media_embeds } = body;
+    const { title, content, excerpt, category, tags, featured_image_url, is_featured, status, social_media_embeds, selectedSubreddits } = body;
+
+    // Get current article to check if status is changing to published
+    const { data: currentArticle } = await supabase
+      .from('articles')
+      .select('status, slug, title')
+      .eq('id', id)
+      .single();
 
     const updateData = {};
     if (title) updateData.title = title;
@@ -76,6 +84,43 @@ export async function PUT(request, { params }) {
       .single();
 
     if (error) throw error;
+
+    // Post to SteinHQ if status changed to 'published' or was already published
+    const isNowPublished = status === 'published' || (currentArticle?.status === 'published' && !status);
+    const wasDraft = currentArticle?.status === 'draft' || currentArticle?.status !== 'published';
+    const isPublishingNow = status === 'published' && wasDraft;
+    
+    if (isNowPublished && data && data.slug) {
+      const articleTitle = title || data.title || currentArticle?.title;
+      const articleLink = `/articles/${data.slug}`;
+      
+      // Only post to SteinHQ if publishing now (not if already published)
+      // If subreddits are selected, post to each one
+      if (isPublishingNow && selectedSubreddits && Array.isArray(selectedSubreddits) && selectedSubreddits.length > 0) {
+        selectedSubreddits.forEach((subreddit) => {
+          postToSteinHQ(
+            articleTitle,
+            articleLink,
+            subreddit.name,
+            subreddit.flairID,
+            data.featured_image_url || null
+          ).catch(err => {
+            console.error(`Failed to post to SteinHQ for ${subreddit.name} (non-blocking):`, err);
+          });
+        });
+      } else if (isPublishingNow) {
+        // If no subreddits selected, post with null values (original behavior)
+        postToSteinHQ(
+          articleTitle,
+          articleLink,
+          null,
+          null,
+          data.featured_image_url || null
+        ).catch(err => {
+          console.error('Failed to post to SteinHQ (non-blocking):', err);
+        });
+      }
+    }
 
     return Response.json({
       success: true,

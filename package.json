@@ -64,6 +64,7 @@
     "react-twitter-embed": "^4.0.4",
     "recharts": "^2.15.2",
     "sanitize-html": "^2.15.0",
+    "twitter-api-v2": "^1.29.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

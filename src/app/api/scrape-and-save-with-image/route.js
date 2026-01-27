@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { postToSteinHQ } from '@/lib/steinhq';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -644,6 +645,12 @@ export async function POST(request) {
           { status: 500 }
         );
       }
+
+      // Post to SteinHQ after successful article creation
+      const articleLink = `/articles/${savedArticle.slug}`;
+      postToSteinHQ(savedArticle.title, articleLink).catch(err => {
+        console.error('Failed to post to SteinHQ (non-blocking):', err);
+      });
 
       return NextResponse.json({
         success: true,

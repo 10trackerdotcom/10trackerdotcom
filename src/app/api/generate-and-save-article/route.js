@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createClient } from '@supabase/supabase-js';
+import { postToSteinHQ } from '@/lib/steinhq';
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -387,6 +388,18 @@ ${articleJson.article}
           { status: 500 }
         );
       }
+
+      // Post to SteinHQ after successful article creation
+      const articleLink = `/articles/${savedArticle.slug}`;
+      postToSteinHQ(
+        savedArticle.title,
+        articleLink,
+        null,
+        null,
+        savedArticle.featured_image_url || null
+      ).catch(err => {
+        console.error('Failed to post to SteinHQ (non-blocking):', err);
+      });
 
       return NextResponse.json({
         success: true,

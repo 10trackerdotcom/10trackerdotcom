@@ -3,13 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
-  Save, 
-  X, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  Save,
+  X,
   Search,
   Filter,
   Calendar,
@@ -21,13 +21,26 @@ import {
   Copy,
   Check,
   Globe,
-  Briefcase
+  Briefcase,
+  Twitter,
+  Clock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useUser } from '@clerk/nextjs';
 import RichTextEditor from '@/components/RichTextEditor';
 import { useArticleCategories, clearCategoriesCache } from '@/lib/hooks/useArticleCategories';
 import EmbedManager from '@/components/EmbedManager';
+import { SUBREDDITS } from '@/lib/subreddits';
+
+const SARKARI_CATEGORIES = [
+  { value: '', label: 'All Types' },
+  { value: 'results', label: 'Results' },
+  { value: 'admit_cards', label: 'Admit Cards' },
+  { value: 'latest_jobs', label: 'Latest Jobs' },
+  { value: 'answer_key', label: 'Answer Key' },
+  { value: 'documents', label: 'Documents' },
+  { value: 'admission', label: 'Admission' },
+];
 
 const AdminArticlesPage = () => {
   const { user, isLoaded } = useUser();
@@ -51,8 +64,18 @@ const AdminArticlesPage = () => {
     tags: '',
     featured_image_url: '',
     is_featured: false,
-    social_media_embeds: []
+    social_media_embeds: [],
+    status: 'draft'
   });
+  const [selectedSubreddits, setSelectedSubreddits] = useState([]);
+  
+  // Sarkari result links state
+  const [sarkariLinks, setSarkariLinks] = useState([]);
+  const [sarkariLoading, setSarkariLoading] = useState(false);
+  const [sarkariError, setSarkariError] = useState(null);
+  const [sarkariPage, setSarkariPage] = useState(1);
+  const [sarkariTotalPages, setSarkariTotalPages] = useState(1);
+  const [sarkariCategory, setSarkariCategory] = useState('');
   
   // Article generation state
   const [headline, setHeadline] = useState('');
@@ -75,6 +98,26 @@ const AdminArticlesPage = () => {
   const [techJobError, setTechJobError] = useState(null);
   const [techJobCopied, setTechJobCopied] = useState({});
 
+  // Twitter read state
+  const [twitterUsers, setTwitterUsers] = useState([]);
+  const [twitterLoading, setTwitterLoading] = useState(false);
+  const [twitterError, setTwitterError] = useState(null);
+  const [twitterUsernamesInput, setTwitterUsernamesInput] = useState('Indianinfoguide');
+  const [twitterLimit, setTwitterLimit] = useState(10);
+
+  // Twitter post / scheduling state
+  const [tweetForm, setTweetForm] = useState({
+    title: '',
+    link: '',
+    hashtags: '',
+    imageUrl: '',
+    scheduledAt: ''
+  });
+  const [tweetPosting, setTweetPosting] = useState(false);
+  const [tweetPostError, setTweetPostError] = useState(null);
+  const [tweetPostSuccess, setTweetPostSuccess] = useState(null);
+  const [scheduledTweets, setScheduledTweets] = useState([]);
+
   // Check if user is admin
   const isAdmin = user?.emailAddresses?.[0]?.emailAddress === 'jain10gunjan@gmail.com';
 
@@ -82,6 +125,19 @@ const AdminArticlesPage = () => {
   useEffect(() => {
     fetchArticles();
   }, []);
+
+  // Fetch Sarkari result links (latest 20 by default)
+  useEffect(() => {
+    fetchSarkariLinks(sarkariPage, sarkariCategory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sarkariPage, sarkariCategory]);
+
+  // Optional: preload tweets for default username
+  // useEffect(() => {
+  //   // Fire once on mount to show latest tweets for default handle
+  //   handleFetchTweets();
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, []);
 
   const fetchArticles = async () => {
     try {
@@ -96,6 +152,221 @@ const AdminArticlesPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchSarkariLinks = async (page = 1, category = '') => {
+    try {
+      setSarkariLoading(true);
+      setSarkariError(null);
+
+      const params = new URLSearchParams({
+        mode: 'list',
+        page: String(page),
+        limit: '20',
+      });
+
+      if (category) {
+        params.append('category', category);
+      }
+
+      const response = await fetch(`/api/sarkari-result-links?${params.toString()}`);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to fetch Sarkari links');
+      }
+
+      setSarkariLinks(result.data || []);
+      setSarkariTotalPages(result.pagination?.totalPages || 1);
+    } catch (error) {
+      console.error('Error fetching Sarkari links:', error);
+      setSarkariError(error.message || 'Failed to fetch Sarkari links');
+    } finally {
+      setSarkariLoading(false);
+    }
+  };
+
+  // Fetch tweets from /api/twitter-read
+  // const handleFetchTweets = async () => {
+  //   const raw = twitterUsernamesInput.trim();
+  //   if (!raw) {
+  //     setTwitterUsers([]);
+  //     return;
+  //   }
+
+  //   const usernames = raw
+  //     .split(',')
+  //     .map((u) => u.trim())
+  //     .filter(Boolean);
+
+  //   if (usernames.length === 0) {
+  //     setTwitterUsers([]);
+  //     return;
+  //   }
+
+  //   try {
+  //     setTwitterLoading(true);
+  //     setTwitterError(null);
+
+  //     const response = await fetch('/api/twitter-read', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json'
+  //       },
+  //       body: JSON.stringify({
+  //         usernames,
+  //         limit: twitterLimit
+  //       })
+  //     });
+
+  //     const data = await response.json();
+
+  //     if (!response.ok) {
+  //       throw new Error(data.error || 'Failed to fetch tweets');
+  //     }
+
+  //     if (!data || !Array.isArray(data.users)) {
+  //       throw new Error('Unexpected response from twitter-read API');
+  //     }
+
+  //     setTwitterUsers(data.users);
+  //   } catch (error) {
+  //     console.error('Error fetching tweets:', error);
+  //     setTwitterError(error.message || 'Failed to fetch tweets');
+  //   } finally {
+  //     setTwitterLoading(false);
+  //   }
+  // };
+
+  const handleTweetFormChange = (field, value) => {
+    setTweetForm((prev) => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const postTweetNow = async (payload) => {
+    try {
+      setTweetPosting(true);
+      setTweetPostError(null);
+      setTweetPostSuccess(null);
+
+      const response = await fetch('/api/twitterpost', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to post tweet');
+      }
+
+      setTweetPostSuccess('Tweet posted successfully');
+      toast.success('Tweet posted successfully');
+      return data;
+    } catch (error) {
+      console.error('Error posting tweet:', error);
+      setTweetPostError(error.message || 'Failed to post tweet');
+      toast.error(error.message || 'Failed to post tweet');
+      throw error;
+    } finally {
+      setTweetPosting(false);
+    }
+  };
+
+  const handlePostTweetNow = async () => {
+    if (!tweetForm.title.trim()) {
+      setTweetPostError('Tweet text (title) is required');
+      return;
+    }
+
+    const payload = {
+      title: tweetForm.title.trim(),
+      link: tweetForm.link.trim() || undefined,
+      hashtags: tweetForm.hashtags.trim() || undefined,
+      imageUrl: tweetForm.imageUrl.trim() || undefined
+    };
+
+    await postTweetNow(payload);
+  };
+
+  // Very lightweight client-side scheduling only while the admin page is open
+  const handleScheduleTweet = () => {
+    if (!tweetForm.title.trim()) {
+      setTweetPostError('Tweet text (title) is required');
+      return;
+    }
+
+    if (!tweetForm.scheduledAt) {
+      setTweetPostError('Please select a scheduled date & time');
+      return;
+    }
+
+    const scheduledTime = new Date(tweetForm.scheduledAt);
+    if (Number.isNaN(scheduledTime.getTime())) {
+      setTweetPostError('Invalid scheduled date & time');
+      return;
+    }
+
+    const now = new Date();
+    if (scheduledTime <= now) {
+      setTweetPostError('Scheduled time must be in the future');
+      return;
+    }
+
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      title: tweetForm.title.trim(),
+      link: tweetForm.link.trim() || undefined,
+      hashtags: tweetForm.hashtags.trim() || undefined,
+      imageUrl: tweetForm.imageUrl.trim() || undefined
+    };
+
+    // Schedule with setTimeout – works only while this page is open
+    const delay = scheduledTime.getTime() - now.getTime();
+    const timeoutId = setTimeout(async () => {
+      try {
+        await postTweetNow(payload);
+        setScheduledTweets((prev) =>
+          prev.map((item) =>
+            item.id === id ? { ...item, status: 'sent', sentAt: new Date().toISOString() } : item
+          )
+        );
+      } catch (e) {
+        setScheduledTweets((prev) =>
+          prev.map((item) =>
+            item.id === id ? { ...item, status: 'failed', error: e.message } : item
+          )
+        );
+      }
+    }, delay);
+
+    setScheduledTweets((prev) => [
+      ...prev,
+      {
+        id,
+        payload,
+        scheduledAt: scheduledTime.toISOString(),
+        status: 'scheduled',
+        timeoutId
+      }
+    ]);
+
+    toast.success('Tweet scheduled (browser must stay open)');
+  };
+
+  const cancelScheduledTweet = (id) => {
+    setScheduledTweets((prev) => {
+      const found = prev.find((t) => t.id === id);
+      if (found && found.timeoutId) {
+        clearTimeout(found.timeoutId);
+      }
+      return prev.filter((t) => t.id !== id);
+    });
   };
 
   const handleCreateArticle = async (e) => {
@@ -115,7 +386,8 @@ const AdminArticlesPage = () => {
         body: JSON.stringify({
           ...formData,
           tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-          social_media_embeds: formData.social_media_embeds || []
+          social_media_embeds: formData.social_media_embeds || [],
+          selectedSubreddits: selectedSubreddits
         })
       });
 
@@ -151,7 +423,8 @@ const AdminArticlesPage = () => {
         body: JSON.stringify({
           ...formData,
           tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-          social_media_embeds: formData.social_media_embeds || []
+          social_media_embeds: formData.social_media_embeds || [],
+          selectedSubreddits: selectedSubreddits
         })
       });
 
@@ -206,8 +479,10 @@ const AdminArticlesPage = () => {
       tags: '',
       featured_image_url: '',
       is_featured: false,
-      social_media_embeds: []
+      social_media_embeds: [],
+      status: 'draft'
     });
+    setSelectedSubreddits([]);
   };
 
   const resetGenerateForm = () => {
@@ -458,8 +733,10 @@ const AdminArticlesPage = () => {
       tags: article.tags?.join(', ') || '',
       featured_image_url: article.featured_image_url || '',
       is_featured: article.is_featured || false,
-      social_media_embeds: embeds
+      social_media_embeds: embeds,
+      status: article.status || 'draft'
     });
+    setSelectedSubreddits([]);
     
     console.log('📝 Loading article for edit:', {
       id: article.id,
@@ -729,6 +1006,584 @@ const AdminArticlesPage = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Twitter – Read & Post */}
+        <div className="bg-white rounded-lg shadow-sm border border-neutral-200 p-6 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+            {/* Left: Read tweets */}
+            {/* <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Twitter className="w-5 h-5 text-sky-500" />
+                  <div>
+                    <h2 className="text-lg font-semibold text-neutral-900">Twitter – Latest Tweets</h2>
+                    <p className="text-xs text-neutral-500">
+                      Fetch tweets for handles and quickly copy text / media URLs. New tweets are highlighted.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleFetchTweets}
+                  disabled={twitterLoading}
+                  className="px-3 py-1.5 rounded-lg bg-neutral-800 text-white text-xs hover:bg-neutral-700 flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  {twitterLoading ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Refresh
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="w-3 h-3" />
+                      Refresh
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-3 mb-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-neutral-700 mb-1">
+                    Twitter usernames (comma separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={twitterUsernamesInput}
+                    onChange={(e) => setTwitterUsernamesInput(e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                    placeholder="Indianinfoguide, anotherhandle"
+                  />
+                </div>
+                <div className="w-full md:w-28">
+                  <label className="block text-xs font-medium text-neutral-700 mb-1">
+                    Tweets / user
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={twitterLimit}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (Number.isNaN(val)) {
+                        setTwitterLimit(10);
+                      } else {
+                        setTwitterLimit(Math.min(Math.max(val, 1), 100));
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                  />
+                </div>
+              </div>
+
+              {twitterError && (
+                <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                  {twitterError}
+                </div>
+              )}
+
+              <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                {twitterLoading && twitterUsers.length === 0 && (
+                  <div className="py-8 text-center text-neutral-500 text-sm flex flex-col items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Loading tweets...</span>
+                  </div>
+                )}
+
+                {!twitterLoading && twitterUsers.length === 0 && (
+                  <div className="py-8 text-center text-neutral-400 text-sm">
+                    No tweets loaded yet. Click &quot;Refresh&quot; to fetch tweets.
+                  </div>
+                )}
+
+                {twitterUsers.map((user) => (
+                  <div
+                    key={user.userId}
+                    className="border border-neutral-200 rounded-lg p-3 bg-neutral-50"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {user.profileImageUrl && (
+                          <img
+                            src={user.profileImageUrl}
+                            alt={user.username || ''}
+                            className="w-8 h-8 rounded-full border border-neutral-200"
+                          />
+                        )}
+                        <div>
+                          <div className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
+                            {user.name || user.username || 'Unknown'}
+                            {user.newTweetCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700">
+                                {user.newTweetCount} new
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-neutral-500">
+                            @{user.username} • {user.tweetCount} tweets
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 mt-2">
+                      {user.tweets.map((tweet) => {
+                        const hasMedia = Array.isArray(tweet.media) && tweet.media.length > 0;
+                        const imageMedia = (tweet.media || []).filter(
+                          (m) => m.type === 'photo' && m.url
+                        );
+                        const videoMedia = (tweet.media || []).filter(
+                          (m) => m.type === 'video' && m.url
+                        );
+
+                        return (
+                          <div
+                            key={tweet.id}
+                            className="bg-white border border-neutral-200 rounded-md p-2 text-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-neutral-800 whitespace-pre-wrap flex-1">
+                                {tweet.text}
+                              </p>
+                              <div className="flex flex-col items-end gap-1 ml-2">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    tweet.isNew
+                                      ? 'bg-emerald-100 text-emerald-700'
+                                      : 'bg-neutral-100 text-neutral-600'
+                                  }`}
+                                >
+                                  {tweet.isNew ? 'New' : 'Seen'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(tweet.text || '');
+                                    toast.success('Tweet text copied');
+                                  }}
+                                  className="inline-flex items-center gap-1 text-[10px] text-neutral-500 hover:text-neutral-800"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                  Copy text
+                                </button>
+                              </div>
+                            </div>
+
+                            {hasMedia && (
+                              <div className="mt-2 space-y-1">
+                                <div className="flex flex-wrap gap-1">
+                                  {imageMedia.length > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-100 text-blue-700 font-medium flex items-center gap-1">
+                                      <ImageIcon className="w-3 h-3" />
+                                      {imageMedia.length} image
+                                      {imageMedia.length > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                  {videoMedia.length > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 font-medium flex items-center gap-1">
+                                      {/* Simple video badge without custom icon */}
+                                      {/* <span className="inline-block w-2 h-2 rounded-full bg-purple-500" /> */}
+                                      {/* {videoMedia.length} video */}
+                                      {/* {videoMedia.length > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {imageMedia.map((m, idx) => (
+                                    <button
+                                      key={`${m.url}-${idx}`}
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(m.url);
+                                        toast.success('Image URL copied');
+                                      }}
+                                      title={m.url}
+                                      className="group border border-neutral-200 rounded-md overflow-hidden bg-neutral-100 hover:border-neutral-400"
+                                    >
+                                      <img
+                                        src={m.url}
+                                        alt="Tweet media"
+                                        className="w-16 h-16 object-cover block"
+                                      />
+                                    </button>
+                                  ))}
+                                  {videoMedia.map((m, idx) => (
+                                    <button
+                                      key={`${m.url}-${idx}`}
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(m.url);
+                                        toast.success('Video thumbnail URL copied');
+                                      }}
+                                      title={m.url}
+                                      className="group border border-purple-200 rounded-md px-2 py-1 text-[10px] text-purple-700 bg-purple-50 hover:bg-purple-100 flex items-center gap-1"
+                                    >
+                                      <span className="inline-block w-2 h-2 rounded-full bg-purple-500" />
+                                      Copy video thumb
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            // </div> */}
+
+            {/* Right: Compose / schedule tweet */}
+            <div className="w-full lg:w-80 border border-neutral-200 rounded-lg p-4 bg-neutral-50">
+              <div className="flex items-center gap-2 mb-3">
+                <Twitter className="w-4 h-4 text-sky-500" />
+                <h3 className="text-sm font-semibold text-neutral-900">
+                  Compose / Schedule Tweet
+                </h3>
+              </div>
+
+              {tweetPostError && (
+                <div className="mb-2 p-2 rounded-md bg-red-50 border border-red-200 text-[11px] text-red-700">
+                  {tweetPostError}
+                </div>
+              )}
+              {tweetPostSuccess && (
+                <div className="mb-2 p-2 rounded-md bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-700">
+                  {tweetPostSuccess}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-neutral-700 mb-1">
+                    Tweet text (title) *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={tweetForm.title}
+                    onChange={(e) => handleTweetFormChange('title', e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800 resize-none"
+                    placeholder="Write tweet text here..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-700 mb-1">
+                    Link (optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={tweetForm.link}
+                    onChange={(e) => handleTweetFormChange('link', e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                    placeholder="https://10tracker.in/articles/..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-700 mb-1">
+                    Hashtags (space separated, optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={tweetForm.hashtags}
+                    onChange={(e) => handleTweetFormChange('hashtags', e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                    placeholder="#India #News #Infra"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-700 mb-1">
+                    Image URL (optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={tweetForm.imageUrl}
+                    onChange={(e) => handleTweetFormChange('imageUrl', e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                    placeholder="Paste media URL from tweets above"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-neutral-700 mb-1 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    Schedule (optional, browser must stay open)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={tweetForm.scheduledAt}
+                    onChange={(e) => handleTweetFormChange('scheduledAt', e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                  />
+                  <p className="mt-1 text-[10px] text-neutral-500">
+                    Scheduling runs only while this admin page is open. For guaranteed scheduling,
+                    move this logic to a server/cron later.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handlePostTweetNow}
+                    disabled={tweetPosting || !tweetForm.title.trim()}
+                    className="w-full px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-semibold hover:bg-sky-700 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    {tweetPosting ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Posting...
+                      </>
+                    ) : (
+                      <>
+                        <Twitter className="w-3 h-3" />
+                        Post now
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleScheduleTweet}
+                    disabled={tweetPosting || !tweetForm.title.trim() || !tweetForm.scheduledAt}
+                    className="w-full px-3 py-2 rounded-lg border border-neutral-300 text-xs font-semibold text-neutral-800 hover:bg-neutral-100 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    <Clock className="w-3 h-3" />
+                    Schedule
+                  </button>
+                </div>
+
+                {scheduledTweets.length > 0 && (
+                  <div className="mt-3 border-t border-neutral-200 pt-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-semibold text-neutral-700">
+                        Scheduled tweets ({scheduledTweets.length})
+                      </span>
+                    </div>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      {scheduledTweets.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between gap-2 text-[10px] py-1"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate text-neutral-800">
+                              {item.payload.title}
+                            </div>
+                            <div className="text-neutral-500">
+                              {new Date(item.scheduledAt).toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[9px] ${
+                                item.status === 'scheduled'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : item.status === 'sent'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-red-50 text-red-700 border border-red-200'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                            {item.status === 'scheduled' && (
+                              <button
+                                type="button"
+                                onClick={() => cancelScheduledTweet(item.id)}
+                                className="text-[10px] text-neutral-500 hover:text-neutral-900"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sarkari Result New Links */}
+        <div className="bg-white rounded-lg shadow-sm border border-neutral-200 p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-900">
+                Sarkari Result – New Links
+              </h2>
+              <p className="text-sm text-neutral-600">
+                See the latest scraped links from Sarkari Result. Copy title/URL and open the source quickly.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 items-center">
+              <select
+                value={sarkariCategory}
+                onChange={(e) => {
+                  setSarkariPage(1);
+                  setSarkariCategory(e.target.value);
+                }}
+                className="px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800 text-sm"
+              >
+                {SARKARI_CATEGORIES.map((cat) => (
+                  <option key={cat.value || 'all'} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => fetchSarkariLinks(sarkariPage, sarkariCategory)}
+                className="px-4 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 text-sm flex items-center gap-2"
+              >
+                {sarkariLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Refreshing
+                  </>
+                ) : (
+                  'Refresh'
+                )}
+              </button>
+            </div>
+          </div>
+
+          {sarkariError && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+              {sarkariError}
+            </div>
+          )}
+
+          <div className="overflow-x-auto -mx-3 md:mx-0">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead className="bg-neutral-50 border-b border-neutral-200">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Title
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    URL
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-200">
+                {sarkariLoading && sarkariLinks.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-neutral-500">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading latest Sarkari links...
+                      </div>
+                    </td>
+                  </tr>
+                ) : sarkariLinks.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-neutral-500">
+                      No links found. Try refreshing or running the Sarkari scraper.
+                    </td>
+                  </tr>
+                ) : (
+                  sarkariLinks.map((link) => (
+                    <tr key={link.id} className="hover:bg-neutral-50">
+                      <td className="px-4 py-3">
+                        <span className="inline-flex px-2 py-1 rounded-full text-[11px] font-medium bg-blue-100 text-blue-800">
+                          {SARKARI_CATEGORIES.find((c) => c.value === link.category)?.label || link.category}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 max-w-xs">
+                        <div className="text-sm font-medium text-neutral-900 line-clamp-2">
+                          {link.title}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 max-w-xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(link.url);
+                            toast.success('URL copied');
+                          }}
+                          className="group flex items-center gap-2 text-xs text-blue-600 hover:text-blue-800 break-all text-left"
+                          title={link.url}
+                        >
+                          <span className="truncate max-w-[180px] md:max-w-[260px] group-hover:underline">
+                            {link.url}
+                          </span>
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => window.open(link.url, '_blank')}
+                            className="p-2 text-neutral-400 hover:text-neutral-700"
+                            title="Open source link"
+                          >
+                            <Globe className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(link.title);
+                              toast.success('Title copied');
+                            }}
+                            className="p-2 text-neutral-400 hover:text-neutral-700"
+                            title="Copy title"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="mt-4 flex items-center justify-between gap-3 text-xs md:text-sm flex-wrap">
+            <p className="text-neutral-500">
+              Showing page {sarkariPage} of {sarkariTotalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={sarkariPage <= 1 || sarkariLoading}
+                onClick={() => setSarkariPage((p) => Math.max(p - 1, 1))}
+                className={`px-3 py-1.5 rounded-lg border text-xs md:text-sm ${
+                  sarkariPage <= 1 || sarkariLoading
+                    ? 'border-neutral-200 text-neutral-300 cursor-not-allowed'
+                    : 'border-neutral-300 text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={sarkariPage >= sarkariTotalPages || sarkariLoading}
+                onClick={() =>
+                  setSarkariPage((p) =>
+                    sarkariTotalPages ? Math.min(p + 1, sarkariTotalPages) : p + 1
+                  )
+                }
+                className={`px-3 py-1.5 rounded-lg border text-xs md:text-sm ${
+                  sarkariPage >= sarkariTotalPages || sarkariLoading
+                    ? 'border-neutral-200 text-neutral-300 cursor-not-allowed'
+                    : 'border-neutral-300 text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1652,6 +2507,75 @@ const AdminArticlesPage = () => {
                     Mark as Featured Article
                   </label>
                 </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Status *
+                  </label>
+                  <select
+                    required
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                  </select>
+                </div>
+
+                {/* Subreddit Selection - Only show when publishing */}
+                {formData.status === 'published' && (
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-2">
+                      Select Subreddits to Post (Optional)
+                    </label>
+                    <div className="border border-neutral-300 rounded-lg p-4 max-h-64 overflow-y-auto">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {SUBREDDITS.map((subreddit) => (
+                          <div key={subreddit.name} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              id={subreddit.name}
+                              checked={selectedSubreddits.some(s => s.name === subreddit.name)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSubreddits([...selectedSubreddits, subreddit]);
+                                } else {
+                                  setSelectedSubreddits(selectedSubreddits.filter(s => s.name !== subreddit.name));
+                                }
+                              }}
+                              className="h-4 w-4 text-neutral-800 focus:ring-neutral-800 border-neutral-300 rounded"
+                            />
+                            <label htmlFor={subreddit.name} className="ml-2 text-sm text-neutral-700">
+                              {subreddit.name}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      {selectedSubreddits.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-neutral-200">
+                          <p className="text-sm text-neutral-600 mb-2">
+                            Selected: {selectedSubreddits.length} subreddit{selectedSubreddits.length !== 1 ? 's' : ''}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedSubreddits.map((subreddit) => (
+                              <span
+                                key={subreddit.name}
+                                className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                              >
+                                {subreddit.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-neutral-500">
+                      Select one or more subreddits to post this article to. The article will be added to the Google Sheet for each selected subreddit.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-neutral-200">

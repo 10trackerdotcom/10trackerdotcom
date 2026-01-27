@@ -60,17 +60,24 @@ export async function generateMetadata({ params }) {
     return names[categorySlug] || categorySlug;
   };
 
+    // Prefer configured site URL, fall back to the primary live domain
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com';
     const fullUrl = `${siteUrl}/articles/${article.slug}`;
+    // Build an absolute, share-safe image URL for Open Graph / Twitter
+    const fallbackOgImage = `${siteUrl}/10tracker.png`;
     const fullImage = article.featured_image_url 
       ? (article.featured_image_url.startsWith('http') 
           ? article.featured_image_url 
           : `${siteUrl}${article.featured_image_url}`)
-      : `${siteUrl}/og-image.jpg`;
+      : fallbackOgImage;
+
+    const description =
+      article.excerpt ||
+      (article.content ? article.content.substring(0, 160) : '');
 
     return {
       title: `${article.title} | 10tracker`,
-      description: article.excerpt || article.content.substring(0, 160),
+      description,
       keywords: [
         'exam preparation',
         'CAT exam',
@@ -98,7 +105,7 @@ export async function generateMetadata({ params }) {
         locale: 'en_US',
         url: fullUrl,
         title: article.title,
-        description: article.excerpt || article.content.substring(0, 160),
+        description,
         siteName: '10tracker',
         images: [
           {
@@ -116,10 +123,16 @@ export async function generateMetadata({ params }) {
       },
       twitter: {
         card: 'summary_large_image',
-          title: article.title,
-        description: article.excerpt || article.content.substring(0, 160),
-        images: [fullImage],
-        creator: '@10tracker',
+        site: '@10Tracker',
+        creator: '@10Tracker',
+        title: article.title,
+        description,
+        images: [
+          {
+            url: fullImage,
+            alt: article.title,
+          },
+        ],
       },
       robots: {
         index: true,

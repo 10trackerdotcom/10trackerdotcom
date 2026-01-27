@@ -19,8 +19,58 @@ const categoryMap = {
   'admission': 'admission'
 };
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const mode = searchParams.get('mode') || 'scrape';
+
+    // Paginated listing mode for admin UI
+    if (mode === 'list') {
+      const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
+      const limit = Math.min(
+        Math.max(parseInt(searchParams.get('limit') || '20', 10), 1),
+        50
+      );
+      const categoryFilter = searchParams.get('category') || null;
+
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+
+      let query = supabase
+        .from('sarkari_result_links')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (categoryFilter) {
+        query = query.eq('category', categoryFilter);
+      }
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        console.error('Error fetching paginated Sarkari links:', error);
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message || 'Failed to fetch Sarkari links',
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: count ? Math.ceil(count / limit) : 1,
+        },
+      });
+    }
+
     const url = 'https://sarkariresult.com.cm/';
     
     // Fetch the HTML content

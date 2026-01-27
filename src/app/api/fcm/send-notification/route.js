@@ -3,13 +3,16 @@
 // Uses service account for authentication (recommended for production)
 
 import { NextResponse } from 'next/server';
-import path from 'path';
-import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // Initialize Firebase Admin SDK
 let admin = null;
 let messaging = null;
-let initError = null;
 
 try {
   // Dynamic import to avoid issues if firebase-admin is not installed
@@ -17,68 +20,31 @@ try {
   
   // Initialize only if not already initialized
   if (!firebaseAdmin.apps.length) {
-    let serviceAccount;
-    
-    // Try to get service account from environment variable first
-    if (process.env.FCM_SERVICE_ACCOUNT) {
-      try {
-        serviceAccount = JSON.parse(process.env.FCM_SERVICE_ACCOUNT);
-        console.log('✅ Using FCM service account from environment variable');
-      } catch (parseError) {
-        console.error('❌ Failed to parse FCM_SERVICE_ACCOUNT:', parseError);
-        throw new Error('Invalid FCM_SERVICE_ACCOUNT JSON in environment variable');
-      }
-    } else {
-      // Try to load from file
-      const serviceAccountPath = path.join(process.cwd(), 'service_account.json');
-      
-      if (fs.existsSync(serviceAccountPath)) {
-        try {
-          const serviceAccountContent = fs.readFileSync(serviceAccountPath, 'utf8');
-          serviceAccount = JSON.parse(serviceAccountContent);
-          console.log('✅ Loaded FCM service account from file:', serviceAccountPath);
-        } catch (fileError) {
-          console.error('❌ Failed to read service_account.json:', fileError);
-          throw new Error('Failed to read service_account.json file');
-        }
-      } else {
-        console.error('❌ service_account.json not found at:', serviceAccountPath);
-        throw new Error('Service account file not found. Please set FCM_SERVICE_ACCOUNT env var or add service_account.json to project root');
-      }
-    }
+    // Get service account from environment variable or file
+    const serviceAccount = process.env.FCM_SERVICE_ACCOUNT 
+      ? JSON.parse(process.env.FCM_SERVICE_ACCOUNT)
+      : require('../../../../service_account.json');
     
     firebaseAdmin.initializeApp({
       credential: firebaseAdmin.credential.cert(serviceAccount),
     });
-    
-    console.log('✅ Firebase Admin SDK initialized successfully');
   }
   
   admin = firebaseAdmin;
   messaging = admin.messaging();
 } catch (error) {
-  console.error('❌ Firebase Admin SDK initialization error:', error);
-  initError = error;
-  if (error.message?.includes('Cannot find module')) {
-    console.error('💡 Make sure firebase-admin is installed: npm install firebase-admin');
-  }
+  console.error('Firebase Admin SDK initialization error:', error);
+  console.error('Make sure firebase-admin is installed: npm install firebase-admin');
 }
 
 export async function POST(request) {
   try {
     // Check if Firebase Admin is initialized
     if (!admin || !messaging) {
-      const errorMessage = initError 
-        ? `Firebase Admin SDK initialization failed: ${initError.message}`
-        : 'Firebase Admin SDK is not initialized. Please install firebase-admin and configure service account.';
-      
       return NextResponse.json(
         { 
-          error: errorMessage,
-          hint: initError?.message?.includes('Cannot find module') 
-            ? 'Run: npm install firebase-admin'
-            : 'Check service_account.json or set FCM_SERVICE_ACCOUNT environment variable',
-          details: initError?.message
+          error: 'Firebase Admin SDK is not initialized. Please install firebase-admin and configure service account.',
+          hint: 'Run: npm install firebase-admin'
         },
         { status: 500 }
       );
@@ -91,16 +57,10 @@ export async function POST(request) {
       image,
       data,
       topic, // Optional: send to topic instead of token
+      category, // Optional: send to all users in a category (e.g., 'articles', 'exams')
+      sendToAll, // Optional: send to all active users
+      batchSize = 100, // Batch size for sending (default 100)
     } = await request.json();
-
-    console.log('📤 Received notification request:', {
-      hasToken: !!token,
-      hasTopic: !!topic,
-      title,
-      bodyLength: body?.length,
-      hasImage: !!image,
-      hasData: !!data
-    });
 
     // Validate required fields
     if (!title || !body) {
@@ -118,7 +78,46 @@ export async function POST(request) {
     };
 
     let result;
+    let tokensToSend = [];
 
+    // If category or sendToAll is specified, fetch tokens from database
+    if (category || sendToAll) {
+      console.log(`📊 Fetching tokens from database: ${sendToAll ? 'all users' : `category: ${category}`}`);
+      
+      let query = supabase
+        .from('fcm_tokens')
+        .select('token, user_id, enrollment_category, enrollment_source')
+        .eq('is_active', true);
+      
+      if (category && !sendToAll) {
+        query = query.eq('enrollment_category', category);
+      }
+      
+      const { data: tokensData, error: tokensError } = await query;
+      
+      if (tokensError) {
+        console.error('❌ Error fetching tokens from database:', tokensError);
+        return NextResponse.json(
+          { error: 'Failed to fetch tokens from database', details: tokensError.message },
+          { status: 500 }
+        );
+      }
+      
+      if (!tokensData || tokensData.length === 0) {
+        return NextResponse.json(
+          { error: `No active tokens found${category ? ` for category: ${category}` : ''}` },
+          { status: 404 }
+        );
+      }
+      
+      tokensToSend = tokensData.map(t => t.token);
+      console.log(`✅ Found ${tokensToSend.length} active tokens`);
+    } else if (token) {
+      // Use provided token(s)
+      tokensToSend = Array.isArray(token) ? token : [token];
+    }
+
+    // Send notifications
     if (topic) {
       // Send to topic
       const message = {
@@ -127,79 +126,123 @@ export async function POST(request) {
         topic: topic,
       };
       
-      console.log('📨 Sending to topic:', topic);
-      console.log('📦 Message payload:', JSON.stringify(message, null, 2));
-      
       result = await messaging.send(message);
       console.log('✅ Topic message sent, message ID:', result);
-    } else if (token) {
-      // Send to specific token(s)
-      const tokens = Array.isArray(token) ? token : [token];
+    } else if (tokensToSend.length > 0) {
+      // Send to tokens (from DB or provided)
+      const totalTokens = tokensToSend.length;
+      const batches = [];
       
-      console.log(`📨 Sending to ${tokens.length} token(s)`);
-      
-      if (tokens.length === 1) {
-        // Single token
-        const message = {
-          notification: notificationPayload,
-          data: data || {},
-          token: tokens[0],
-        };
-        
-        console.log('📦 Single token message:', {
-          token: tokens[0].substring(0, 50) + '...',
-          notification: notificationPayload,
-          dataKeys: Object.keys(data || {})
-        });
-        
-        result = await messaging.send(message);
-        console.log('✅ Single token message sent, message ID:', result);
-      } else {
-        // Multiple tokens - use sendMulticast
-        const message = {
-          notification: notificationPayload,
-          data: data || {},
-        };
-        
-        console.log('📦 Multicast message:', {
-          tokenCount: tokens.length,
-          notification: notificationPayload,
-          dataKeys: Object.keys(data || {})
-        });
-        
-        const multicastResult = await messaging.sendMulticast({
-          tokens: tokens,
-          ...message,
-        });
-        
-        console.log('✅ Multicast result:', {
-          successCount: multicastResult.successCount,
-          failureCount: multicastResult.failureCount,
-          responses: multicastResult.responses.map((r, i) => ({
-            index: i,
-            success: r.success,
-            error: r.error?.code || r.error?.message
-          }))
-        });
-        
-        result = {
-          successCount: multicastResult.successCount,
-          failureCount: multicastResult.failureCount,
-          responses: multicastResult.responses,
-        };
+      // Split into batches of batchSize
+      for (let i = 0; i < totalTokens; i += batchSize) {
+        batches.push(tokensToSend.slice(i, i + batchSize));
       }
+      
+      console.log(`📦 Sending to ${totalTokens} tokens in ${batches.length} batch(es) of ${batchSize}`);
+      
+      const message = {
+        notification: notificationPayload,
+        data: data || {},
+      };
+      
+      let totalSuccess = 0;
+      let totalFailure = 0;
+      const batchResults = [];
+      
+      // Send each batch
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        console.log(`📤 Sending batch ${i + 1}/${batches.length} (${batch.length} tokens)...`);
+        
+        try {
+          if (batch.length === 1) {
+            // Single token in batch
+            const singleResult = await messaging.send({
+              ...message,
+              token: batch[0],
+            });
+            totalSuccess++;
+            batchResults.push({
+              batch: i + 1,
+              success: true,
+              tokensInBatch: 1,
+              messageId: singleResult
+            });
+          } else {
+            // Multiple tokens - use sendMulticast
+            const multicastResult = await messaging.sendMulticast({
+              tokens: batch,
+              ...message,
+            });
+            
+            totalSuccess += multicastResult.successCount;
+            totalFailure += multicastResult.failureCount;
+            
+            // Mark invalid tokens as inactive in database
+            if (multicastResult.failureCount > 0) {
+              multicastResult.responses.forEach((response, index) => {
+                if (!response.success) {
+                  const token = batch[index];
+                  
+                  // Check if token is invalid/unregistered
+                  if (response.error?.code === 'messaging/invalid-registration-token' ||
+                      response.error?.code === 'messaging/registration-token-not-registered') {
+                    // Mark token as inactive in database
+                    supabase
+                      .from('fcm_tokens')
+                      .update({ is_active: false, updated_at: new Date().toISOString() })
+                      .eq('token', token)
+                      .then(({ error }) => {
+                        if (error) {
+                          console.error(`Failed to mark token as inactive:`, error);
+                        } else {
+                          console.log(`✅ Marked invalid token as inactive`);
+                        }
+                      });
+                  }
+                }
+              });
+            }
+            
+            batchResults.push({
+              batch: i + 1,
+              successCount: multicastResult.successCount,
+              failureCount: multicastResult.failureCount,
+              tokensInBatch: batch.length
+            });
+          }
+        } catch (batchError) {
+          console.error(`❌ Error sending batch ${i + 1}:`, batchError);
+          totalFailure += batch.length;
+          batchResults.push({
+            batch: i + 1,
+            success: false,
+            error: batchError.message,
+            tokensInBatch: batch.length
+          });
+        }
+        
+        // Small delay between batches to avoid rate limiting
+        if (i < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      result = {
+        totalTokens,
+        totalBatches: batches.length,
+        successCount: totalSuccess,
+        failureCount: totalFailure,
+        batchResults,
+      };
+      
+      console.log('✅ Batch sending completed:', result);
     } else {
       return NextResponse.json(
-        { error: 'Either token or topic is required' },
+        { error: 'Either token, topic, category, or sendToAll is required' },
         { status: 400 }
       );
     }
-
-    console.log('✅ Notification sent successfully:', {
-      mode: topic ? 'topic' : (Array.isArray(token) ? 'multicast' : 'single'),
-      target: topic || (Array.isArray(token) ? `${token.length} tokens` : 'single token'),
-      result: result
-    });
 
     return NextResponse.json({
       success: true,
@@ -207,12 +250,7 @@ export async function POST(request) {
       result,
     });
   } catch (error) {
-    console.error('❌ Error sending notification:', error);
-    console.error('Error details:', {
-      code: error.code,
-      message: error.message,
-      stack: error.stack
-    });
+    console.error('Error sending notification:', error);
     
     // Handle specific FCM errors
     if (error.code === 'messaging/invalid-registration-token' || 

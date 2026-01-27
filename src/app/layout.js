@@ -11,6 +11,8 @@ import ProfileModal from "@/components/ProfileModal";
 import AnalyticsInitializer from "@/components/AnalyticsInitializer";
 import FCMNotificationProvider from "@/components/FCMNotificationProvider";
 // import NotificationEnrollment from "@/components/NotificationEnrollment"; // Temporarily disabled
+// import { NotificationTestHelper } from "@/components/NotificationTestHelper"; // Temporarily disabled
+// import { FCMDiagnostics } from "@/components/FCMDiagnostics"; // Temporarily disabled
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -49,20 +51,21 @@ export const metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.in'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com'),
   alternates: {
     canonical: '/',
   },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.in',
+    url: process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com',
     title: '10tracker - Latest Updates in 10 Points',
     description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
     siteName: '10tracker',
     images: [
       {
-        url: '/og-image.jpg',
+        // Use an existing image asset as the default OG image
+        url: '/10tracker.png',
         width: 1200,
         height: 630,
         alt: '10tracker - Latest Updates in 10 Points',
@@ -73,7 +76,7 @@ export const metadata = {
     card: 'summary_large_image',
     title: '10tracker - Latest Updates in 10 Points',
     description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
-    images: ['/og-image.jpg'],
+    images: ['/10tracker.png'],
     creator: '@10tracker',
   },
   robots: {
@@ -160,6 +163,8 @@ export default function RootLayout({ children }) {
               <Footer />
               <MobileBottomMenu />
               {/* <NotificationEnrollment /> Temporarily disabled */}
+              {/* <NotificationTestHelper /> Temporarily disabled */}
+              {/* <FCMDiagnostics /> Temporarily disabled */}
               <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
             </FCMNotificationProvider>
           </AuthProvider>

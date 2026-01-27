@@ -4,6 +4,9 @@
 import { getFCMToken, onMessageListener } from '@/app/firebase/firebase';
 import { useEffect, useState } from 'react';
 
+// Local storage key to avoid saving the same FCM token too often
+const FCM_TOKEN_STORAGE_KEY = 'fcm_last_saved_token_v1';
+
 /**
  * Hook to request notification permission and get FCM token
  */
@@ -173,10 +176,49 @@ export const useFCMForegroundMessage = () => {
 };
 
 /**
- * Save FCM token to backend
+ * Save FCM token to backend with enrollment tracking
+ * - Only hits the API when the token (or userId) is new or hasn't been saved recently
  */
 export const saveFCMTokenToBackend = async (token, userId = null) => {
   try {
+    // In the browser, check if we already saved this token recently
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const cached = window.localStorage.getItem(FCM_TOKEN_STORAGE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const sameToken = parsed.token === token;
+          const sameUser = (parsed.userId || null) === (userId || null);
+
+          const lastSavedAt = parsed.savedAt ? new Date(parsed.savedAt).getTime() : null;
+          const now = Date.now();
+          const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+          // If same token+user and last save was within the last day, skip network call
+          if (sameToken && sameUser && lastSavedAt && now - lastSavedAt < ONE_DAY_MS) {
+            console.log('FCM token already saved recently, skipping backend call');
+            return { success: true, skipped: true, reason: 'token_already_saved_recently' };
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to read cached FCM token from localStorage:', e);
+      }
+    }
+
+    // Get current page URL for enrollment tracking
+    const enrollmentSource = typeof window !== 'undefined' 
+      ? window.location.pathname 
+      : '/';
+    
+    // Get device information
+    const deviceInfo = typeof window !== 'undefined' ? {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+      screenWidth: window.screen?.width,
+      screenHeight: window.screen?.height,
+    } : null;
+
     const response = await fetch('/api/fcm/save-token', {
       method: 'POST',
       headers: {
@@ -185,6 +227,8 @@ export const saveFCMTokenToBackend = async (token, userId = null) => {
       body: JSON.stringify({
         token,
         userId,
+        enrollmentSource,
+        deviceInfo,
       }),
     });
 
@@ -193,6 +237,23 @@ export const saveFCMTokenToBackend = async (token, userId = null) => {
     }
 
     const data = await response.json();
+
+    // Cache the fact that we successfully saved this token
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.setItem(
+          FCM_TOKEN_STORAGE_KEY,
+          JSON.stringify({
+            token,
+            userId: userId || null,
+            savedAt: new Date().toISOString(),
+          })
+        );
+      } catch (e) {
+        console.warn('Failed to cache FCM token save in localStorage:', e);
+      }
+    }
+
     return data;
   } catch (error) {
     console.error('Error saving FCM token to backend:', error);

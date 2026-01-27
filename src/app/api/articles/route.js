@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminAuth } from '@/middleware/adminAuth';
+import { postToSteinHQ } from '@/lib/steinhq';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -60,7 +61,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { title, content, excerpt, category, tags, featured_image_url, is_featured, social_media_embeds } = body;
+    const { title, content, excerpt, category, tags, featured_image_url, is_featured, social_media_embeds, status, selectedSubreddits } = body;
 
     if (!title || !content || !category) {
       return Response.json(
@@ -81,12 +82,43 @@ export async function POST(request) {
         is_featured: is_featured || false,
         social_media_embeds: social_media_embeds || [],
         author_email: 'jain10gunjan@gmail.com',
-        status: 'published'
+        status: status || 'draft'
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    // Post to SteinHQ after successful article creation (only if published)
+    if (data && data.slug && status === 'published') {
+      const articleLink = `/articles/${data.slug}`;
+      
+      // If subreddits are selected, post to each one
+      if (selectedSubreddits && Array.isArray(selectedSubreddits) && selectedSubreddits.length > 0) {
+        selectedSubreddits.forEach((subreddit) => {
+          postToSteinHQ(
+            data.title,
+            articleLink,
+            subreddit.name,
+            subreddit.flairID,
+            data.featured_image_url || null
+          ).catch(err => {
+            console.error(`Failed to post to SteinHQ for ${subreddit.name} (non-blocking):`, err);
+          });
+        });
+      } else {
+        // If no subreddits selected, post with null values (original behavior)
+        postToSteinHQ(
+          data.title,
+          articleLink,
+          null,
+          null,
+          data.featured_image_url || null
+        ).catch(err => {
+          console.error('Failed to post to SteinHQ (non-blocking):', err);
+        });
+      }
+    }
 
     return Response.json({
       success: true,
