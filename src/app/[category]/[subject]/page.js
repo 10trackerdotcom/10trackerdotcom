@@ -854,7 +854,7 @@ const progress = useMemo(() => {
                   type="info" 
                   message="We update our question bank daily. Found an issue? Report it — we'll fix it within 48 hrs!" 
                   linkText="Learn More" 
-                  linkHref="https://examtracker.in/about-us" 
+                  linkHref="https://10tracker.com/about-us" 
                   dismissible={true} 
                 />
               </Suspense>
@@ -927,14 +927,14 @@ const progress = useMemo(() => {
                               </div>
                             )}
                             <Link
-                              href={`/${category}/${subject}/${chapterSlug}`}
+                              href={`/${category}/${subject}/${chapterSlug}/practice`}
                               className={`block text-center py-2 rounded-lg border ${
                                 isCompleted 
                                   ? "border-green-300 text-green-800 hover:bg-green-50" 
                                   : "border-neutral-300 text-neutral-800 hover:bg-neutral-50"
                               } transition-colors duration-150`}
                             >
-                              View Topics
+                              Start Practice
                             </Link>
                           </div>
                         </div>

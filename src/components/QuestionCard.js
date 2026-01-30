@@ -324,6 +324,10 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
                 <AlertTriangle size={12} />
                 <span>Report</span>
               </button>
+              
+              {questionData.topic && (
+                <div className="px-2 py-1 rounded-lg bg-white/80 text-xs font-semibold text-gray-700 border border-gray-200/60">{questionData.topic}</div>
+              )}
               <div className={`px-2 py-1 rounded-lg text-xs font-semibold border ${state.isAnswered ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                 {state.isAnswered ? (
                   <div className="flex items-center space-x-1">

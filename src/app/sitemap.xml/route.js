@@ -11,7 +11,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 export async function GET(request) {
-  const baseUrl = 'https://10tracker.com';
+  const baseUrl = 'https://www.10tracker.com';
   const timestamp = new Date().toISOString();
   const { searchParams } = new URL(request.url);
   const forceRefresh = searchParams.get('refresh') === 'true';

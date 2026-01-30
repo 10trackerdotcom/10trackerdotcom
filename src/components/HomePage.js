@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Toaster } from "react-hot-toast";
@@ -130,11 +130,24 @@ function ExamCard({ exam, index }) {
   );
 }
 
+// Define the 8 specific categories to display on homepage
+const HOMEPAGE_CATEGORIES = [
+  'latest-jobs',
+  'exam-results',
+  'news',
+  'world-news',
+  'technology',
+  'admit-cards',
+  'answer-key',
+  'admission'
+];
+
 export default function HomePage() {
   const [examCategories, setExamCategories] = useState([]);
   const [loadingExams, setLoadingExams] = useState(true);
-  const [articles, setArticles] = useState([]);
+  const [articlesByCategory, setArticlesByCategory] = useState({});
   const [loadingArticles, setLoadingArticles] = useState(true);
+  const [categoryErrors, setCategoryErrors] = useState({});
   
   // Fetch categories using shared hook
   const { categories } = useArticleCategories({ enabled: true });
@@ -146,25 +159,69 @@ export default function HomePage() {
     setLoadingExams(false);
   }, []);
 
-  useEffect(() => {
-    fetchArticles();
+  const fetchArticlesByCategory = useCallback(async () => {
+    setLoadingArticles(true);
+    setCategoryErrors({});
+    
+    // Initialize all categories with empty arrays
+    const initialArticles = {};
+    HOMEPAGE_CATEGORIES.forEach(cat => {
+      initialArticles[cat] = [];
+    });
+    setArticlesByCategory(initialArticles);
+
+    // Fetch articles for each category in parallel
+    const fetchPromises = HOMEPAGE_CATEGORIES.map(async (categorySlug) => {
+      try {
+        const response = await fetch(`/api/articles?category=${encodeURIComponent(categorySlug)}&limit=5`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          // Sort by created_at descending (most recent first)
+          const sorted = [...result.data].sort((a, b) => 
+            new Date(b.created_at) - new Date(a.created_at)
+          );
+          return { categorySlug, articles: sorted, error: null };
+        } else {
+          throw new Error(result.error || 'Failed to fetch articles');
+        }
+      } catch (error) {
+        console.error(`Error fetching articles for category ${categorySlug}:`, error);
+        return { 
+          categorySlug, 
+          articles: [], 
+          error: error.message || 'Failed to load articles' 
+        };
+      }
+    });
+
+    // Wait for all requests to complete
+    const results = await Promise.all(fetchPromises);
+    
+    // Update state with results
+    const updatedArticles = {};
+    const errors = {};
+    
+    results.forEach(({ categorySlug, articles, error }) => {
+      updatedArticles[categorySlug] = articles;
+      if (error) {
+        errors[categorySlug] = error;
+      }
+    });
+    
+    setArticlesByCategory(updatedArticles);
+    setCategoryErrors(errors);
+    setLoadingArticles(false);
   }, []);
 
-  const fetchArticles = async () => {
-    try {
-      const response = await fetch('/api/articles?limit=30');
-      const result = await response.json();
-      if (result.success) {
-        const sorted = [...(result.data || [])]
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        setArticles(sorted);
-      }
-    } catch (error) {
-      console.error('Error fetching articles:', error);
-    } finally {
-      setLoadingArticles(false);
-    }
-  };
+  useEffect(() => {
+    fetchArticlesByCategory();
+  }, [fetchArticlesByCategory]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -186,21 +243,10 @@ export default function HomePage() {
     return category?.name || categorySlug;
   };
 
-  // Group articles by category
-  const groupedArticles = articles.reduce((acc, article) => {
-    const category = article.category || 'uncategorized';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push(article);
-    return acc;
-  }, {});
-
-  // Get sorted category list
-  const sortedCategories = Object.keys(groupedArticles).sort((a, b) => {
-    const nameA = getCategoryName(a);
-    const nameB = getCategoryName(b);
-    return nameA.localeCompare(nameB);
+  // Get categories in the specified order
+  const sortedCategories = HOMEPAGE_CATEGORIES.filter(cat => {
+    // Always show category even if it has no articles
+    return true;
   });
 
   // Animation variants
@@ -395,18 +441,13 @@ export default function HomePage() {
                 <div className="w-8 h-8 border-4 border-neutral-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                 <p className="text-neutral-600 text-sm">Loading articles...</p>
               </div>
-            ) : articles.length === 0 ? (
-              <div className="text-center py-12 bg-white border border-neutral-200 rounded-xl">
-                <FileText className="w-12 h-12 text-neutral-400 mx-auto mb-3" />
-                <h3 className="text-lg text-neutral-900 mb-1">No articles available</h3>
-                <p className="text-neutral-600 text-sm">Check back soon for latest updates</p>
-              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {sortedCategories.map((categorySlug) => {
-                  const categoryArticles = groupedArticles[categorySlug];
+                  const categoryArticles = articlesByCategory[categorySlug] || [];
                   const categoryColor = getCategoryColor(categorySlug);
                   const categoryName = getCategoryName(categorySlug);
+                  const hasError = categoryErrors[categorySlug];
                   
                   return (
                     <motion.div
@@ -430,15 +471,31 @@ export default function HomePage() {
                             {categoryName}
                           </h3>
                           <span className="text-xs font-medium text-neutral-500 flex-shrink-0 ml-2">
-                            {categoryArticles.length}
+                            {categoryArticles?.length || 0}
                           </span>
                         </div>
                       </div>
 
                       {/* Desktop Table */}
                       <div className="hidden lg:block overflow-x-auto flex-1">
-                        <div className="divide-y divide-neutral-200">
-                          {categoryArticles.slice(0, 5).map((article) => (
+                        {hasError ? (
+                          <div className="p-6 text-center">
+                            <p className="text-sm text-neutral-500 mb-2">Unable to load articles</p>
+                            <button
+                              onClick={fetchArticlesByCategory}
+                              className="text-xs text-neutral-600 hover:text-neutral-900 underline"
+                            >
+                              Try again
+                            </button>
+                          </div>
+                        ) : categoryArticles.length === 0 ? (
+                          <div className="p-6 text-center">
+                            <FileText className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                            <p className="text-sm text-neutral-500">No articles yet</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-neutral-200">
+                            {categoryArticles.map((article) => (
                             <Link
                               key={article.id}
                               href={`/articles/${article.slug}`}
@@ -496,13 +553,14 @@ export default function HomePage() {
                                 </div>
                               </div>
                             </Link>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                         {/* View More Link for Desktop */}
-                        {categoryArticles.length > 5 && (
+                        {!hasError && categoryArticles.length > 0 && (
                           <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50">
                             <Link
-                              href="/articles"
+                              href={`/articles?category=${categorySlug}`}
                               className="flex items-center justify-center gap-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors group"
                             >
                               View More
@@ -513,8 +571,25 @@ export default function HomePage() {
                       </div>
 
                       {/* Tablet/Mobile Cards */}
-                      <div className="lg:hidden divide-y divide-neutral-200">
-                        {categoryArticles.slice(0, 5).map((article) => (
+                      <div className="lg:hidden">
+                        {hasError ? (
+                          <div className="p-6 text-center">
+                            <p className="text-sm text-neutral-500 mb-2">Unable to load articles</p>
+                            <button
+                              onClick={fetchArticlesByCategory}
+                              className="text-xs text-neutral-600 hover:text-neutral-900 underline"
+                            >
+                              Try again
+                            </button>
+                          </div>
+                        ) : categoryArticles.length === 0 ? (
+                          <div className="p-6 text-center">
+                            <FileText className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                            <p className="text-sm text-neutral-500">No articles yet</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-neutral-200">
+                            {categoryArticles.map((article) => (
                           <Link
                             key={article.id}
                             href={`/articles/${article.slug}`}
@@ -572,12 +647,14 @@ export default function HomePage() {
                               </div>
                             </div>
                           </Link>
-                        ))}
+                          ))}
+                          </div>
+                        )}
                         {/* View More Link for Mobile/Tablet */}
-                        {categoryArticles.length > 5 && (
+                        {!hasError && categoryArticles.length > 0 && (
                           <div className="p-3 border-t border-neutral-200 bg-neutral-50">
                             <Link
-                              href="/articles"
+                              href={`/articles?category=${categorySlug}`}
                               className="flex items-center justify-center gap-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors group"
                             >
                               View More

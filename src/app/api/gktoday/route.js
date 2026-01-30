@@ -192,8 +192,42 @@ export async function GET(request) {
         }, { status: 500 });
       }
 
-      // Successfully saved
-      return NextResponse.json({
+      // Successfully saved - now call twitterpost API
+      let twitterPostResult = null;
+      let twitterPostError = null;
+      let twitterPostCalled = false;
+
+      // Only call Twitter API if we have a title (required parameter)
+      if (title) {
+        twitterPostCalled = true;
+        try {
+          const twitterPostResponse = await axios.post('https://www.10tracker.com/api/twitterpost', {
+            title: title,
+            imageUrl: imageUrl || '', // Send empty string if imageUrl is null
+          }, {
+            timeout: 30000, // 30 second timeout for Twitter API
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          twitterPostResult = {
+            success: twitterPostResponse.data?.success || false,
+            message: twitterPostResponse.data?.message || 'Tweet posted',
+            tweetId: twitterPostResponse.data?.data?.tweetId || null,
+          };
+        } catch (twitterError) {
+          console.error('Error posting to Twitter:', twitterError.response?.data || twitterError.message);
+          twitterPostError = {
+            message: twitterError.response?.data?.error || twitterError.message || 'Failed to post to Twitter',
+            status: twitterError.response?.status || null,
+          };
+          // Don't fail the whole request if Twitter posting fails
+        }
+      }
+
+      // Build response object
+      const response = {
         success: true,
         message: 'New link found and saved',
         data: {
@@ -204,7 +238,20 @@ export async function GET(request) {
           id: savedLink.id,
           createdAt: savedLink.created_at,
         },
-      });
+        twitterPostCalled: twitterPostCalled,
+      };
+
+      // Only include Twitter post fields if API was called
+      if (twitterPostCalled) {
+        if (twitterPostResult) {
+          response.twitterPost = twitterPostResult;
+        }
+        if (twitterPostError) {
+          response.twitterPostError = twitterPostError;
+        }
+      }
+
+      return NextResponse.json(response);
 
     } catch (dbSaveError) {
       console.error('Unexpected error saving to database:', dbSaveError);

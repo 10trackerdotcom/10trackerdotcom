@@ -241,7 +241,7 @@ const Pagetracker = memo(() => {
 
       const { data, error } = await supabase
         .from("examtracker")
-        .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, difficulty, year, subject, order_index, directionHTML")
+        .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, difficulty, year, subject, order_index, directionHTML, topic")
         .eq("topic", pagetopic)
         .eq("category", category.toUpperCase())
         .eq("difficulty", difficulty)
