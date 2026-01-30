@@ -1279,7 +1279,7 @@ const AdminArticlesPage = () => {
                     value={tweetForm.link}
                     onChange={(e) => handleTweetFormChange('link', e.target.value)}
                     className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
-                    placeholder="https://10tracker.in/articles/..."
+                    placeholder="https://10tracker.com/articles/..."
                   />
                 </div>
                 <div>

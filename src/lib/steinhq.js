@@ -17,7 +17,7 @@ const STEINHQ_SHEET_NAME = process.env.STEINHQ_SHEET_NAME || 'Sheet1';
  */
 export async function postToSteinHQ(title, link, subreddit = null, flairID = null, imageurl = null) {
   try {
-    const baseUrl = 'https://10tracker.in';
+    const baseUrl = 'https://10tracker.com';
     const fullLink = `${baseUrl}${link}`;
 
     // Try the endpoint with sheet name first (most common format)

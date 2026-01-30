@@ -28,7 +28,8 @@ export async function POST(request) {
       );
     }
 
-    // image_url is optional, but if provided, validate it's a valid URL
+    // image_url is optional, but if provided, validate it's a valid URL.
+    // This is used ONLY as the featured image, not from scraped content.
     if (image_url && !image_url.match(/^https?:\/\/.+/)) {
       return NextResponse.json(
         { success: false, error: 'Invalid image URL format' },
@@ -46,6 +47,10 @@ export async function POST(request) {
 
     const $ = cheerio.load(html);
 
+    // Remove ALL images from scraped HTML so they don't appear in article content.
+    // Featured image (image_url) is handled separately and still allowed.
+    $("img").remove();
+
     // FIRST: Remove ALL paragraphs with ", " pattern from the entire document
     $("p").each((i, el) => {
       const $p = $(el);
@@ -58,20 +63,7 @@ export async function POST(request) {
       }
     });
 
-    // Remove images with WhatsApp / Telegram / icons8
-    $("img")
-      .filter((i, el) => {
-        const src = $(el).attr("src") || "";
-        const alt = $(el).attr("alt") || "";
-        return (
-          src.includes("whatsapp") ||
-          src.includes("telegram") ||
-          src.includes("icons8") ||
-          alt.toLowerCase().includes("whatsapp") ||
-          alt.toLowerCase().includes("telegram")
-        );
-      })
-      .remove();
+    // (Images already removed above; keep this section intentionally empty.)
 
     // Remove elements with class "size-large wp-image-28778 aligncenter"
     $('.size-large.wp-image-28778.aligncenter, .size-large.wp-image-28778, .wp-image-28778.aligncenter, [class*="size-large"][class*="wp-image-28778"][class*="aligncenter"]').remove();
@@ -138,6 +130,9 @@ export async function POST(request) {
 
     // Remove ads, scripts, styles
     vacancyClone.find("script, style, iframe, ins").remove();
+
+    // Remove any images that were inside the container
+    vacancyClone.find("img").remove();
 
     // Remove junk tables
     vacancyClone.find("table").filter((i, el) => {
@@ -269,6 +264,9 @@ export async function POST(request) {
       
       // Load HTML into cheerio for better manipulation
       const $clean = cheerio.load(`<div>${html}</div>`, null, false);
+
+      // Remove ALL images from cleaned content
+      $clean("img").remove();
       
       // Remove all inline style attributes (this includes positioning that causes overlap)
       $clean('[style]').each((i, el) => {
@@ -625,7 +623,8 @@ export async function POST(request) {
           excerpt: excerpt || title.substring(0, 200) + '...',
           category,
           tags: [],
-          featured_image_url: image_url || null, // Use provided image_url or null
+          // Only store the explicitly provided featured image, not scraped images
+          featured_image_url: image_url || null,
           is_featured: false,
           social_media_embeds: [],
           author_email: 'jain10gunjan@gmail.com',

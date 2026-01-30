@@ -614,7 +614,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
   ), [state, question, isEditing, isAdmin, onStartEditing, handleOptionClick, handleSubmit, handleSkip, handleSaveEdit, getDifficultyColor, jsonLd, config, isCompleted]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 mb-8">
       {renderQuestionCard(question, index)}
       <AnimatePresence>
         {state.showReportForm && (
@@ -623,7 +623,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg"
+            className="m-4 p-4 bg-red-50 border border-red-200 rounded-lg"
           >
             <h3 className="text-sm font-semibold text-red-800 mb-2 flex items-center">
               <AlertTriangle size={14} className="mr-2" />

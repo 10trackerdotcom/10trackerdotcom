@@ -24,7 +24,7 @@ export const metadata = {
     title: '10tracker - Latest Updates in 10 Points',
     description: 'Get the latest news, insights, and updates summarized into 10 clear and easy-to-read points. Stay informed quickly and efficiently with 10tracker.',
     type: 'website',
-    url: process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.in',
+    url: process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com',
     images: [
       {
         url: '/og-image.jpg',

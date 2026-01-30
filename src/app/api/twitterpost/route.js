@@ -35,7 +35,7 @@ import axios from 'axios';
  * ===================
  * {
  *   "title": "Your tweet text here",
- *   "link": "https://10tracker.in/articles/your-article",
+ *   "link": "https://10tracker.com/articles/your-article",
  *   "hashtags": ["#India", "#News", "#Tech"], // Array of hashtags (optional)
  *   "imageUrl": "https://example.com/image.jpg" // Optional image URL to attach
  * }
@@ -44,7 +44,7 @@ import axios from 'axios';
  * 
  * {
  *   "title": "Your tweet text here",
- *   "link": "https://10tracker.in/articles/your-article",
+ *   "link": "https://10tracker.com/articles/your-article",
  *   "hashtags": "#India #News #Tech", // Space-separated string (optional)
  *   "imageUrl": "https://example.com/image.jpg" // Optional image URL to attach
  * }
@@ -232,8 +232,8 @@ export async function POST(request) {
     // Post tweet with or without media
     const tweetPayload =
       mediaIds.length > 0
-        ? { text: tweetText, media: { media_ids: mediaIds } }
-        : { text: tweetText };
+        ? { text: `🚨${tweetText}`, media: { media_ids: mediaIds } }
+        : { text: `🚨${tweetText}` };
 
     const tweetResponse = await rwClient.v2.tweet(tweetPayload);
 

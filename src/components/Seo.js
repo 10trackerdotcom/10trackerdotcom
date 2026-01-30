@@ -13,7 +13,7 @@ export default function ArticleSEO({
   readingTime,
   viewCount
 }) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.in';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com';
   const fullUrl = `${siteUrl}${url}`;
   const fullImage = image ? (image.startsWith('http') ? image : `${siteUrl}${image}`) : `${siteUrl}/og-image.jpg`;
 
@@ -161,7 +161,7 @@ export function PageSEO({
   url, 
   type = "website" 
 }) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.in';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com';
   const fullUrl = `${siteUrl}${url}`;
   const fullImage = image ? (image.startsWith('http') ? image : `${siteUrl}${image}`) : `${siteUrl}/og-image.jpg`;
 

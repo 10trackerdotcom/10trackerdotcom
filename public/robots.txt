@@ -2,7 +2,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://10tracker.in/sitemap.xml
+Sitemap: https://10tracker.com/sitemap.xml
 
 # Disallow admin areas
 Disallow: /admin/

@@ -119,6 +119,20 @@ const convertToHtml = (article) => {
     
     const lines = block.split('\n').map(l => l.trim()).filter(l => l);
     if (lines.length === 0) continue;
+
+    // Check for markdown headings like "# Heading", "## Heading", "### Heading"
+    // We convert them into clean <h2>/<h3> elements without the leading ### text.
+    if (lines.length === 1) {
+      const headingMatch = lines[0].match(/^(#{1,6})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const headingText = headingMatch[2].trim();
+        // Map all heading levels to h2/h3 to keep UI consistent and avoid very large/small headings
+        const tag = level <= 2 ? 'h2' : 'h3';
+        html += `<${tag}>${processInlineFormatting(headingText)}</${tag}>`;
+        continue;
+      }
+    }
     
     // Check if it's a bullet list
     const hasBullets = lines.some(line => line.match(/^-\s/));
@@ -129,7 +143,9 @@ const convertToHtml = (article) => {
       lines.forEach(line => {
         const bulletMatch = line.match(/^-\s*(.+)$/);
         if (bulletMatch) {
-          const itemText = bulletMatch[1].trim();
+          let itemText = bulletMatch[1].trim();
+          // Strip any markdown heading syntax inside bullet items (e.g. "- ### Point")
+          itemText = itemText.replace(/^(#{1,6})\s+/, '');
           html += `<li>${processInlineFormatting(itemText)}</li>`;
         }
       });

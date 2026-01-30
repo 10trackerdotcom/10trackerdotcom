@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-import debounce from "lodash/debounce";
+import { supabase } from "@/app/lib/supabase";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
 import toast, { Toaster } from "react-hot-toast";
@@ -18,16 +17,32 @@ const QuestionCard = dynamic(() => import("@/components/QuestionCard"), {
 const Navbar = dynamic(() => import("@/components/Navbar"), { ssr: false });
 const MetaDataJobs = dynamic(() => import("@/components/Seo"), { ssr: false });
 
-// Optimized Supabase config
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Constants
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "jain10gunjan@gmail.com";
+const QUESTIONS_PER_PAGE = 5;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 50; // Maximum cache entries
+const POINTS_PER_CORRECT_ANSWER = 100;
 
-const ADMIN_EMAIL = "jain10gunjan@gmail.com";
-const QUESTIONS_PER_PAGE = 5; // Reduced initial load
-const BATCH_DELAY = 3000; // Increased delay for less frequent updates
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+// Utility: Parse page number from URL
+const parsePageFromUrl = (searchParams) => {
+  const pageFromUrl = searchParams?.get("page");
+  const parsed = parseInt(pageFromUrl || "1", 10);
+  return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+};
+
+// Utility: Format topic name
+const formatTopicName = (pagetopic) => {
+  return pagetopic?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) || "";
+};
+
+// Utility: Error handler
+const handleError = (error, userMessage, logMessage) => {
+  if (process.env.NODE_ENV === 'development' && logMessage) {
+    console.error(logMessage, error);
+  }
+  toast.error(userMessage);
+};
 
 // Simple Skeleton
 const QuestionSkeleton = memo(() => (
@@ -82,7 +97,7 @@ const Pagetracker = memo(() => {
   const router = useRouter();
   const { user, setShowAuthModal } = useAuth();
 
-  // Simplified state
+  // State
   const [questions, setQuestions] = useState([]);
   const [counts, setCounts] = useState({ easy: 0, medium: 0, hard: 0 });
   const [activeDifficulty, setActiveDifficulty] = useState("easy");
@@ -93,33 +108,56 @@ const Pagetracker = memo(() => {
     correct: [],
     points: 0
   });
-  const [currentPage, setCurrentPage] = useState(() => {
-    const pageFromUrl = searchParams?.get("page");
-    const parsed = parseInt(pageFromUrl || "1", 10);
-    return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-  });
+  const [difficultyQuestionIds, setDifficultyQuestionIds] = useState(new Set()); // Store question IDs for current difficulty
+  const [currentPage, setCurrentPage] = useState(() => parsePageFromUrl(searchParams));
 
   // Refs for optimization
   const pendingUpdatesRef = useRef(new Map());
   const cacheRef = useRef(new Map());
-  const batchTimeoutRef = useRef(null);
+  const isSavingRef = useRef(false);
+  const saveRequestIdRef = useRef(0);
 
-  // Cache helper
+  // Cache helpers with cleanup
+  const cleanupCache = useCallback(() => {
+    const now = Date.now();
+    const entries = Array.from(cacheRef.current.entries());
+    
+    // Remove expired entries
+    entries.forEach(([key, value]) => {
+      if (now - value.timestamp > CACHE_TTL) {
+        cacheRef.current.delete(key);
+      }
+    });
+
+    // Limit cache size
+    if (cacheRef.current.size > MAX_CACHE_SIZE) {
+      const sorted = entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const toRemove = sorted.slice(0, cacheRef.current.size - MAX_CACHE_SIZE);
+      toRemove.forEach(([key]) => cacheRef.current.delete(key));
+    }
+  }, []);
+
   const getCached = useCallback((key) => {
+    cleanupCache();
     const cached = cacheRef.current.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return cached.data;
     }
-    cacheRef.current.delete(key);
+    if (cached) {
+      cacheRef.current.delete(key);
+    }
     return null;
-  }, []);
+  }, [cleanupCache]);
 
   const setCached = useCallback((key, data) => {
+    cleanupCache();
     cacheRef.current.set(key, { data, timestamp: Date.now() });
-  }, []);
+  }, [cleanupCache]);
 
-  // Fetch counts once (cached)
+  // Fetch counts with optimized query
   const fetchCounts = useCallback(async () => {
+    if (!category || !pagetopic) return;
+
     const cacheKey = `counts-${category}-${pagetopic}`;
     const cached = getCached(cacheKey);
     if (cached) {
@@ -128,26 +166,61 @@ const Pagetracker = memo(() => {
     }
 
     try {
-      // Single query for all counts
+      // Fetch all difficulties in one query, count in database
       const { data, error } = await supabase
         .from("examtracker")
         .select("difficulty")
         .eq("topic", pagetopic)
-        .eq("category", category?.toUpperCase());
+        .eq("category", category.toUpperCase());
 
       if (error) throw error;
 
+      // Count in memory (more efficient than multiple queries)
       const countsData = { easy: 0, medium: 0, hard: 0 };
-      data?.forEach(q => {
-        if (countsData.hasOwnProperty(q.difficulty)) {
-          countsData[q.difficulty]++;
-        }
-      });
+      if (data) {
+        data.forEach(q => {
+          if (q.difficulty && countsData.hasOwnProperty(q.difficulty)) {
+            countsData[q.difficulty]++;
+          }
+        });
+      }
 
       setCounts(countsData);
       setCached(cacheKey, countsData);
     } catch (error) {
-      console.error("Error fetching counts:", error);
+      handleError(error, "Failed to load question counts", "Error fetching counts:");
+    }
+  }, [category, pagetopic, getCached, setCached]);
+
+  // Fetch all question IDs for current difficulty (for progress calculation)
+  const fetchDifficultyQuestionIds = useCallback(async (difficulty) => {
+    if (!pagetopic || !category) return;
+
+    const cacheKey = `questionIds-${category}-${pagetopic}-${difficulty}`;
+    const cached = getCached(cacheKey);
+    
+    if (cached) {
+      setDifficultyQuestionIds(new Set(cached));
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("examtracker")
+        .select("_id")
+        .eq("topic", pagetopic)
+        .eq("category", category.toUpperCase())
+        .eq("difficulty", difficulty);
+
+      if (error) throw error;
+
+      const ids = (data || []).map(q => q._id);
+      setDifficultyQuestionIds(new Set(ids));
+      setCached(cacheKey, ids);
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error fetching question IDs:", error);
+      }
     }
   }, [category, pagetopic, getCached, setCached]);
 
@@ -181,14 +254,13 @@ const Pagetracker = memo(() => {
       setQuestions(questionsData);
       setCached(cacheKey, questionsData);
     } catch (error) {
-      console.error("Error fetching questions:", error);
-      toast.error("Failed to load questions");
+      handleError(error, "Failed to load questions", "Error fetching questions:");
     } finally {
       setIsLoadingQuestions(false);
     }
   }, [category, pagetopic, getCached, setCached]);
 
-  // Fetch user progress (simplified)
+  // Fetch user progress
   const fetchUserProgress = useCallback(async () => {
     if (!user?.id || !pagetopic || !category) {
       setProgress({ completed: [], correct: [], points: 0 });
@@ -202,199 +274,149 @@ const Pagetracker = memo(() => {
         .eq("user_id", user.id)
         .eq("topic", pagetopic)
         .eq("area", category)
-        .maybeSingle(); // Use maybeSingle to handle no record case gracefully
+        .maybeSingle();
 
       if (error && error.code !== "PGRST116") {
-        console.error("❌ [Progress] Error fetching progress:", error);
         throw error;
       }
 
-      // Ensure arrays are valid (handle null/undefined)
       const completed = Array.isArray(data?.completedquestions) ? data.completedquestions : [];
       const correct = Array.isArray(data?.correctanswers) ? data.correctanswers : [];
       const points = typeof data?.points === 'number' ? data.points : 0;
 
-      console.log("✅ [Progress] Loaded progress:", {
-        completed: completed.length,
-        correct: correct.length,
-        points: points
-      });
-
-      setProgress({
-        completed,
-        correct,
-        points
-      });
+      setProgress({ completed, correct, points });
     } catch (error) {
-      console.error("❌ [Progress] Error fetching user progress:", error);
-      // Set empty progress on error to prevent UI issues
+      handleError(error, "Failed to load progress", "Error fetching user progress:");
       setProgress({ completed: [], correct: [], points: 0 });
     }
   }, [user, pagetopic, category]);
 
-  // Batch progress update - properly merges with existing progress
-  const saveProgress = useCallback(async (immediate = false) => {
-    if (!user) {
-      console.warn("⚠️ [Progress] Cannot save: user not logged in");
-      return;
+  // Helper: Fetch existing progress from database
+  const fetchExistingProgress = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("user_progress")
+      .select("completedquestions, correctanswers, points")
+      .eq("user_id", user.id)
+      .eq("topic", pagetopic)
+      .eq("area", category)
+      .maybeSingle();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
     }
 
-    if (pendingUpdatesRef.current.size === 0) {
-      console.log("ℹ️ [Progress] No pending updates to save");
-      return;
+    return {
+      completed: Array.isArray(data?.completedquestions) ? data.completedquestions : [],
+      correct: Array.isArray(data?.correctanswers) ? data.correctanswers : [],
+      points: typeof data?.points === 'number' ? data.points : 0
+    };
+  }, [user, pagetopic, category]);
+
+  // Helper: Merge progress updates
+  const mergeProgressUpdates = useCallback((existing, updates) => {
+    const aggregated = updates.reduce((acc, update) => ({
+      completed: [...new Set([...acc.completed, ...update.completed])],
+      correct: [...new Set([...acc.correct, ...update.correct])],
+      points: acc.points + (update.points || 0)
+    }), { completed: [], correct: [], points: 0 });
+
+    return {
+      completed: [...new Set([...existing.completed, ...aggregated.completed])],
+      correct: [...new Set([...existing.correct, ...aggregated.correct])],
+      points: existing.points + aggregated.points
+    };
+  }, []);
+
+  // Helper: Save progress to database
+  const saveProgressToDatabase = useCallback(async (progressData) => {
+    // Try upsert first
+    let { error: saveError } = await supabase
+      .from("user_progress")
+      .upsert(progressData, { 
+        onConflict: "user_id,topic,area"
+      });
+
+    // If upsert fails, try insert then update
+    if (saveError) {
+      const { error: insertError } = await supabase
+        .from("user_progress")
+        .insert(progressData);
+
+      if (insertError) {
+        const { error: updateError } = await supabase
+          .from("user_progress")
+          .update({
+            completedquestions: progressData.completedquestions,
+            correctanswers: progressData.correctanswers,
+            points: progressData.points,
+            email: progressData.email,
+          })
+          .eq("user_id", user.id)
+          .eq("topic", pagetopic)
+          .eq("area", category);
+
+        if (updateError) {
+          throw updateError;
+        }
+      }
     }
+  }, [user, pagetopic, category]);
+
+  // Save progress with race condition protection
+  const saveProgress = useCallback(async (immediate = false) => {
+    if (!user) return;
+    if (isSavingRef.current) return; // Prevent concurrent saves
+
+    if (pendingUpdatesRef.current.size === 0) return;
+
+    const requestId = ++saveRequestIdRef.current;
+    isSavingRef.current = true;
 
     const updates = Array.from(pendingUpdatesRef.current.values());
     pendingUpdatesRef.current.clear();
 
-    console.log("💾 [Progress] Saving progress:", {
-      updatesCount: updates.length,
-      immediate,
-      userId: user.id,
-      topic: pagetopic,
-      area: category
-    });
-
     try {
-      // First, fetch existing progress from database
-      const { data: existingProgress, error: fetchError } = await supabase
-        .from("user_progress")
-        .select("completedquestions, correctanswers, points")
-        .eq("user_id", user.id)
-        .eq("topic", pagetopic)
-        .eq("area", category)
-        .maybeSingle();
+      // Fetch existing progress
+      const existing = await fetchExistingProgress();
 
-      if (fetchError && fetchError.code !== "PGRST116") {
-        console.error("❌ [Progress] Error fetching existing progress:", fetchError);
-        throw fetchError;
-      }
+      // Merge updates
+      const merged = mergeProgressUpdates(existing, updates);
 
-      // Get existing arrays (or empty if no record exists) - ensure they're arrays
-      const existingCompleted = Array.isArray(existingProgress?.completedquestions) 
-        ? existingProgress.completedquestions 
-        : [];
-      const existingCorrect = Array.isArray(existingProgress?.correctanswers) 
-        ? existingProgress.correctanswers 
-        : [];
-      const existingPoints = typeof existingProgress?.points === 'number' 
-        ? existingProgress.points 
-        : 0;
-
-      console.log("📊 [Progress] Existing progress:", {
-        completed: existingCompleted.length,
-        correct: existingCorrect.length,
-        points: existingPoints
-      });
-
-      // Aggregate new updates
-      const newUpdates = updates.reduce((acc, update) => ({
-        completed: [...new Set([...acc.completed, ...update.completed])],
-        correct: [...new Set([...acc.correct, ...update.correct])],
-        points: acc.points + (update.points || 0) // Sum points instead of max
-      }), { completed: [], correct: [], points: 0 });
-
-      console.log("🆕 [Progress] New updates:", {
-        completed: newUpdates.completed,
-        correct: newUpdates.correct,
-        points: newUpdates.points
-      });
-
-      // Merge existing with new updates
-      const mergedCompleted = [...new Set([...existingCompleted, ...newUpdates.completed])];
-      const mergedCorrect = [...new Set([...existingCorrect, ...newUpdates.correct])];
-      const mergedPoints = existingPoints + newUpdates.points;
-
-      console.log("🔄 [Progress] Merged progress:", {
-        completed: mergedCompleted.length,
-        correct: mergedCorrect.length,
-        points: mergedPoints
-      });
-
-      // Save merged progress - use upsert with proper conflict handling
+      // Prepare data
       const progressData = {
         user_id: user.id,
-        email: user?.emailAddresses[0]?.emailAddress,
+        email: user?.emailAddresses[0]?.emailAddress || user?.primaryEmailAddress?.emailAddress,
         topic: pagetopic,
-        completedquestions: mergedCompleted,
-        correctanswers: mergedCorrect,
-        points: mergedPoints,
+        completedquestions: merged.completed,
+        correctanswers: merged.correct,
+        points: merged.points,
         area: category,
       };
 
-      console.log("💾 [Progress] Attempting to save:", progressData);
+      // Save to database
+      await saveProgressToDatabase(progressData);
 
-      // Try upsert first
-      let { error: saveError, data: savedData } = await supabase
-        .from("user_progress")
-        .upsert(progressData, { 
-          onConflict: "user_id,topic,area"
-        })
-        .select();
-
-      // If upsert fails, try insert then update
-      if (saveError) {
-        console.warn("⚠️ [Progress] Upsert failed, trying insert/update:", saveError);
-        
-        // Try to insert first
-        const { error: insertError } = await supabase
-          .from("user_progress")
-          .insert(progressData);
-
-        // If insert fails (likely due to existing record), try update
-        if (insertError) {
-          console.log("ℹ️ [Progress] Insert failed (record exists), trying update");
-          const { error: updateError } = await supabase
-            .from("user_progress")
-            .update({
-              completedquestions: mergedCompleted,
-              correctanswers: mergedCorrect,
-              points: mergedPoints,
-              email: user?.emailAddresses[0]?.emailAddress,
-            })
-            .eq("user_id", user.id)
-            .eq("topic", pagetopic)
-            .eq("area", category);
-
-          if (updateError) {
-            console.error("❌ [Progress] Update also failed:", updateError);
-            throw updateError;
-          }
+      // Only update local state if this is still the latest request
+      if (requestId === saveRequestIdRef.current) {
+        setProgress(prev => mergeProgressUpdates(prev, updates));
+        if (immediate) {
+          toast.success("Progress saved!", { duration: 2000 });
         }
-      } else {
-        console.log("✅ [Progress] Upsert successful:", savedData);
       }
-
-      // Update local state with merged data
-      setProgress(prev => ({
-        completed: [...new Set([...prev.completed, ...newUpdates.completed])],
-        correct: [...new Set([...prev.correct, ...newUpdates.correct])],
-        points: prev.points + newUpdates.points
-      }));
-
-      console.log("✅ [Progress] Progress saved successfully:", {
-        completed: mergedCompleted.length,
-        correct: mergedCorrect.length,
-        points: mergedPoints
-      });
-
-      toast.success("Progress saved!", { duration: 2000 });
     } catch (error) {
-      console.error("❌ [Progress] Error saving progress:", error);
-      toast.error("Failed to save progress. Retrying...");
-      // Re-add to queue for retry
-      updates.forEach(update => {
-        pendingUpdatesRef.current.set(Date.now(), update);
-      });
+      handleError(error, "Failed to save progress. Retrying...", "Error saving progress:");
+      // Re-add to queue for retry (limit retries)
+      if (updates.length < 10) {
+        updates.forEach(update => {
+          pendingUpdatesRef.current.set(Date.now(), update);
+        });
+      }
+    } finally {
+      isSavingRef.current = false;
     }
-  }, [user, pagetopic, category]);
+  }, [user, pagetopic, category, fetchExistingProgress, mergeProgressUpdates, saveProgressToDatabase]);
 
-  const debouncedSave = useMemo(
-    () => debounce(() => saveProgress(false), BATCH_DELAY),
-    [saveProgress]
-  );
-
-  // Immediate save function (for critical actions)
+  // Immediate save function
   const saveProgressImmediate = useCallback(() => {
     saveProgress(true);
   }, [saveProgress]);
@@ -406,35 +428,31 @@ const Pagetracker = memo(() => {
       return;
     }
 
-    console.log("📝 [Answer] Handling answer:", { questionId, isCorrect });
-
     // Optimistic update
     setProgress(prev => ({
       completed: [...new Set([...prev.completed, questionId])],
       correct: isCorrect 
         ? [...new Set([...prev.correct, questionId])]
         : prev.correct.filter(id => id !== questionId),
-      points: prev.points + (isCorrect ? 100 : 0)
+      points: prev.points + (isCorrect ? POINTS_PER_CORRECT_ANSWER : 0)
     }));
 
     // Queue for batch save
     pendingUpdatesRef.current.set(questionId, {
       completed: [questionId],
       correct: isCorrect ? [questionId] : [],
-      points: isCorrect ? 100 : 0
+      points: isCorrect ? POINTS_PER_CORRECT_ANSWER : 0
     });
 
-    // Save immediately for all user actions to ensure progress is saved
-    // This ensures "Mark Complete" and correct answers are saved right away
+    // Save immediately
     saveProgressImmediate();
-  }, [user, setShowAuthModal, debouncedSave, saveProgressImmediate]);
+  }, [user, setShowAuthModal, saveProgressImmediate]);
 
   // Handle difficulty change
   const handleDifficultyChange = useCallback((difficulty) => {
     if (difficulty === activeDifficulty || isLoadingQuestions) return;
     setActiveDifficulty(difficulty);
     setCurrentPage(1);
-    // Update URL to first page (remove ?page or set to 1)
     const params = new URLSearchParams(searchParams.toString());
     params.delete("page");
     const query = params.toString();
@@ -443,59 +461,118 @@ const Pagetracker = memo(() => {
 
   // Initial load
   useEffect(() => {
+    if (!category || !pagetopic) return;
+    
     const load = async () => {
       setIsLoading(true);
-      await Promise.all([fetchCounts(), fetchQuestions(activeDifficulty, currentPage)]);
+      await Promise.all([
+        fetchCounts(), 
+        fetchQuestions(activeDifficulty, currentPage),
+        fetchDifficultyQuestionIds(activeDifficulty)
+      ]);
       setIsLoading(false);
     };
     load();
-  }, [fetchCounts, fetchQuestions, activeDifficulty, currentPage]);
+  }, [category, pagetopic, activeDifficulty, currentPage]); // Removed function dependencies
+
+  // Fetch question IDs when difficulty changes
+  useEffect(() => {
+    if (category && pagetopic && activeDifficulty) {
+      fetchDifficultyQuestionIds(activeDifficulty);
+    }
+  }, [activeDifficulty, category, pagetopic, fetchDifficultyQuestionIds]);
 
   // Sync current page with URL changes
   useEffect(() => {
-    const pageFromUrl = searchParams.get("page");
-    const parsed = parseInt(pageFromUrl || "1", 10);
-    const page = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
-    setCurrentPage(page);
-  }, [searchParams]);
+    const page = parsePageFromUrl(searchParams);
+    if (page !== currentPage) {
+      setCurrentPage(page);
+    }
+  }, [searchParams, currentPage]);
 
   // Load progress when user changes
   useEffect(() => {
     fetchUserProgress();
-  }, [fetchUserProgress]);
+  }, [user?.id, pagetopic, category]); // More specific dependencies
 
   // Cleanup and save on unmount
   useEffect(() => {
     return () => {
-      if (batchTimeoutRef.current) {
-        clearTimeout(batchTimeoutRef.current);
-      }
-      debouncedSave.cancel();
-      // Save any pending updates before unmounting
       if (pendingUpdatesRef.current.size > 0 && user) {
-        saveProgress(true);
+        // Use sendBeacon for reliable save on unmount
+        const data = JSON.stringify({
+          updates: Array.from(pendingUpdatesRef.current.values()),
+          userId: user.id,
+          topic: pagetopic,
+          area: category,
+          email: user?.emailAddresses?.[0]?.emailAddress || user?.primaryEmailAddress?.emailAddress
+        });
+        
+        // Try sendBeacon first, fallback to sync save
+        if (navigator.sendBeacon) {
+          try {
+            navigator.sendBeacon('/api/save-progress', new Blob([data], { type: 'application/json' }));
+          } catch (e) {
+            // Fallback to immediate save
+            saveProgress(true);
+          }
+        } else {
+          saveProgress(true);
+        }
       }
     };
-  }, [debouncedSave, user, saveProgress]);
+  }, [user, pagetopic, category, saveProgress]);
 
   // Save progress before page unload
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (e) => {
       if (pendingUpdatesRef.current.size > 0 && user) {
-        // Use sendBeacon or sync save for critical data
-        saveProgress(true);
+        const data = JSON.stringify({
+          updates: Array.from(pendingUpdatesRef.current.values()),
+          userId: user.id,
+          topic: pagetopic,
+          area: category,
+          email: user?.emailAddresses?.[0]?.emailAddress || user?.primaryEmailAddress?.emailAddress
+        });
+        
+        // Use sendBeacon for reliable background save
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/save-progress', new Blob([data], { type: 'application/json' }));
+        }
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [user, saveProgress]);
+  }, [user, pagetopic, category]);
 
-  // Calculate stats
+  // Pagination helpers - must be defined before stats useMemo
+  const totalQuestionsForDifficulty = useMemo(
+    () => counts[activeDifficulty] || 0,
+    [counts, activeDifficulty]
+  );
+
+  // Calculate stats with optimized memoization - based on overall progress for current difficulty
   const stats = useMemo(() => {
-    const completed = questions.filter(q => progress.completed.includes(q._id)).length;
-    const correct = questions.filter(q => progress.correct.includes(q._id)).length;
-    const total = questions.length;
+    const total = totalQuestionsForDifficulty;
+    
+    if (total === 0 || difficultyQuestionIds.size === 0) {
+      return {
+        completed: 0,
+        correct: 0,
+        total: 0,
+        completionPercentage: 0,
+        accuracy: 0,
+        points: progress.points
+      };
+    }
+
+    // Filter progress to only include questions from current difficulty
+    const completedForDifficulty = progress.completed.filter(id => difficultyQuestionIds.has(id));
+    const correctForDifficulty = progress.correct.filter(id => difficultyQuestionIds.has(id));
+    
+    const completed = completedForDifficulty.length;
+    const correct = correctForDifficulty.length;
     
     return {
       completed,
@@ -505,13 +582,8 @@ const Pagetracker = memo(() => {
       accuracy: completed ? Math.round((correct / completed) * 100) : 0,
       points: progress.points
     };
-  }, [questions, progress]);
-
-  // Pagination helpers
-  const totalQuestionsForDifficulty = useMemo(
-    () => counts[activeDifficulty] || 0,
-    [counts, activeDifficulty]
-  );
+  }, [totalQuestionsForDifficulty, difficultyQuestionIds, progress.completed, progress.correct, progress.points]);
+  
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(totalQuestionsForDifficulty / QUESTIONS_PER_PAGE) || 1),
     [totalQuestionsForDifficulty]
@@ -528,13 +600,10 @@ const Pagetracker = memo(() => {
         return;
       }
 
-      // Update local state
       setCurrentPage(page);
 
-      // Update URL ?page=
       const params = new URLSearchParams(searchParams.toString());
       if (page === 1) {
-        // For first page, allow both / and ?page=1 – we choose to keep URL clean
         params.delete("page");
       } else {
         params.set("page", String(page));
@@ -546,10 +615,7 @@ const Pagetracker = memo(() => {
   );
 
   // Format topic name
-  const topicName = useMemo(() => 
-    pagetopic?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) || "",
-    [pagetopic]
-  );
+  const topicName = useMemo(() => formatTopicName(pagetopic), [pagetopic]);
 
   if (isLoading) {
     return (
@@ -574,153 +640,153 @@ const Pagetracker = memo(() => {
 
   return (
     <>
-    <Navbar />
-    <div className="min-h-screen bg-neutral-50">
-      <MetaDataJobs
-        seoTitle={`${topicName} ${category?.toUpperCase()} Practice`}
-        seoDescription={`Practice ${topicName} questions with detailed solutions.`}
-      />
-      <div className="bg-neutral-50 pt-4 overflow-x-hidden">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 w-full">
-          {/* Header with Stats */}
-          <div className="mb-4 sm:mb-8 mt-16">
-            <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900 mb-1">
-              {topicName}
-            </h1>
-            <p className="text-xs sm:text-sm text-neutral-600 mb-4">
-              {totalQuestionsForDifficulty} questions available
-            </p>
-            
-            {/* Stats Row */}
-            <div className="bg-white rounded-lg border border-neutral-200 p-3 mb-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                <div>
-                  <p className="text-xs text-neutral-600 mb-1">Completion</p>
-                  <p className="text-lg font-semibold text-neutral-900">{stats.completionPercentage}%</p>
-                </div>
-                <div>
-                  <p className="text-xs text-neutral-600 mb-1">Correct</p>
-                  <p className="text-lg font-semibold text-neutral-900">{stats.correct}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-neutral-600 mb-1">Accuracy</p>
-                  <p className="text-lg font-semibold text-neutral-900">{stats.accuracy}%</p>
-                </div>
-                <div>
-                  <p className="text-xs text-neutral-600 mb-1">Points</p>
-                  <p className="text-lg font-semibold text-neutral-900">{stats.points}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-4">
-            {/* Progress Bar */}
-            <div className="mb-4">
-              <div className="flex justify-between text-xs sm:text-sm mb-2">
-                <span className="text-neutral-700">Progress</span>
-                <span className="text-neutral-600">{stats.completed}/{stats.total} questions</span>
-              </div>
-              <div className="w-full bg-neutral-200 rounded-full h-2">
-                <div 
-                  className="bg-neutral-900 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${stats.completionPercentage}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Difficulty Buttons */}
-            <div className="flex flex-wrap gap-2 mb-3">
-              {["easy", "medium", "hard"].map((difficulty) => (
-                <DifficultyButton
-                  key={difficulty}
-                  difficulty={difficulty}
-                  count={counts[difficulty]}
-                  active={activeDifficulty === difficulty}
-                  loading={isLoadingQuestions}
-                  onClick={() => handleDifficultyChange(difficulty)}
-                />
-              ))}
-            </div>
-
-            {/* Sign in prompt */}
-            {!user && (
-              <div className="bg-neutral-50 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <div>
-                  <p className="text-xs sm:text-sm font-medium text-neutral-900">Sign in to track progress</p>
-                  <p className="text-xs text-neutral-600">Save your answers and track your improvement</p>
-                </div>
-                <button 
-                  onClick={() => setShowAuthModal(true)}
-                  className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-neutral-800 whitespace-nowrap"
-                >
-                  Sign In
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Questions */}
-          <div className="space-y-4 w-full overflow-x-hidden">
-            <MathJaxContext config={mathJaxConfig}>
-              <MathJax>
-                {isLoadingQuestions && questions.length === 0 ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3].map((i) => <QuestionSkeleton key={i} />)}
+      <Navbar />
+      <div className="min-h-screen bg-neutral-50">
+        <MetaDataJobs
+          seoTitle={`${topicName} ${category?.toUpperCase()} Practice`}
+          seoDescription={`Practice ${topicName} questions with detailed solutions.`}
+        />
+        <div className="bg-neutral-50 pt-4 overflow-x-hidden">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 w-full">
+            {/* Header with Stats */}
+            <div className="mb-4 sm:mb-8 mt-16">
+              <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900 mb-1">
+                {topicName}
+              </h1>
+              <p className="text-xs sm:text-sm text-neutral-600 mb-4">
+                {totalQuestionsForDifficulty} questions available
+              </p>
+              
+              {/* Stats Row */}
+              <div className="bg-white rounded-lg border border-neutral-200 p-3 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div>
+                    <p className="text-xs text-neutral-600 mb-1">Completion</p>
+                    <p className="text-lg font-semibold text-neutral-900">{stats.completionPercentage}%</p>
                   </div>
-                ) : questions.length > 0 ? (
-                  <>
-                    {questions.map((question, index) => (
-                      <QuestionCard
-                        key={question._id}
-                        category={category}
-                        question={question}
-                        index={index}
-                        onAnswer={(isCorrect) => handleAnswer(question._id, isCorrect)}
-                        isCompleted={progress.completed.includes(question._id)}
-                        isCorrect={progress.correct.includes(question._id)}
-                        isAdmin={user?.email === ADMIN_EMAIL}
-                      />
-                    ))}
-                    {/* Pagination controls */}
-                    {totalPages > 1 && (
-                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 text-sm text-neutral-700">
-                        <button
-                          onClick={() => goToPage(currentPage - 1)}
-                          disabled={currentPage === 1 || isLoadingQuestions}
-                          className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
-                        >
-                          Previous
-                        </button>
-                        <span className="text-xs sm:text-sm">
-                          Page <span className="font-semibold">{currentPage}</span> of{" "}
-                          <span className="font-semibold">{totalPages}</span>
-                        </span>
-                        <button
-                          onClick={() => goToPage(currentPage + 1)}
-                          disabled={currentPage === totalPages || isLoadingQuestions}
-                          className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-12 bg-white rounded-lg border border-neutral-200">
-                    <Clock size={36} className="mx-auto text-neutral-400 mb-3" />
-                    <h3 className="text-lg font-semibold text-neutral-900 mb-2">No questions available</h3>
-                    <p className="text-sm text-neutral-600">No questions found for {activeDifficulty} difficulty.</p>
+                  <div>
+                    <p className="text-xs text-neutral-600 mb-1">Correct</p>
+                    <p className="text-lg font-semibold text-neutral-900">{stats.correct}</p>
                   </div>
-                )}
-              </MathJax>
-            </MathJaxContext>
+                  <div>
+                    <p className="text-xs text-neutral-600 mb-1">Accuracy</p>
+                    <p className="text-lg font-semibold text-neutral-900">{stats.accuracy}%</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-neutral-600 mb-1">Points</p>
+                    <p className="text-lg font-semibold text-neutral-900">{stats.points}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-4">
+              {/* Progress Bar */}
+              <div className="mb-4">
+                <div className="flex justify-between text-xs sm:text-sm mb-2">
+                  <span className="text-neutral-700">Progress</span>
+                  <span className="text-neutral-600">{stats.completed}/{stats.total} questions</span>
+                </div>
+                <div className="w-full bg-neutral-200 rounded-full h-2">
+                  <div 
+                    className="bg-neutral-900 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${stats.completionPercentage}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Difficulty Buttons */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {["easy", "medium", "hard"].map((difficulty) => (
+                  <DifficultyButton
+                    key={difficulty}
+                    difficulty={difficulty}
+                    count={counts[difficulty]}
+                    active={activeDifficulty === difficulty}
+                    loading={isLoadingQuestions}
+                    onClick={() => handleDifficultyChange(difficulty)}
+                  />
+                ))}
+              </div>
+
+              {/* Sign in prompt */}
+              {!user && (
+                <div className="bg-neutral-50 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs sm:text-sm font-medium text-neutral-900">Sign in to track progress</p>
+                    <p className="text-xs text-neutral-600">Save your answers and track your improvement</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowAuthModal(true)}
+                    className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-neutral-800 whitespace-nowrap"
+                  >
+                    Sign In
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Questions */}
+            <div className="space-y-4 w-full overflow-x-hidden">
+              <MathJaxContext config={mathJaxConfig}>
+                <MathJax>
+                  {isLoadingQuestions && questions.length === 0 ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3].map((i) => <QuestionSkeleton key={i} />)}
+                    </div>
+                  ) : questions.length > 0 ? (
+                    <>
+                      {questions.map((question, index) => (
+                        <QuestionCard
+                          key={question._id}
+                          category={category}
+                          question={question}
+                          index={index}
+                          onAnswer={(isCorrect) => handleAnswer(question._id, isCorrect)}
+                          isCompleted={progress.completed.includes(question._id)}
+                          isCorrect={progress.correct.includes(question._id)}
+                          isAdmin={user?.email === ADMIN_EMAIL || user?.primaryEmailAddress?.emailAddress === ADMIN_EMAIL}
+                        />
+                      ))}
+                      {/* Pagination controls */}
+                      {totalPages > 1 && (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 text-sm text-neutral-700">
+                          <button
+                            onClick={() => goToPage(currentPage - 1)}
+                            disabled={currentPage === 1 || isLoadingQuestions}
+                            className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
+                          >
+                            Previous
+                          </button>
+                          <span className="text-xs sm:text-sm">
+                            Page <span className="font-semibold">{currentPage}</span> of{" "}
+                            <span className="font-semibold">{totalPages}</span>
+                          </span>
+                          <button
+                            onClick={() => goToPage(currentPage + 1)}
+                            disabled={currentPage === totalPages || isLoadingQuestions}
+                            className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-12 bg-white rounded-lg border border-neutral-200">
+                      <Clock size={36} className="mx-auto text-neutral-400 mb-3" />
+                      <h3 className="text-lg font-semibold text-neutral-900 mb-2">No questions available</h3>
+                      <p className="text-sm text-neutral-600">No questions found for {activeDifficulty} difficulty.</p>
+                    </div>
+                  )}
+                </MathJax>
+              </MathJaxContext>
+            </div>
           </div>
         </div>
+        <Toaster position="bottom-right" />
       </div>
-      <Toaster position="bottom-right" />
-    </div>
     </>
   );
 });
