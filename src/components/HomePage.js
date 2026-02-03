@@ -136,7 +136,9 @@ const HOMEPAGE_CATEGORIES = [
   'exam-results',
   'news',
   'world-news',
-  'technology',
+  'regional-news',
+  'sports',
+  'economy',
   'admit-cards',
   'answer-key',
   'admission'
