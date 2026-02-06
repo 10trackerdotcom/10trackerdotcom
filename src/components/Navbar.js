@@ -185,13 +185,13 @@ const Navbar = () => {
                 ) : (
                   <div className="flex items-center gap-2">
                     <Link
-                      href="/sign-in"
+                      href="https://accounts.10tracker.com/sign-in"
                       className="px-4 py-2 rounded-lg font-medium bg-white border border-neutral-300 text-neutral-800 hover:bg-neutral-50 transition-colors"
                     >
                       Sign In
                     </Link>
                     <Link
-                      href="/sign-up"
+                      href="https://accounts.10tracker.com/sign-up"
                       className="px-4 py-2 rounded-lg font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors"
                     >
                       Sign Up
@@ -320,14 +320,14 @@ const Navbar = () => {
               ) : (
                 <div className="space-y-3 pt-2">
                   <Link
-                    href="/sign-in"
+                    href="https://accounts.10tracker.com/sign-in"
                     onClick={() => setIsOpen(false)}
                     className="block w-full px-4 py-3 rounded-lg bg-neutral-900 text-white font-semibold text-base hover:bg-neutral-800 transition-all duration-200 active:scale-[0.98] text-center"
                   >
                     Sign In
                   </Link>
                   <Link
-                    href="/sign-up"
+                    href="https://accounts.10tracker.com/sign-up"
                     onClick={() => setIsOpen(false)}
                     className="block w-full px-4 py-3 rounded-lg bg-white border border-neutral-300 text-neutral-900 font-semibold text-base hover:bg-neutral-50 transition-all duration-200 active:scale-[0.98] text-center"
                   >

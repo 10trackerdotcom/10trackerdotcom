@@ -100,7 +100,7 @@ const MobileBottomMenu = () => {
             </Link>
           ) : (
             <Link
-              href="/sign-in"
+              href="https://accounts.10tracker.com/sign-in"
               className={`flex flex-col items-center justify-center flex-1 h-full transition-colors min-w-0 ${
                 isActive('/sign-in') ? 'text-neutral-900' : 'text-neutral-500'
               }`}
