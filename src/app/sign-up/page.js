@@ -25,7 +25,7 @@ export default function SignUpPage() {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
   const mainAppUrl = process.env.NEXT_PUBLIC_MAIN_APP_URL || "/";
-
+  const mainAppUrlSignUp = process.env.NEXT_PUBLIC_MAIN_APP_URL_SIGN_UP || "/";
   // Non-blocking redirect check - don't wait for it, show content immediately
   useEffect(() => {
     // Only redirect if we're sure user is signed in (non-blocking)
@@ -117,7 +117,7 @@ export default function SignUpPage() {
               {/* Clerk SignUp Component with Custom Styling */}
               <div className="[&_.cl-rootBox]:!w-full [&_.cl-card]:!shadow-none [&_.cl-card]:!border-none [&_.cl-main]:!p-0 [&_.cl-formButtonPrimary]:!transition-all">
                 <SignUpComponent
-                  forceRedirectUrl={mainAppUrl}
+                  forceRedirectUrl={mainAppUrlSignUp}
                   appearance={{
                     elements: {
                       rootBox: "w-full",
