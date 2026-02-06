@@ -24,6 +24,7 @@ const SignUpComponent = dynamic(
 export default function SignUpPage() {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
+  const mainAppUrl = process.env.NEXT_PUBLIC_MAIN_APP_URL || "/";
 
   // Non-blocking redirect check - don't wait for it, show content immediately
   useEffect(() => {
@@ -116,7 +117,7 @@ export default function SignUpPage() {
               {/* Clerk SignUp Component with Custom Styling */}
               <div className="[&_.cl-rootBox]:!w-full [&_.cl-card]:!shadow-none [&_.cl-card]:!border-none [&_.cl-main]:!p-0 [&_.cl-formButtonPrimary]:!transition-all">
                 <SignUpComponent
-                  forceRedirectUrl="/"
+                  forceRedirectUrl={mainAppUrl}
                   appearance={{
                     elements: {
                       rootBox: "w-full",
@@ -148,8 +149,8 @@ export default function SignUpPage() {
                   routing="path"
                   path="/sign-up"
                   signInUrl="/sign-in"
-                  afterSignUpUrl="/"
-                  afterSignInUrl="/"
+                  afterSignUpUrl={mainAppUrl}
+                  afterSignInUrl={mainAppUrl}
                 />
               </div>
             </div>
