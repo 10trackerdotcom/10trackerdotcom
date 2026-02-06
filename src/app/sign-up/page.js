@@ -2,40 +2,22 @@
 
 import { SignUp } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, CheckCircle } from "lucide-react";
-import dynamic from "next/dynamic";
-
-// Lazy load Clerk components for better performance - only load when needed
-const SignUpComponent = dynamic(
-  () => import("@clerk/nextjs").then(mod => mod.SignUp),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center py-12">
-        <div className="w-6 h-6 border-2 border-neutral-300 border-t-neutral-900 rounded-full animate-spin"></div>
-      </div>
-    )
-  }
-);
 
 export default function SignUpPage() {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
   const mainAppUrl = process.env.NEXT_PUBLIC_MAIN_APP_URL || "/";
   const mainAppUrlSignUp = process.env.NEXT_PUBLIC_MAIN_APP_URL_SIGN_UP || "/";
-  // Non-blocking redirect check - don't wait for it, show content immediately
+  
   useEffect(() => {
-    // Only redirect if we're sure user is signed in (non-blocking)
     if (isLoaded && isSignedIn) {
       router.replace("/");
     }
   }, [isLoaded, isSignedIn, router]);
-
-  // Show content immediately - don't wait for Clerk to load
-  // The form will be interactive as soon as Clerk loads in the background
 
   const features = [
     "Unlimited practice questions",
@@ -116,7 +98,7 @@ export default function SignUpPage() {
 
               {/* Clerk SignUp Component with Custom Styling */}
               <div className="[&_.cl-rootBox]:!w-full [&_.cl-card]:!shadow-none [&_.cl-card]:!border-none [&_.cl-main]:!p-0 [&_.cl-formButtonPrimary]:!transition-all">
-                <SignUpComponent
+                <SignUp
                   forceRedirectUrl={mainAppUrlSignUp}
                   appearance={{
                     elements: {
@@ -150,7 +132,6 @@ export default function SignUpPage() {
                   path="/sign-up"
                   signInUrl="/sign-in"
                   afterSignUpUrl={mainAppUrl}
-                  afterSignInUrl={mainAppUrl}
                 />
               </div>
             </div>
@@ -160,4 +141,3 @@ export default function SignUpPage() {
     </div>
   );
 }
-
