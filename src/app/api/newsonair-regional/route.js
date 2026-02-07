@@ -161,7 +161,27 @@ async function processCategory(categoryKey) {
     const title = latestArticle.title;
     const imageUrl = latestArticle.imageUrl || '';
 
-    // Check if an entry with same title & category already exists in postable_entries
+    // Check if an article with same title & category already exists in articles table
+    // We check articles table, NOT is_posted value, to avoid duplicates
+    let existingArticle = null;
+    try {
+      const { data, error } = await supabase
+        .from('articles')
+        .select('id, title, category, created_at')
+        .eq('category', config.dbCategory)
+        .eq('title', title)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking existing article:', error);
+      } else {
+        existingArticle = data || null;
+      }
+    } catch (checkError) {
+      console.error('Unexpected error during existing-article check:', checkError);
+    }
+
+    // Also check postable_entries to avoid duplicate entries
     let existingEntry = null;
     try {
       const { data, error } = await supabase
@@ -180,8 +200,9 @@ async function processCategory(categoryKey) {
       console.error('Unexpected error during existing-entry check:', checkError);
     }
 
-    // If exists, do not insert; return "no new article found" with NO data object
-    if (existingEntry) {
+    // If article exists in articles table OR postable_entries, do not insert
+    // We check by title and category, NOT by is_posted value
+    if (existingArticle || existingEntry) {
       return {
         category: categoryKey,
         success: true,

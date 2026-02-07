@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminAuth } from '@/middleware/adminAuth';
 
+// Force Node.js runtime for file operations (required for Vercel)
+export const runtime = 'nodejs';
+// Increase max duration for large file uploads (Vercel Pro: 60s, Hobby: 10s)
+export const maxDuration = 30;
+
 // Create Supabase client with service role key (bypasses RLS)
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -69,18 +74,54 @@ export async function POST(request) {
     // Generate unique filename
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
-    const fileExt = file.name.split('.').pop();
+    const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `articles/${timestamp}-${randomString}.${fileExt}`;
 
-    // Convert file to buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    // Convert file to format compatible with Supabase Storage
+    // Supabase accepts: Blob, ArrayBuffer, File, Buffer, or Uint8Array
+    let fileData;
+    try {
+      // Try multiple approaches for maximum compatibility
+      if (file instanceof File || file instanceof Blob) {
+        // For File/Blob objects, convert to ArrayBuffer then Buffer
+        const arrayBuffer = await file.arrayBuffer();
+        fileData = Buffer.from(arrayBuffer);
+      } else if (Buffer.isBuffer(file)) {
+        // Already a Buffer
+        fileData = file;
+      } else if (file.arrayBuffer) {
+        // Has arrayBuffer method
+        const arrayBuffer = await file.arrayBuffer();
+        fileData = Buffer.from(arrayBuffer);
+      } else {
+        // Last resort: try to read as stream
+        const chunks = [];
+        if (file.stream) {
+          const reader = file.stream().getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(Buffer.from(value));
+          }
+          fileData = Buffer.concat(chunks);
+        } else {
+          throw new Error('Unsupported file format');
+        }
+      }
+    } catch (bufferError) {
+      console.error('Buffer conversion error:', bufferError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to process file. Please try again.' },
+        { status: 500 }
+      );
+    }
 
     // Upload to Supabase Storage using service role (bypasses RLS)
+    // Supabase Storage accepts Buffer directly in Node.js environments (Vercel uses Node.js runtime)
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('article-images')
-      .upload(fileName, buffer, {
-        contentType: file.type,
+      .upload(fileName, fileData, {
+        contentType: file.type || 'image/jpeg',
         upsert: false,
         cacheControl: '3600'
       });
@@ -128,8 +169,33 @@ export async function POST(request) {
 
   } catch (error) {
     console.error('Upload error:', error);
+    
+    // Provide more specific error messages
+    if (error.message?.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Server configuration error: SUPABASE_SERVICE_ROLE_KEY is missing. Please add it to your environment variables.' 
+        },
+        { status: 500 }
+      );
+    }
+    
+    if (error.message?.includes('timeout') || error.message?.includes('duration')) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Upload timeout. The file may be too large or the server is taking too long. Try a smaller image.' 
+        },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json(
-      { success: false, error: 'Failed to upload image' },
+      { 
+        success: false, 
+        error: error.message || 'Failed to upload image. Please try again.' 
+      },
       { status: 500 }
     );
   }
