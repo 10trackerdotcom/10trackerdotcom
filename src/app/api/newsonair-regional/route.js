@@ -160,6 +160,7 @@ async function processCategory(categoryKey) {
     const latestArticle = articles[0];
     const title = latestArticle.title;
     const imageUrl = latestArticle.imageUrl || '';
+    const articleUrl = latestArticle.url || '';
 
     // Check if an article with same title & category already exists in articles table
     // We check articles table, NOT is_posted value, to avoid duplicates
@@ -218,6 +219,7 @@ async function processCategory(categoryKey) {
           title,
           image_url: imageUrl,
           category: config.dbCategory,
+          url: articleUrl,
           is_posted: false,
         })
         .select()
