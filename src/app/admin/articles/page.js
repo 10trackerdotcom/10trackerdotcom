@@ -30,6 +30,7 @@ import { useUser } from '@clerk/nextjs';
 import RichTextEditor from '@/components/RichTextEditor';
 import { useArticleCategories, clearCategoriesCache } from '@/lib/hooks/useArticleCategories';
 import EmbedManager from '@/components/EmbedManager';
+import ImageUpload from '@/components/ImageUpload';
 import { SUBREDDITS } from '@/lib/subreddits';
 
 const SARKARI_CATEGORIES = [
@@ -1589,55 +1590,67 @@ const AdminArticlesPage = () => {
 
         {/* Articles Table */}
         <div className="bg-white rounded-lg shadow-sm border border-neutral-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-neutral-50 border-b border-neutral-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Title</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Views</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Title</th>
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Category</th>
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Views</th>
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Created</th>
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
                 {filteredArticles.map((article) => (
                   <tr key={article.id} className="hover:bg-neutral-50">
-                    <td className="px-6 py-4">
+                    <td className="px-4 lg:px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div>
+                        {article.featured_image_url && (
+                          <img
+                            src={article.featured_image_url}
+                            alt={article.title}
+                            className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium text-neutral-900 flex items-center gap-2">
-                            {article.title}
+                            <span className="line-clamp-1">{article.title}</span>
                             {article.is_featured && (
-                              <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">
+                              <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full flex-shrink-0">
                                 Featured
                               </span>
                             )}
                           </div>
-                          <div className="text-sm text-neutral-500 line-clamp-1">
+                          <div className="text-xs text-neutral-500 line-clamp-1 mt-1">
                             {article.excerpt || article.content.substring(0, 100)}...
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 lg:px-6 py-4">
                       <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
                         {article.category_name || article.category}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                    <td className="px-4 lg:px-6 py-4">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        article.status === 'published' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
                         {article.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-neutral-500">
+                    <td className="px-4 lg:px-6 py-4 text-sm text-neutral-500">
                       {article.view_count || 0}
                     </td>
-                    <td className="px-6 py-4 text-sm text-neutral-500">
+                    <td className="px-4 lg:px-6 py-4 text-sm text-neutral-500">
                       {formatDate(article.created_at)}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 lg:px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => window.open(`/articles/${article.slug}`, '_blank')}
@@ -1666,6 +1679,82 @@ const AdminArticlesPage = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-neutral-200">
+            {filteredArticles.map((article) => (
+              <div key={article.id} className="p-4 hover:bg-neutral-50">
+                <div className="flex items-start gap-3">
+                  {article.featured_image_url && (
+                    <img
+                      src={article.featured_image_url}
+                      alt={article.title}
+                      className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h3 className="text-sm font-medium text-neutral-900 line-clamp-2 flex-1">
+                        {article.title}
+                      </h3>
+                      {article.is_featured && (
+                        <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full flex-shrink-0">
+                          Featured
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-neutral-500 line-clamp-2 mb-2">
+                      {article.excerpt || article.content.substring(0, 100)}...
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                        {article.category_name || article.category}
+                      </span>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        article.status === 'published' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {article.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-neutral-500 mb-3">
+                      <div className="flex items-center gap-1">
+                        <Eye className="w-3 h-3" />
+                        {article.view_count || 0} views
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(article.created_at)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => window.open(`/articles/${article.slug}`, '_blank')}
+                        className="flex-1 px-3 py-2 text-xs font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" />
+                        View
+                      </button>
+                      <button
+                        onClick={() => openEditModal(article)}
+                        className="flex-1 px-3 py-2 text-xs font-medium text-neutral-600 border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors flex items-center justify-center gap-1"
+                      >
+                        <Edit className="w-3 h-3" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteArticle(article.id)}
+                        className="px-3 py-2 text-xs font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -2365,15 +2454,15 @@ const AdminArticlesPage = () => {
 
       {/* Create/Edit Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            className="bg-white rounded-lg shadow-xl max-w-4xl w-full my-4 max-h-[95vh] flex flex-col"
           >
-            <div className="p-6 border-b border-neutral-200">
+            <div className="p-4 sm:p-6 border-b border-neutral-200 flex-shrink-0">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-neutral-900">
+                <h2 className="text-lg sm:text-xl font-semibold text-neutral-900">
                   {editingArticle ? 'Edit Article' : 'Create New Article'}
                 </h2>
                 <button
@@ -2385,8 +2474,8 @@ const AdminArticlesPage = () => {
               </div>
             </div>
 
-            <form onSubmit={editingArticle ? handleUpdateArticle : handleCreateArticle} className="p-6">
-              <div className="space-y-6">
+            <form onSubmit={editingArticle ? handleUpdateArticle : handleCreateArticle} className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
                 {/* Title */}
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-2">
@@ -2473,18 +2562,12 @@ const AdminArticlesPage = () => {
                 </div>
 
                 {/* Featured Image */}
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Featured Image URL
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.featured_image_url}
-                    onChange={(e) => setFormData({ ...formData, featured_image_url: e.target.value })}
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
+                <ImageUpload
+                  value={formData.featured_image_url}
+                  onChange={(url) => setFormData({ ...formData, featured_image_url: url })}
+                  label="Featured Image"
+                  required={false}
+                />
 
                 {/* Social Media Embeds */}
                 <div>
@@ -2578,17 +2661,17 @@ const AdminArticlesPage = () => {
                 )}
               </div>
 
-              <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-neutral-200">
+              <div className="flex flex-col sm:flex-row justify-end gap-3 p-4 sm:p-6 pt-4 sm:pt-6 border-t border-neutral-200 bg-white flex-shrink-0">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-6 py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors duration-200"
+                  className="w-full sm:w-auto px-6 py-2.5 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors duration-200 font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors duration-200 flex items-center gap-2"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700 transition-colors duration-200 flex items-center justify-center gap-2 font-medium"
                 >
                   <Save className="w-4 h-4" />
                   {editingArticle ? 'Update Article' : 'Create Article'}

@@ -8,27 +8,9 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// Generate static paths for all articles
-export async function generateStaticParams() {
-  try {
-    const { data: articles, error } = await supabase
-      .from('published_articles')
-      .select('slug')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching articles for static generation:', error);
-      return [];
-    }
-
-    return articles?.map((article) => ({
-      slug: article.slug,
-    })) || [];
-  } catch (error) {
-    console.error('Error in generateStaticParams:', error);
-    return [];
-  }
-}
+// Force dynamic rendering - fetch from DB on every request
+export const dynamic = 'force-dynamic';
+export const revalidate = 0; // No caching, always fresh data
 
 // Fetch article data on the server
 export async function generateMetadata({ params }) {
@@ -173,7 +155,6 @@ export default async function ArticlePage({ params }) {
     
     // If view doesn't have social_media_embeds, fetch directly from articles table
     if (article && !article.hasOwnProperty('social_media_embeds')) {
-      console.log('⚠️ View missing social_media_embeds, fetching from articles table');
       const { data: directArticle } = await supabase
         .from('articles')
         .select('social_media_embeds')
@@ -183,18 +164,6 @@ export default async function ArticlePage({ params }) {
       if (directArticle) {
         article.social_media_embeds = directArticle.social_media_embeds;
       }
-    }
-    
-    // Debug log
-    if (article) {
-      console.log('📄 Server-side: Fetched article:', {
-        id: article.id,
-        title: article.title,
-        hasSocialMediaEmbeds: article.hasOwnProperty('social_media_embeds'),
-        socialMediaEmbeds: article.social_media_embeds,
-        socialMediaEmbedsType: typeof article.social_media_embeds,
-        allKeys: Object.keys(article)
-      });
     }
 
     if (articleError || !article) {
