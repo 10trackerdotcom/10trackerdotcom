@@ -67,8 +67,17 @@ const convertNewlinesToBreaks = (text, isUpscPrelims) => {
 };
 
 // Memoized QuestionCard component
-const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
+const QuestionCard = memo(({ question, category, index, onAnswer, questionId: questionIdProp, isCompleted, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
   const { user } = useAuth();
+  const questionId = questionIdProp ?? question._id ?? question.id;
+  // When questionId prop is passed, call onAnswer(questionId, isCorrect); otherwise onAnswer(isCorrect) for backward compat
+  const reportAnswer = useCallback((isCorrect) => {
+    if (questionIdProp !== undefined && questionId != null) {
+      onAnswer(questionId, isCorrect);
+    } else {
+      onAnswer(isCorrect);
+    }
+  }, [questionIdProp, questionId, onAnswer]);
   // Check if this is UPSC Prelims
   const isUpscPrelims = category?.toLowerCase() === 'upsc-prelims' || category?.toLowerCase() === 'upscprelims';
   
@@ -124,13 +133,13 @@ const QuestionCard = memo(({ question, category, index, onAnswer, isCompleted, o
     if (!state.selectedOption || state.isAnswered) return;
     const isCorrect = state.selectedOption === question.correct_option;
     setState((prev) => ({ ...prev, isCorrect, showFeedback: true, isAnswered: true }));
-    setTimeout(() => onAnswer(isCorrect), 800);
-  }, [state.selectedOption, state.isAnswered, question.correct_option, onAnswer]);
+    setTimeout(() => reportAnswer(isCorrect), 800);
+  }, [state.selectedOption, state.isAnswered, question.correct_option, reportAnswer]);
 
   const handleSkip = useCallback(() => {
     setState((prev) => ({ ...prev, isAnswered: true }));
-    onAnswer(false);
-  }, [onAnswer]);
+    reportAnswer(false);
+  }, [reportAnswer]);
 
   const handleReport = useCallback(() => {
     setState((prev) => ({ ...prev, showReportForm: !prev.showReportForm }));

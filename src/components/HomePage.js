@@ -130,18 +130,19 @@ function ExamCard({ exam, index }) {
   );
 }
 
-// Define the 8 specific categories to display on homepage
+// Categories to display on homepage (order: news first, then rest)
 const HOMEPAGE_CATEGORIES = [
-  'latest-jobs',
-  'exam-results',
   'news',
   'world-news',
   'regional-news',
   'sports',
   'economy',
+  'positive-news',
+  'defence-news',
+  'latest-jobs',
   'admit-cards',
+  'exam-results',
   'answer-key',
-  'admission'
 ];
 
 export default function HomePage() {

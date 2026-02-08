@@ -109,7 +109,12 @@ const Pagetracker = memo(() => {
     points: 0
   });
   const [difficultyQuestionIds, setDifficultyQuestionIds] = useState(new Set()); // Store question IDs for current difficulty
-  const [currentPage, setCurrentPage] = useState(() => parsePageFromUrl(searchParams));
+
+  // Single source of truth: derive page from URL to avoid duplicate state + sync effect re-renders
+  const currentPage = useMemo(
+    () => parsePageFromUrl(searchParams),
+    [searchParams]
+  );
 
   // Refs for optimization
   const pendingUpdatesRef = useRef(new Map());
@@ -224,21 +229,19 @@ const Pagetracker = memo(() => {
     }
   }, [category, pagetopic, getCached, setCached]);
 
-  // Fetch questions with pagination
+  // Fetch questions with pagination (sets loading only on network fetch, not on cache hit)
   const fetchQuestions = useCallback(async (difficulty, page = 1) => {
     if (!pagetopic || !category) return;
 
+    const cacheKey = `questions-${category}-${pagetopic}-${difficulty}-${page}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      setQuestions(cached);
+      return;
+    }
+
     setIsLoadingQuestions(true);
     try {
-      const cacheKey = `questions-${category}-${pagetopic}-${difficulty}-${page}`;
-      const cached = getCached(cacheKey);
-      
-      if (cached) {
-        setQuestions(cached);
-        setIsLoadingQuestions(false);
-        return;
-      }
-
       const { data, error } = await supabase
         .from("examtracker")
         .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, difficulty, year, subject, order_index, directionHTML, topic")
@@ -448,47 +451,51 @@ const Pagetracker = memo(() => {
     saveProgressImmediate();
   }, [user, setShowAuthModal, saveProgressImmediate]);
 
-  // Handle difficulty change
+  // Handle difficulty change (page resets to 1 via URL)
   const handleDifficultyChange = useCallback((difficulty) => {
     if (difficulty === activeDifficulty || isLoadingQuestions) return;
     setActiveDifficulty(difficulty);
-    setCurrentPage(1);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("page");
     const query = params.toString();
     router.push(query ? `?${query}` : "?", { scroll: false });
   }, [activeDifficulty, isLoadingQuestions, router, searchParams]);
 
-  // Initial load
+  // Initial load: counts only when category/topic change (full-page loading)
   useEffect(() => {
     if (!category || !pagetopic) return;
-    
+    let cancelled = false;
     const load = async () => {
       setIsLoading(true);
-      await Promise.all([
-        fetchCounts(), 
-        fetchQuestions(activeDifficulty, currentPage),
-        fetchDifficultyQuestionIds(activeDifficulty)
-      ]);
-      setIsLoading(false);
+      try {
+        await fetchCounts();
+        if (!cancelled) setIsLoading(false);
+      } catch {
+        if (!cancelled) setIsLoading(false);
+      }
     };
     load();
-  }, [category, pagetopic, activeDifficulty, currentPage]); // Removed function dependencies
+    return () => { cancelled = true; };
+  }, [category, pagetopic, fetchCounts]);
 
-  // Fetch question IDs when difficulty changes
+  // Question IDs for current difficulty (when category, topic, or difficulty change — not on page change)
   useEffect(() => {
-    if (category && pagetopic && activeDifficulty) {
-      fetchDifficultyQuestionIds(activeDifficulty);
-    }
-  }, [activeDifficulty, category, pagetopic, fetchDifficultyQuestionIds]);
+    if (!category || !pagetopic || !activeDifficulty) return;
+    fetchDifficultyQuestionIds(activeDifficulty);
+  }, [category, pagetopic, activeDifficulty, fetchDifficultyQuestionIds]);
 
-  // Sync current page with URL changes
+  // Questions: fetch only when category, topic, difficulty, or PAGE change (loading set inside fetchQuestions on cache miss only)
   useEffect(() => {
-    const page = parsePageFromUrl(searchParams);
-    if (page !== currentPage) {
-      setCurrentPage(page);
-    }
-  }, [searchParams, currentPage]);
+    if (!category || !pagetopic) return;
+    let cancelled = false;
+    const load = async () => {
+      await fetchQuestions(activeDifficulty, currentPage);
+      if (cancelled) return;
+      // no need to set loading false here; fetchQuestions handles it
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [category, pagetopic, activeDifficulty, currentPage, fetchQuestions]);
 
   // Load progress when user changes
   useEffect(() => {
@@ -599,9 +606,6 @@ const Pagetracker = memo(() => {
       ) {
         return;
       }
-
-      setCurrentPage(page);
-
       const params = new URLSearchParams(searchParams.toString());
       if (page === 1) {
         params.delete("page");
@@ -743,7 +747,8 @@ const Pagetracker = memo(() => {
                           category={category}
                           question={question}
                           index={index}
-                          onAnswer={(isCorrect) => handleAnswer(question._id, isCorrect)}
+                          questionId={question._id}
+                          onAnswer={handleAnswer}
                           isCompleted={progress.completed.includes(question._id)}
                           isCorrect={progress.correct.includes(question._id)}
                           isAdmin={user?.email === ADMIN_EMAIL || user?.primaryEmailAddress?.emailAddress === ADMIN_EMAIL}

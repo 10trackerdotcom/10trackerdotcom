@@ -189,7 +189,7 @@ async function processCategory(categoryKey) {
         .from('postable_entries')
         .select('id, title, image_url, category, created_at')
         .eq('category', config.dbCategory)
-        .eq('title', title)
+        .eq('image_url', imageUrl)
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
