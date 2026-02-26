@@ -67,7 +67,7 @@ const convertNewlinesToBreaks = (text, isUpscPrelims) => {
 };
 
 // Memoized QuestionCard component
-const QuestionCard = memo(({ question, category, index, onAnswer, questionId: questionIdProp, isCompleted, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
+const QuestionCard = memo(({ question, category, index, onAnswer, questionId: questionIdProp, isCompleted, isCorrect, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
   const { user } = useAuth();
   const questionId = questionIdProp ?? question._id ?? question.id;
   // When questionId prop is passed, call onAnswer(questionId, isCorrect); otherwise onAnswer(isCorrect) for backward compat
@@ -103,6 +103,18 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
     },
     isSaving: false,
   });
+
+  // Keep internal answered/correct state in sync with persisted progress
+  useEffect(() => {
+    if (!isCompleted) return;
+    setState((prev) => ({
+      ...prev,
+      isAnswered: true,
+      // If parent knows correctness, reflect it in local feedback state
+      isCorrect: typeof isCorrect === "boolean" ? isCorrect : prev.isCorrect,
+      showFeedback: typeof isCorrect === "boolean" ? true : prev.showFeedback,
+    }));
+  }, [isCompleted, isCorrect]);
 
 // Optimized MathJax config
   const config = useMemo(() => ({
@@ -293,8 +305,8 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <MathJaxContext config={config}>
         <div className="bg-gray-50 p-4 border-b border-gray-100/60">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center space-x-3">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div className="flex items-center space-x-3 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 text-white flex items-center justify-center font-bold text-sm">{questionIndex + 1}</div>
               <div className="flex flex-col space-y-1">
                 <span className="text-xs font-medium text-gray-500 uppercase">Difficulty</span>
@@ -305,7 +317,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
               {questionData.year && (
                 <div className="px-2 py-1 rounded-lg bg-white/80 text-xs font-semibold text-gray-700 border border-gray-200/60">{questionData.year}</div>
               )}
@@ -335,7 +347,9 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
               </button>
               
               {questionData.topic && (
-                <div className="px-2 py-1 rounded-lg bg-white/80 text-xs font-semibold text-gray-700 border border-gray-200/60">{questionData.topic}</div>
+                <div className="px-2 py-1 rounded-lg bg-white/80 text-[10px] sm:text-xs font-semibold text-gray-700 border border-gray-200/60 max-w-full truncate">
+                  {questionData.topic}
+                </div>
               )}
               <div className={`px-2 py-1 rounded-lg text-xs font-semibold border ${state.isAnswered ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                 {state.isAnswered ? (

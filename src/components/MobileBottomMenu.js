@@ -8,36 +8,19 @@ import {
   Home, 
   X, 
   ChevronRight, 
-  Grid3x3, 
   GraduationCap, 
-  Newspaper, 
   BarChart2, 
   User,
-  BookOpen,
   Info,
-  Mail
+  Mail,
+  Menu
 } from 'lucide-react';
-import { useArticleCategories } from '@/lib/hooks/useArticleCategories';
 import { useAuth } from '@/app/context/AuthContext';
 
 const MobileBottomMenu = () => {
-  const [showCategories, setShowCategories] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const pathname = usePathname();
   const { user } = useAuth();
-  
-  // Check if we're on an auth page to prevent unnecessary API calls
-  const isAuthPage = pathname === '/sign-up' || pathname === '/sign-in';
-  
-  // Only fetch categories when drawer is opened AND not on auth pages
-  const { categories, loading: categoriesLoading } = useArticleCategories({ 
-    enabled: showCategories && !isAuthPage 
-  });
-
-  const getCategoryColor = (categorySlug) => {
-    if (!categories || !Array.isArray(categories)) return '#3B82F6';
-    const category = categories.find(cat => cat.slug === categorySlug);
-    return category?.color || '#3B82F6';
-  };
 
   const isActive = (path) => {
     return pathname === path;
@@ -68,24 +51,14 @@ const MobileBottomMenu = () => {
             <span className="text-xs font-medium truncate w-full text-center">Exams</span>
           </Link>
 
-          <Link
-            href="/articles"
-            className={`flex flex-col items-center justify-center flex-1 h-full transition-colors min-w-0 ${
-              isActive('/articles') ? 'text-neutral-900' : 'text-neutral-500'
-            }`}
-          >
-            <Newspaper className="w-5 h-5 mb-1 flex-shrink-0" />
-            <span className="text-xs font-medium truncate w-full text-center">Articles</span>
-          </Link>
-          
           <button
-            onClick={() => setShowCategories(true)}
+            onClick={() => setShowMenu(true)}
             className={`flex flex-col items-center justify-center flex-1 h-full transition-colors min-w-0 ${
-              showCategories ? 'text-neutral-900' : 'text-neutral-500'
+              showMenu ? 'text-neutral-900' : 'text-neutral-500'
             }`}
           >
-            <Grid3x3 className="w-5 h-5 mb-1 flex-shrink-0" />
-            <span className="text-xs font-medium truncate w-full text-center">Categories</span>
+            <Menu className="w-5 h-5 mb-1 flex-shrink-0" />
+            <span className="text-xs font-medium truncate w-full text-center">Menu</span>
           </button>
 
           {user ? (
@@ -112,16 +85,16 @@ const MobileBottomMenu = () => {
         </div>
       </div>
 
-      {/* Drawer-style Category Modal */}
+      {/* Drawer-style Menu Modal */}
       <AnimatePresence>
-        {showCategories && (
+        {showMenu && (
           <>
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowCategories(false)}
+              onClick={() => setShowMenu(false)}
               className="md:hidden fixed inset-0 bg-black/50 z-[60]"
             />
             
@@ -137,7 +110,7 @@ const MobileBottomMenu = () => {
               <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-white sticky top-0 z-10">
                 <h2 className="text-xl font-semibold text-neutral-900">Menu</h2>
                 <button
-                  onClick={() => setShowCategories(false)}
+                  onClick={() => setShowMenu(false)}
                   className="p-2 rounded-lg hover:bg-neutral-100 active:bg-neutral-200 transition-colors"
                   aria-label="Close drawer"
                 >
@@ -147,13 +120,13 @@ const MobileBottomMenu = () => {
 
               {/* Drawer Content */}
               <div className="flex-1 overflow-y-auto px-6 py-6">
-                {/* Quick Navigation */}
+                {/* Quick Links */}
                 <div className="mb-6">
                   <h3 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-3">Quick Links</h3>
                   <div className="space-y-2">
                     <Link
                       href="/exams"
-                      onClick={() => setShowCategories(false)}
+                      onClick={() => setShowMenu(false)}
                       className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 active:bg-neutral-100 transition-all group"
                     >
                       <GraduationCap className="w-5 h-5 text-neutral-600 flex-shrink-0" />
@@ -162,21 +135,10 @@ const MobileBottomMenu = () => {
                       </span>
                       <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-600 transition-colors" />
                     </Link>
-                    <Link
-                      href="/articles"
-                      onClick={() => setShowCategories(false)}
-                      className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 active:bg-neutral-100 transition-all group"
-                    >
-                      <Newspaper className="w-5 h-5 text-neutral-600 flex-shrink-0" />
-                      <span className="text-base font-medium text-neutral-900 group-hover:text-neutral-700 flex-1">
-                        All Articles
-                      </span>
-                      <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-600 transition-colors" />
-                    </Link>
                     {user && (
                       <Link
                         href="/user-progress"
-                        onClick={() => setShowCategories(false)}
+                        onClick={() => setShowMenu(false)}
                         className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 active:bg-neutral-100 transition-all group"
                       >
                         <BarChart2 className="w-5 h-5 text-neutral-600 flex-shrink-0" />
@@ -189,77 +151,13 @@ const MobileBottomMenu = () => {
                   </div>
                 </div>
 
-                {/* Article Categories */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-3">Article Categories</h3>
-                  {categoriesLoading ? (
-                    // Shimmer/Skeleton Loading UI
-                    <div className="space-y-3">
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: i * 0.05 }}
-                          className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 bg-white overflow-hidden relative"
-                        >
-                          {/* Shimmer overlay effect */}
-                          <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
-                          {/* Color dot shimmer */}
-                          <div className="w-4 h-4 rounded-full bg-neutral-200 flex-shrink-0 animate-pulse"></div>
-                          {/* Text shimmer */}
-                          <div className="flex-1 space-y-2">
-                            <div className="h-4 bg-neutral-200 rounded w-3/4 animate-pulse"></div>
-                            <div className="h-3 bg-neutral-100 rounded w-1/2 animate-pulse"></div>
-                          </div>
-                          {/* Arrow shimmer */}
-                          <div className="w-5 h-5 bg-neutral-200 rounded animate-pulse"></div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : categories && Array.isArray(categories) && categories.length > 0 ? (
-                    <div className="space-y-2">
-                      {categories.map((category, index) => (
-                        <motion.div
-                          key={category.slug}
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                        >
-                          <Link
-                            href={`/article/${category.slug}`}
-                            onClick={() => setShowCategories(false)}
-                            className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 active:bg-neutral-100 transition-all group"
-                          >
-                            <div 
-                              className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm"
-                              style={{ backgroundColor: category.color || getCategoryColor(category.slug) }}
-                            />
-                            <span className="text-base font-medium text-neutral-900 group-hover:text-neutral-700 flex-1">
-                              {category.name}
-                            </span>
-                            <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-600 transition-colors" />
-                          </Link>
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="w-12 h-12 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Grid3x3 className="w-6 h-6 text-neutral-400" />
-                      </div>
-                      <p className="text-sm text-neutral-600">No categories available</p>
-                    </div>
-                  )}
-                </div>
-
                 {/* Footer Links */}
                 <div className="pt-4 border-t border-neutral-200">
                   <h3 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide mb-3">More</h3>
                   <div className="space-y-2">
                     <Link
                       href="/about-us"
-                      onClick={() => setShowCategories(false)}
+                      onClick={() => setShowMenu(false)}
                       className="flex items-center gap-3 p-3 rounded-lg text-sm font-medium text-neutral-700 hover:text-neutral-900 hover:bg-neutral-50 transition-all"
                     >
                       <Info className="w-4 h-4 text-neutral-500" />
@@ -267,7 +165,7 @@ const MobileBottomMenu = () => {
                     </Link>
                     <Link
                       href="/contact-us"
-                      onClick={() => setShowCategories(false)}
+                      onClick={() => setShowMenu(false)}
                       className="flex items-center gap-3 p-3 rounded-lg text-sm font-medium text-neutral-700 hover:text-neutral-900 hover:bg-neutral-50 transition-all"
                     >
                       <Mail className="w-4 h-4 text-neutral-500" />

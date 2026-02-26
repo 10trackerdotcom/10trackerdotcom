@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
-  BookOpen,
   User,
   LogIn,
   LogOut,
@@ -16,36 +15,16 @@ import {
   FileText,
   Info,
   Mail,
-  Grid3x3,
-  ChevronRight,
   GraduationCap,
-  BookMarked,
-  Newspaper,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
-import { useArticleCategories } from "@/lib/hooks/useArticleCategories";
 import { NotificationButton } from "@/components/NotificationEnrollment";
 
 const Navbar = () => {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [showCategoryDrawer, setShowCategoryDrawer] = useState(false);
   const { user, signOut, setShowAuthModal, isAdmin, setShowProfileModal } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  
-  // Check if we're on an auth page to prevent unnecessary API calls
-  const isAuthPage = pathname === '/sign-up' || pathname === '/sign-in';
-  
-  // Only fetch categories when drawer is opened AND not on auth pages
-  const { categories, loading: categoriesLoading } = useArticleCategories({ 
-    enabled: showCategoryDrawer && !isAuthPage 
-  });
-
-  const getCategoryColor = (categorySlug) => {
-    if (!categories || !Array.isArray(categories)) return '#3B82F6';
-    const category = categories.find(cat => cat.slug === categorySlug);
-    return category?.color || '#3B82F6';
-  };
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
@@ -63,7 +42,6 @@ const Navbar = () => {
   const mainNavItems = [
     { name: "Home", path: "/", icon: <Home size={18} /> },
     { name: "Exams", path: "/exams", icon: <GraduationCap size={18} /> },
-    { name: "Articles", path: "/articles", icon: <Newspaper size={18} /> },
     { name: "About Us", path: "/about-us", icon: <Info size={18} /> },
     { name: "Contact Us", path: "/contact-us", icon: <Mail size={18} /> },
   ];
@@ -253,19 +231,6 @@ const Navbar = () => {
                 className="flex items-center w-full px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
               />
 
-              {/* Article Categories Button */}
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  setShowCategoryDrawer(true);
-                }}
-                className="flex items-center w-full px-4 py-3 rounded-lg text-base font-medium text-gray-800 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200 active:bg-gray-100"
-              >
-                <Grid3x3 size={18} className="mr-3 text-gray-600" />
-                Article Categories
-                <ChevronRight size={18} className="ml-auto text-gray-400" />
-              </button>
-
               {/* Divider */}
               <div className="my-4 border-t border-gray-200"></div>
 
@@ -354,106 +319,6 @@ const Navbar = () => {
               </div>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Category Drawer for Mobile */}
-      <AnimatePresence>
-        {showCategoryDrawer && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowCategoryDrawer(false)}
-              className="md:hidden fixed inset-0 bg-black/50 z-[60]"
-            />
-            
-            {/* Drawer */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'tween', duration: 0.3, ease: 'easeInOut' }}
-              className="md:hidden fixed top-0 right-0 bottom-0 w-full max-w-sm bg-white z-[70] shadow-2xl flex flex-col"
-            >
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200 bg-white sticky top-0 z-10">
-                <h2 className="text-xl font-semibold text-neutral-900">Categories</h2>
-                <button
-                  onClick={() => setShowCategoryDrawer(false)}
-                  className="p-2 rounded-lg hover:bg-neutral-100 active:bg-neutral-200 transition-colors"
-                  aria-label="Close drawer"
-                >
-                  <X className="w-6 h-6 text-neutral-600" />
-                </button>
-              </div>
-
-              {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto px-6 py-6">
-                {categoriesLoading ? (
-                  // Enhanced Shimmer/Skeleton Loading UI
-                  <div className="space-y-3">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: i * 0.05 }}
-                        className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 bg-white overflow-hidden relative"
-                      >
-                        {/* Shimmer overlay effect */}
-                        <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent"></div>
-                        {/* Color dot shimmer */}
-                        <div className="w-4 h-4 rounded-full bg-neutral-200 flex-shrink-0 animate-pulse"></div>
-                        {/* Text shimmer */}
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-neutral-200 rounded w-3/4 animate-pulse"></div>
-                          <div className="h-3 bg-neutral-100 rounded w-1/2 animate-pulse"></div>
-                        </div>
-                        {/* Arrow shimmer */}
-                        <div className="w-5 h-5 bg-neutral-200 rounded animate-pulse"></div>
-                      </motion.div>
-                    ))}
-                  </div>
-                ) : categories && Array.isArray(categories) && categories.length > 0 ? (
-                  <div className="space-y-2">
-                    {categories.map((category, index) => (
-                      <motion.div
-                        key={category.slug}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                      >
-                        <Link
-                          href={`/article/${category.slug}`}
-                          onClick={() => setShowCategoryDrawer(false)}
-                          className="flex items-center gap-4 p-4 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 active:bg-neutral-100 transition-all group"
-                        >
-                          <div 
-                            className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm"
-                            style={{ backgroundColor: category.color || getCategoryColor(category.slug) }}
-                          />
-                          <span className="text-base font-medium text-neutral-900 group-hover:text-neutral-700 flex-1">
-                            {category.name}
-                          </span>
-                          <ChevronRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-600 transition-colors" />
-                        </Link>
-                      </motion.div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Grid3x3 className="w-8 h-8 text-neutral-400" />
-                    </div>
-                    <p className="text-neutral-600">No categories available</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </>
         )}
       </AnimatePresence>
 

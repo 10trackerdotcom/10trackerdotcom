@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
@@ -95,6 +95,7 @@ const Pagetracker = memo(() => {
   const { category, pagetopic } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const { user, setShowAuthModal } = useAuth();
 
   // State
@@ -431,14 +432,25 @@ const Pagetracker = memo(() => {
       return;
     }
 
+    // If this question is already marked completed, do not re-award points or re-save
+    if (progress.completed.includes(questionId)) {
+      return;
+    }
+
     // Optimistic update
-    setProgress(prev => ({
-      completed: [...new Set([...prev.completed, questionId])],
-      correct: isCorrect 
-        ? [...new Set([...prev.correct, questionId])]
-        : prev.correct.filter(id => id !== questionId),
-      points: prev.points + (isCorrect ? POINTS_PER_CORRECT_ANSWER : 0)
-    }));
+    setProgress(prev => {
+      // Double-guard inside state update in case progress changed between renders
+      if (prev.completed.includes(questionId)) {
+        return prev;
+      }
+      return {
+        completed: [...new Set([...prev.completed, questionId])],
+        correct: isCorrect 
+          ? [...new Set([...prev.correct, questionId])]
+          : prev.correct.filter(id => id !== questionId),
+        points: prev.points + (isCorrect ? POINTS_PER_CORRECT_ANSWER : 0)
+      };
+    });
 
     // Queue for batch save
     pendingUpdatesRef.current.set(questionId, {
@@ -449,7 +461,7 @@ const Pagetracker = memo(() => {
 
     // Save immediately
     saveProgressImmediate();
-  }, [user, setShowAuthModal, saveProgressImmediate]);
+  }, [user, setShowAuthModal, saveProgressImmediate, progress]);
 
   // Handle difficulty change (page resets to 1 via URL)
   const handleDifficultyChange = useCallback((difficulty) => {
@@ -458,8 +470,9 @@ const Pagetracker = memo(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("page");
     const query = params.toString();
-    router.push(query ? `?${query}` : "?", { scroll: false });
-  }, [activeDifficulty, isLoadingQuestions, router, searchParams]);
+    const basePath = pathname || "";
+    router.push(query ? `${basePath}?${query}` : basePath, { scroll: false });
+  }, [activeDifficulty, isLoadingQuestions, router, searchParams, pathname]);
 
   // Initial load: counts only when category/topic change (full-page loading)
   useEffect(() => {
@@ -500,7 +513,7 @@ const Pagetracker = memo(() => {
   // Load progress when user changes
   useEffect(() => {
     fetchUserProgress();
-  }, [user?.id, pagetopic, category]); // More specific dependencies
+  }, [user?.id, pagetopic, category, fetchUserProgress]); // More specific dependencies
 
   // Cleanup and save on unmount
   useEffect(() => {
@@ -596,27 +609,22 @@ const Pagetracker = memo(() => {
     [totalQuestionsForDifficulty]
   );
 
-  const goToPage = useCallback(
-    (page) => {
-      if (
-        page === currentPage ||
-        page < 1 ||
-        page > totalPages ||
-        isLoadingQuestions
-      ) {
-        return;
-      }
+  // Keep URL page in sync with available data (handles invalid/out-of-range page params)
+  useEffect(() => {
+    // Wait until counts/questions have loaded to avoid resetting valid page params on initial mount
+    if (isLoading || isLoadingQuestions || !totalPages) return;
+    if (currentPage > totalPages) {
       const params = new URLSearchParams(searchParams.toString());
-      if (page === 1) {
+      if (totalPages === 1) {
         params.delete("page");
       } else {
-        params.set("page", String(page));
+        params.set("page", String(totalPages));
       }
       const query = params.toString();
-      router.push(query ? `?${query}` : "?", { scroll: false });
-    },
-    [currentPage, totalPages, isLoadingQuestions, router, searchParams]
-  );
+      const basePath = pathname || "";
+      router.replace(query ? `${basePath}?${query}` : basePath, { scroll: false });
+    }
+  }, [currentPage, totalPages, router, searchParams, pathname, isLoading, isLoadingQuestions]);
 
   // Format topic name
   const topicName = useMemo(() => formatTopicName(pagetopic), [pagetopic]);
@@ -757,32 +765,54 @@ const Pagetracker = memo(() => {
                       {/* Pagination controls */}
                       {totalPages > 1 && (
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 text-sm text-neutral-700">
-                          <button
-                            onClick={() => goToPage(currentPage - 1)}
-                            disabled={currentPage === 1 || isLoadingQuestions}
-                            className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
+                          <a
+                            href={
+                              currentPage === 1 || isLoadingQuestions
+                                ? "#"
+                                : currentPage - 1 === 1
+                                ? pathname || ""
+                                : `${pathname}?page=${currentPage - 1}`
+                            }
+                            aria-disabled={currentPage === 1 || isLoadingQuestions}
+                            className={`px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors w-full sm:w-auto text-center ${
+                              currentPage === 1 || isLoadingQuestions ? "opacity-50 pointer-events-none" : ""
+                            }`}
                           >
                             Previous
-                          </button>
+                          </a>
                           <span className="text-xs sm:text-sm">
                             Page <span className="font-semibold">{currentPage}</span> of{" "}
                             <span className="font-semibold">{totalPages}</span>
                           </span>
-                          <button
-                            onClick={() => goToPage(currentPage + 1)}
-                            disabled={currentPage === totalPages || isLoadingQuestions}
-                            className="px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 transition-colors w-full sm:w-auto"
+                          <a
+                            href={
+                              currentPage === totalPages || isLoadingQuestions
+                                ? "#"
+                                : `${pathname}?page=${currentPage + 1}`
+                            }
+                            aria-disabled={currentPage === totalPages || isLoadingQuestions}
+                            className={`px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors w-full sm:w-auto text-center ${
+                              currentPage === totalPages || isLoadingQuestions ? "opacity-50 pointer-events-none" : ""
+                            }`}
                           >
                             Next
-                          </button>
+                          </a>
                         </div>
                       )}
                     </>
                   ) : (
                     <div className="text-center py-12 bg-white rounded-lg border border-neutral-200">
                       <Clock size={36} className="mx-auto text-neutral-400 mb-3" />
-                      <h3 className="text-lg font-semibold text-neutral-900 mb-2">No questions available</h3>
-                      <p className="text-sm text-neutral-600">No questions found for {activeDifficulty} difficulty.</p>
+                      <h3 className="text-lg font-semibold text-neutral-900 mb-2">
+                        {totalQuestionsForDifficulty === 0
+                          ? "No questions available"
+                          : "No questions on this page"}
+                      </h3>
+                      <p className="text-sm text-neutral-600">
+                        {totalQuestionsForDifficulty === 0
+                          ? `No questions found for ${activeDifficulty} difficulty.`
+                          : "You’ve navigated to an empty page. Use the pagination controls to go back to an earlier page."}
+                      </p>
                     </div>
                   )}
                 </MathJax>
