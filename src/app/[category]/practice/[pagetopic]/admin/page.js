@@ -738,7 +738,7 @@ const PremiumTestInterface = () => {
       try {
         await supabase.from("user_progress").upsert({
           user_id: user.id,
-          email: user.email,
+          email: user?.emailAddresses[0]?.emailAddress,
           topic: pagetopic,
           completedquestions: updatedProgress.completedquestions,
           correctanswers: updatedProgress.correctanswers,

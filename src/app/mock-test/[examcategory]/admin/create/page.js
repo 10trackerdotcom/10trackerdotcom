@@ -53,7 +53,16 @@ export default function CreateTestPage() {
   });
 
   // Check if user is admin
-  const isAdmin = user?.email === 'jain10gunjan@gmail.com';
+  console.log(user);
+  const isAdmin = user?.emailAddresses[0]?.emailAddress === 'jain10gunjan@gmail.com';
+  const userEmail = useMemo(() => {
+    return (
+      user?.primaryEmailAddress?.emailAddress ||
+      user?.emailAddresses?.[0]?.emailAddress ||
+      user?.email ||
+      null
+    );
+  }, [user]);
 
   // Fetch subjects and topics from API
   useEffect(() => {
@@ -213,6 +222,9 @@ export default function CreateTestPage() {
 
     setIsLoading(true);
     try {
+      if (!userEmail) {
+        throw new Error("Unable to determine your email (created_by). Please sign out/in and try again.");
+      }
       let questions = [];
       
       if (testConfig.creationMode === 'manual') {
@@ -236,17 +248,48 @@ export default function CreateTestPage() {
         include_engineering_math: testConfig.includeEngineeringMath,
         custom_weightage: testConfig.customWeightage,
         creation_mode: testConfig.creationMode,
-        created_by: user.email,
+        created_by: userEmail,
         question_distribution: testConfig.creationMode === 'auto' ? calculateQuestionDistribution() : [],
         weightage_config: testConfig.weightageConfig,
         is_active: true
       };
 
-      const { data: savedTest, error: testError } = await supabase
-        .from('mock_tests')
-        .insert(testData)
-        .select()
-        .single();
+      const insertWithSchemaFallback = async (table, payload) => {
+        let lastError = null;
+        let data = null;
+        let cleanedPayload = { ...payload };
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const result = await supabase.from(table).insert(cleanedPayload).select().single();
+          if (!result.error) {
+            data = result.data;
+            lastError = null;
+            break;
+          }
+
+          lastError = result.error;
+
+          // PostgREST missing column error: PGRST204
+          // message example: "Could not find the 'creation_mode' column of 'mock_tests' in the schema cache"
+          if (lastError.code === "PGRST204") {
+            const match = /Could not find the '([^']+)' column/i.exec(lastError.message || "");
+            const missingColumn = match?.[1];
+            if (missingColumn && Object.prototype.hasOwnProperty.call(cleanedPayload, missingColumn)) {
+              delete cleanedPayload[missingColumn];
+              continue;
+            }
+          }
+
+          break;
+        }
+
+        return { data, error: lastError };
+      };
+
+      const { data: savedTest, error: testError } = await insertWithSchemaFallback(
+        "mock_tests",
+        testData
+      );
 
       if (testError) {
         console.error('Error saving test:', testError);

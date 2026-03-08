@@ -7,7 +7,8 @@ import React, {
   useMemo,
   memo,
   lazy,
-  Suspense 
+  Suspense,
+  useRef
 } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
@@ -21,6 +22,8 @@ import {
   Calendar, User, CheckSquare, AlertCircle
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
+import Navbar from "@/components/Navbar";
+import MetaDataJobs from "@/components/Seo";
 
 // Supabase configuration
 const supabase = createClient(
@@ -118,6 +121,10 @@ const initialState = {
   testDuration: 0,
   testStartTime: null,
 
+  // Time tracking (seconds)
+  timeRemaining: 0,
+  totalTime: 0,
+  timeSpent: 0,
   
   // Statistics
   questionsAnswered: 0,
@@ -194,13 +201,17 @@ const reducer = (state, action) => {
         sidebarOpen: false
       };
       
-    // case "UPDATE_TIME":
-    //   return { 
-    //     ...newState, 
-    //     timeSpent: state.timeSpent + 1, 
-    //     totalTime: state.totalTime + 1,
-    //     timeRemaining: Math.max(0, state.timeRemaining - 1)
-    //   };
+    case "UPDATE_TIME": {
+      const nowMs = action.payload?.nowMs ?? Date.now();
+      const questionStart = sanitizeData(state.questionStartTime, "number", nowMs);
+      const timeSpent = Math.max(0, Math.floor((nowMs - questionStart) / 1000));
+      return {
+        ...newState,
+        totalTime: sanitizeData(action.payload?.totalTime, "number", state.totalTime),
+        timeRemaining: sanitizeData(action.payload?.timeRemaining, "number", state.timeRemaining),
+        timeSpent,
+      };
+    }
       
     case "MARK_FOR_REVIEW":
       return { ...newState, ...action.payload };
@@ -248,7 +259,7 @@ const ProgressRing = memo(({ progress, size = 60, strokeWidth = 4, className = "
           stroke="currentColor"
           strokeWidth={strokeWidth}
           fill="transparent"
-          className="text-gray-200"
+          className="text-neutral-200"
         />
         <circle
           cx={size / 2}
@@ -259,13 +270,13 @@ const ProgressRing = memo(({ progress, size = 60, strokeWidth = 4, className = "
           fill="transparent"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
-          className="text-blue-600 transition-all duration-500 ease-out"
+          className="text-neutral-700 transition-all duration-500 ease-out"
           strokeLinecap="round"
         />
       </svg>
       {showPercentage && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xs font-semibold text-gray-700">
+          <span className="text-xs font-semibold text-neutral-700">
             {Math.round(validProgress)}%
           </span>
         </div>
@@ -283,9 +294,20 @@ const TimerDisplay = memo(({
   testStartTime,
   onTimeEnd, 
   onTimeWarning,
+  onTick,
   className = "" 
 }) => {
   const [timeRemaining, setTimeRemaining] = useState(testDuration);
+  const onTimeEndRef = useRef(onTimeEnd);
+  const onTimeWarningRef = useRef(onTimeWarning);
+  const onTickRef = useRef(onTick);
+
+  // Keep latest callbacks without retriggering timer effect
+  useEffect(() => {
+    onTimeEndRef.current = onTimeEnd;
+    onTimeWarningRef.current = onTimeWarning;
+    onTickRef.current = onTick;
+  }, [onTimeEnd, onTimeWarning, onTick]);
 
   const formatTime = useCallback((seconds) => {
     const validSeconds = Math.max(0, sanitizeData(seconds, 'number', 0));
@@ -311,25 +333,26 @@ const TimerDisplay = memo(({
       const remaining = Math.max(0, testDuration - elapsed);
       
       setTimeRemaining(remaining);
+      onTickRef.current?.({ timeRemaining: remaining, totalTime: elapsed, nowMs: now });
 
       // Handle warnings
       if (remaining === 600) {
-        onTimeWarning?.(remaining, '⚠️ 10 minutes left!');
+        onTimeWarningRef.current?.(remaining, '⚠️ 10 minutes left!');
       } else if (remaining === 300) {
-        onTimeWarning?.(remaining, '🚨 5 minutes left!');
+        onTimeWarningRef.current?.(remaining, '🚨 5 minutes left!');
       } else if (remaining === 60) {
-        onTimeWarning?.(remaining, '⏰ Final minute!');
+        onTimeWarningRef.current?.(remaining, '⏰ Final minute!');
       }
 
       if (remaining === 0) {
-        onTimeEnd?.();
+        onTimeEndRef.current?.();
       }
     };
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [testStarted, testStartTime, testDuration, onTimeEnd, onTimeWarning]);
+  }, [testStarted, testStartTime, testDuration]);
 
   const progress = testDuration > 0 ? ((testDuration - timeRemaining) / testDuration) * 100 : 0;
   const isWarning = timeRemaining <= 300;
@@ -341,10 +364,10 @@ const TimerDisplay = memo(({
         size={32} 
         strokeWidth={3} 
         showPercentage={false}
-        className={isWarning ? 'text-red-500' : 'text-blue-500'}
+        className={isWarning ? 'text-red-500' : 'text-neutral-600'}
       />
       <div className={`font-mono text-sm md:text-lg font-bold ${
-        isWarning ? 'text-red-600' : 'text-gray-800'
+        isWarning ? 'text-red-600' : 'text-neutral-800'
       }`}>
         {formatTime(timeRemaining)}
       </div>
@@ -367,7 +390,7 @@ const ConnectionStatus = memo(({ isOnline, lastSaved }) => (
       {isOnline ? 'Online' : 'Offline'}
     </span>
     {lastSaved && (
-      <span className="text-gray-500 hidden sm:inline">
+      <span className="text-neutral-500 hidden sm:inline">
         • Saved {new Date(lastSaved).toLocaleTimeString()}
       </span>
     )}
@@ -390,36 +413,32 @@ const QuestionGrid = memo(({
     const isMarked = markedIds.includes(questionId);
     const isCurrent = index === currentIndex;
 
-    if (isCurrent) return "bg-blue-600 text-white scale-105 ring-2 ring-blue-300";
-    if (isAnswered && isMarked) return "bg-purple-500 text-white";
-    if (isAnswered) return "bg-green-500 text-white";
-    if (isMarked) return "bg-yellow-500 text-white";
-    return "bg-gray-200 text-gray-700 hover:bg-gray-300 active:bg-gray-400";
+    if (isCurrent) return "bg-neutral-900 text-white scale-105 ring-2 ring-neutral-400";
+    if (isAnswered && isMarked) return "bg-neutral-600 text-white";
+    if (isAnswered) return "bg-neutral-700 text-white";
+    if (isMarked) return "bg-amber-500 text-white";
+    return "bg-neutral-200 text-neutral-700 hover:bg-neutral-300 active:bg-neutral-400";
   }, [answeredIds, markedIds, currentIndex]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden">
-        <div className="p-4 border-b flex justify-between items-center">
-          <h3 className="text-lg font-semibold">Questions</h3>
-          <button 
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl w-full max-w-md max-h-[80vh] overflow-hidden border border-neutral-200 shadow-xl">
+        <div className="p-4 border-b border-neutral-200 flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-neutral-900">Questions</h3>
+          <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-600"
+            aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
-        
         <div className="p-4 overflow-y-auto max-h-96">
           <div className="grid grid-cols-5 gap-2 mb-4">
             {questions.map((q, index) => (
               <button
                 key={q.id || index}
-                className={`
-                  p-3 text-sm font-semibold rounded-lg transition-all duration-200 
-                  touch-manipulation active:scale-95
-                  ${getQuestionStatus(q.id, index)}
-                `}
+                className={`relative p-3 text-sm font-semibold rounded-lg transition-all duration-200 touch-manipulation active:scale-95 ${getQuestionStatus(q.id, index)}`}
                 onClick={() => {
                   onNavigate(index);
                   onClose();
@@ -428,32 +447,18 @@ const QuestionGrid = memo(({
               >
                 {index + 1}
                 {markedIds.includes(q.id) && (
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full"></div>
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full" />
                 )}
               </button>
             ))}
           </div>
-          
-          {/* Mobile Legend */}
-          <div className="bg-gray-50 rounded-lg p-3">
-            <h5 className="text-xs font-semibold text-gray-700 mb-2">Legend</h5>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-blue-600 rounded"></div>
-                <span>Current</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-green-500 rounded"></div>
-                <span>Answered</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-                <span>Marked</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-gray-200 rounded"></div>
-                <span>Pending</span>
-              </div>
+          <div className="bg-neutral-50 rounded-lg p-3 border border-neutral-200">
+            <h5 className="text-xs font-semibold text-neutral-700 mb-2">Legend</h5>
+            <div className="grid grid-cols-2 gap-2 text-xs text-neutral-600">
+              <div className="flex items-center space-x-2"><div className="w-3 h-3 bg-neutral-900 rounded" /><span>Current</span></div>
+              <div className="flex items-center space-x-2"><div className="w-3 h-3 bg-neutral-600 rounded" /><span>Answered</span></div>
+              <div className="flex items-center space-x-2"><div className="w-3 h-3 bg-amber-500 rounded" /><span>Marked</span></div>
+              <div className="flex items-center space-x-2"><div className="w-3 h-3 bg-neutral-200 rounded" /><span>Pending</span></div>
             </div>
           </div>
         </div>
@@ -466,64 +471,48 @@ QuestionGrid.displayName = 'QuestionGrid';
 
 // Previous Attempt Check Component
 const PreviousAttemptCard = memo(({ attempt, onViewResult, onRetakeTest }) => (
-  <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
+  <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-6 mb-6">
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center space-x-3">
-        <CheckCircle className="h-8 w-8 text-green-600" />
+        <CheckCircle className="h-8 w-8 text-green-600 flex-shrink-0" />
         <div>
-          <h3 className="text-xl font-bold text-gray-900">Test Already Attempted</h3>
-          <p className="text-gray-600">You have previously taken this test</p>
+          <h3 className="text-xl font-bold text-neutral-900">Test Already Attempted</h3>
+          <p className="text-neutral-600 text-sm">You have previously taken this test.</p>
         </div>
       </div>
     </div>
-    
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div className="text-center p-3 bg-blue-50 rounded-lg">
-        <div className="text-2xl font-bold text-blue-700">{attempt.score || 0}</div>
-        <div className="text-blue-600 text-sm">Score</div>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="text-center p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+        <div className="text-xl font-bold text-neutral-900">{attempt.score ?? 0}</div>
+        <div className="text-neutral-600 text-xs">Score</div>
       </div>
-      <div className="text-center p-3 bg-green-50 rounded-lg">
-        <div className="text-2xl font-bold text-green-700">{attempt.percentage || 0}%</div>
-        <div className="text-green-600 text-sm">Percentage</div>
+      <div className="text-center p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+        <div className="text-xl font-bold text-neutral-900">{attempt.percentage ?? 0}%</div>
+        <div className="text-neutral-600 text-xs">Percentage</div>
       </div>
-      <div className="text-center p-3 bg-purple-50 rounded-lg">
-        <div className="text-2xl font-bold text-purple-700">{attempt.attempted_questions || 0}</div>
-        <div className="text-purple-600 text-sm">Attempted</div>
+      <div className="text-center p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+        <div className="text-xl font-bold text-neutral-900">{attempt.attempted_questions ?? 0}</div>
+        <div className="text-neutral-600 text-xs">Attempted</div>
       </div>
-      <div className="text-center p-3 bg-orange-50 rounded-lg">
-        <div className="text-2xl font-bold text-orange-700">{attempt.duration_taken || 0}m</div>
-        <div className="text-orange-600 text-sm">Time Taken</div>
+      <div className="text-center p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+        <div className="text-xl font-bold text-neutral-900">{attempt.duration_taken ?? 0}m</div>
+        <div className="text-neutral-600 text-xs">Time</div>
       </div>
     </div>
-    
-    <div className="mb-6">
-      <p className="text-sm text-gray-600 mb-2">
-        <Calendar className="h-4 w-4 inline mr-1" />
-        Attempted on: {new Date(attempt.submitted_at).toLocaleDateString()}
-      </p>
-      <p className="text-sm text-gray-600">
-        <User className="h-4 w-4 inline mr-1" />
-        Status: <span className="font-semibold capitalize">{attempt.status}</span>
-      </p>
+    <div className="mb-6 text-sm text-neutral-600 space-y-1">
+      <p className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> Attempted on: {new Date(attempt.submitted_at).toLocaleDateString()}</p>
+      <p className="flex items-center gap-1.5"><User className="h-4 w-4" /> Status: <span className="font-semibold capitalize text-neutral-800">{attempt.status}</span></p>
     </div>
-    
     <div className="flex flex-col sm:flex-row gap-3">
       {attempt.status === 'completed' ? (
-        <button
-        onClick={onViewResult}
-        className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-      >
-        <Trophy className="h-5 w-5 mr-2" />
-        View Results
-      </button>
-      ) : 
-      <button
-        onClick={onRetakeTest}
-        className="flex-1 bg-gray-200 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-300 transition-colors flex items-center justify-center"
-      >
-        <RefreshCw className="h-5 w-5 mr-2" />
-        Start Test
-      </button>}
+        <button onClick={onViewResult} className="flex-1 bg-neutral-900 text-white px-6 py-3 rounded-lg hover:bg-neutral-800 transition-colors flex items-center justify-center font-medium">
+          <Trophy className="h-5 w-5 mr-2" /> View Results
+        </button>
+      ) : (
+        <button onClick={onRetakeTest} className="flex-1 bg-neutral-100 text-neutral-800 px-6 py-3 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center font-medium">
+          <RefreshCw className="h-5 w-5 mr-2" /> Start Test
+        </button>
+      )}
     </div>
   </div>
 ));
@@ -544,6 +533,7 @@ export default function EnhancedMobileMockTestPage() {
   const [networkError, setNetworkError] = useState(false);
   const [previousAttempt, setPreviousAttempt] = useState(null);
   const [allowRetake, setAllowRetake] = useState(false);
+  const autoSubmitOnceRef = useRef(false);
 
  // Optimized MathJax config
  const config = useMemo(() => ({
@@ -557,8 +547,7 @@ export default function EnhancedMobileMockTestPage() {
   showMathMenu: false,
 }), []);
 
-console.log("Running");
-  // Enhanced time formatting - MOVED INSIDE COMPONENT
+  // Time formatting
   const formatTime = useCallback((seconds) => {
     const validSeconds = sanitizeData(seconds, 'number', 0);
     const hours = Math.floor(validSeconds / 3600);
@@ -626,8 +615,17 @@ console.log("Running");
   }, []);
 
   // Check for previous attempts
+  const userEmail = useMemo(() => {
+    return (
+      user?.primaryEmailAddress?.emailAddress ||
+      user?.emailAddresses?.[0]?.emailAddress ||
+      user?.email ||
+      null
+    );
+  }, [user]);
+
   const checkPreviousAttempts = useCallback(async () => {
-    if (!user?.email || !testId) return;
+    if (!userEmail || !testId) return;
 
     try {
       const { data: attempts, error } = await supabase
@@ -637,23 +635,21 @@ console.log("Running");
           duration_taken, status, is_completed
         `)
         .eq('test_id', testId)
-        .eq('user_email', user.email)
+        .eq('user_email', userEmail)
         .eq('is_completed', true)
         .order('submitted_at', { ascending: false })
         .limit(1);
 
       if (error) throw error;
 
-      console.log(attempts);
-
-      if (attempts && attempts.length > 0) {
+      if (attempts?.length > 0) {
         setPreviousAttempt(attempts[0]);
         setAllowRetake(true);
       }
     } catch (error) {
       console.error('Error checking previous attempts:', error);
     }
-  }, [user?.email, testId]);
+  }, [userEmail, testId]);
 
   // Auto-save functionality - optimized
   const performAutoSave = useCallback(async () => {
@@ -701,9 +697,11 @@ console.log("Running");
   }, [state.testStarted, state.autoSaveEnabled, state.isOnline, attemptId, performAutoSave]);
 
   const handleTimeEnd = useCallback(async () => {
+    if (autoSubmitOnceRef.current) return;
+    autoSubmitOnceRef.current = true;
     toast.error('⏰ Time up! Auto-submitting...', { duration: 5000 });
     await submitTest(true);
-  }, []);
+  }, [submitTest]);
   
   const handleTimeWarning = useCallback((timeRemaining, message) => {
     toast.error(message, { 
@@ -811,6 +809,8 @@ console.log("Running");
           currentQuestionIndex: 0,
           testDuration: testDurationInSeconds,
           timeRemaining: testDurationInSeconds,
+          totalTime: 0,
+          timeSpent: 0,
           answerHistory: [],
           answerSummary: {},
           answeredQuestionIds: [],
@@ -825,11 +825,15 @@ console.log("Running");
 
   const startTestAttempt = async () => {
     try {
+      if (!userEmail) {
+        toast.error("Please sign in again to start the test.");
+        return;
+      }
       const { data: attemptData, error: attemptError } = await supabase
         .from('user_test_attempts')
         .insert({
           test_id: testId,
-          user_email: sanitizeData(user?.email, 'string', 'anonymous@test.com'),
+          user_email: sanitizeData(userEmail, 'string', 'anonymous@test.com'),
           total_questions: state.questionsQueue.length,
           started_at: new Date().toISOString(),
           status: 'in_progress'
@@ -841,6 +845,7 @@ console.log("Running");
 
       setAttemptId(attemptData.id);
       dispatch({ type: "START_TEST", payload: { testStarted: true } });
+      autoSubmitOnceRef.current = false;
       toast.success('🚀 Test started!', { duration: 2000 });
     } catch (error) {
       console.error('Error starting test:', error);
@@ -995,7 +1000,7 @@ console.log("Running");
     await submitTest(true);
   };
 
-  const submitTest = async (isAutoSubmit = false) => {
+  async function submitTest(isAutoSubmit = false) {
     if (!attemptId) {
       toast.error('No test session found');
       return;
@@ -1006,7 +1011,8 @@ console.log("Running");
 
     try {
       const stats = currentStats;
-      const timeSpentMinutes = Math.max(1, Math.round(state.totalTime / 60));
+      const elapsedSeconds = sanitizeData(state.totalTime, "number", 0);
+      const timeSpentMinutes = Math.max(1, Math.round(elapsedSeconds / 60));
 
       // Create answered questions lookup map
       const answeredMap = new Map();
@@ -1124,30 +1130,30 @@ console.log("Running");
 
       if (updateError) throw updateError;
 
-      // Save individual responses - ALL questions
+      // Save individual responses - ALL questions (correct_answer is NOT NULL in DB)
       const responses = allQuestions.map(question => ({
         attempt_id: attemptId,
         question_id: question.id,
         question_order: question.order,
-        user_answer: question.userAnswer,
-        correct_answer: question.correct_option,
+        user_answer: question.userAnswer ?? '',
+        correct_answer: question.correct_option ?? '',
         is_correct: question.isCorrect,
         time_taken: question.timeSpent,
         marked_for_review: question.isMarkedForReview,
-        subject: question.subject,
-        topic: question.topic,
-        difficulty: question.difficulty,
+        subject: question.subject ?? '',
+        topic: question.topic ?? '',
+        difficulty: question.difficulty ?? '',
         response_type: question.isAttempted ? 'answered' : 'skipped',
         is_unanswered: !question.isAttempted
       }));
 
-      // Insert responses in batches
+      // Upsert responses in batches (idempotent)
       const batchSize = 50;
       for (let i = 0; i < responses.length; i += batchSize) {
         const batch = responses.slice(i, i + batchSize);
         const { error: batchError } = await supabase
           .from('user_question_responses')
-          .insert(batch);
+          .upsert(batch, { onConflict: 'attempt_id,question_id' });
         
         if (batchError) {
           console.error(`Batch ${i / batchSize + 1} error:`, batchError);
@@ -1211,7 +1217,7 @@ console.log("Running");
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }
 
   const getQuestionStatus = useCallback((questionId, index) => {
     const isAnswered = state.answeredQuestionIds.includes(questionId);
@@ -1236,31 +1242,40 @@ console.log("Running");
   }, []);
 
   // Loading state
+  const categoryLabel = (examcategory?.toUpperCase?.() || 'GATE CSE').replace(/-/g, ' ');
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 md:h-16 md:w-16 border-4 border-blue-200 border-t-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium text-sm md:text-base">Loading test...</p>
+      <div className="min-h-screen bg-neutral-50">
+        <Navbar />
+        <MetaDataJobs seoTitle={`Mock Test`} seoDescription={`Take a ${categoryLabel} mock test.`} />
+        <div className="pt-24 min-h-screen flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-neutral-200 border-t-neutral-700 mx-auto mb-4" />
+            <p className="text-neutral-600 font-medium text-sm md:text-base">Loading test…</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Error states
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="text-center bg-white rounded-xl shadow-xl p-6 md:p-8 max-w-sm md:max-w-md w-full">
-          <BookOpen className="h-12 w-12 md:h-16 md:w-16 text-blue-600 mx-auto mb-4" />
-          <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-4">Sign In Required</h2>
-          <p className="text-gray-600 mb-6 text-sm md:text-base">Please sign in to take the test.</p>
-          <button 
-            onClick={() => router.push('/auth/signin')}
-            className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Sign In
-          </button>
+      <div className="min-h-screen bg-neutral-50">
+        <Navbar />
+        <MetaDataJobs seoTitle="Sign In Required" seoDescription="Sign in to take the mock test." />
+        <div className="pt-24 min-h-screen flex items-center justify-center p-4">
+          <div className="text-center bg-white rounded-xl shadow-sm border border-neutral-200 p-6 md:p-8 max-w-sm md:max-w-md w-full">
+            <BookOpen className="h-12 w-12 md:h-14 md:w-14 text-neutral-600 mx-auto mb-4" />
+            <h2 className="text-xl md:text-2xl font-bold text-neutral-900 mb-2">Sign In Required</h2>
+            <p className="text-neutral-600 mb-6 text-sm md:text-base">Please sign in to take the test.</p>
+            <button
+              onClick={() => router.push('/auth/signin')}
+              className="w-full bg-neutral-900 text-white py-3 px-6 rounded-lg hover:bg-neutral-800 transition-colors font-medium"
+            >
+              Sign In
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1268,17 +1283,21 @@ console.log("Running");
 
   if (!testInfo) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center p-4">
-        <div className="text-center bg-white rounded-xl shadow-xl p-6 md:p-8 max-w-sm md:max-w-md w-full">
-          <AlertTriangle className="h-12 w-12 md:h-16 md:w-16 text-red-600 mx-auto mb-4" />
-          <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-4">Test Not Found</h2>
-          <p className="text-gray-600 mb-6 text-sm md:text-base">The requested test is not available.</p>
-          <button 
-            onClick={() => router.push(`/mock-test/${examcategory}`)}
-            className="w-full bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Browse Tests
-          </button>
+      <div className="min-h-screen bg-neutral-50">
+        <Navbar />
+        <MetaDataJobs seoTitle="Test Not Found" seoDescription="The requested mock test was not found." />
+        <div className="pt-24 min-h-screen flex items-center justify-center p-4">
+          <div className="text-center bg-white rounded-xl shadow-sm border border-neutral-200 p-6 md:p-8 max-w-sm md:max-w-md w-full">
+            <AlertTriangle className="h-12 w-12 md:h-14 md:w-14 text-red-600 mx-auto mb-4" />
+            <h2 className="text-xl md:text-2xl font-bold text-neutral-900 mb-2">Test Not Found</h2>
+            <p className="text-neutral-600 mb-6 text-sm md:text-base">The requested test is not available.</p>
+            <button
+              onClick={() => router.push(`/mock-test/${examcategory}`)}
+              className="w-full bg-neutral-900 text-white py-3 px-6 rounded-lg hover:bg-neutral-800 transition-colors font-medium"
+            >
+              Browse Tests
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1287,36 +1306,33 @@ console.log("Running");
   // Pre-test screen with previous attempt check
   if (!state.testStarted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-        <div className="container mx-auto px-4 py-4 md:py-8">
-          {/* Mobile Header */}
-          <div className="flex items-center justify-between mb-6 md:hidden">
-            <button
-              onClick={() => router.back()}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-            >
-              <ArrowLeft className="h-6 w-6" />
-            </button>
-            <h1 className="text-sm font-bold text-gray-900 truncate">{testInfo.name}</h1>
-            <button
-              onClick={() => router.push(`/mock-test/${examcategory}`)}
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-            >
-              <Home className="h-6 w-6" />
-            </button>
-          </div>
-
-          <div className="max-w-4xl mx-auto">
-            {/* Desktop Header */}
-            <div className="text-center mb-6 md:mb-8 hidden md:block">
-              <Trophy className="h-12 w-12 md:h-16 md:w-16 text-blue-600 mx-auto mb-4" />
-              <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
-                {testInfo.name}
-              </h1>
-              <p className="text-lg md:text-xl text-gray-600">
-                {examcategory.toUpperCase()} Mock Test Experience
-              </p>
+      <div className="min-h-screen bg-neutral-50">
+        <Navbar />
+        <MetaDataJobs seoTitle={testInfo.name} seoDescription={`Take ${testInfo.name} - ${categoryLabel} mock test.`} />
+        <div className="pt-24 min-h-screen">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+            {/* Mobile Header */}
+            <div className="flex items-center justify-between mb-6 md:hidden">
+              <button onClick={() => router.back()} className="p-2 text-neutral-600 hover:bg-neutral-100 rounded-lg" aria-label="Back">
+                <ArrowLeft className="h-6 w-6" />
+              </button>
+              <h1 className="text-sm font-bold text-neutral-900 truncate flex-1 mx-2 text-center">{testInfo.name}</h1>
+              <button onClick={() => router.push(`/mock-test/${examcategory}`)} className="p-2 text-neutral-600 hover:bg-neutral-100 rounded-lg" aria-label="Home">
+                <Home className="h-6 w-6" />
+              </button>
             </div>
+
+            <div className="max-w-4xl mx-auto">
+              {/* Desktop Header */}
+              <div className="text-center mb-6 md:mb-8 hidden md:block">
+                <Trophy className="h-12 w-12 md:h-14 md:w-14 text-neutral-600 mx-auto mb-4" />
+                <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900 mb-2">
+                  {testInfo.name}
+                </h1>
+                <p className="text-base md:text-lg text-neutral-600">
+                  {categoryLabel} · Full-length mock test
+                </p>
+              </div>
 
             {/* Previous Attempt Check */}
             {previousAttempt && (
@@ -1330,431 +1346,227 @@ console.log("Running");
             {/* Only show test start if no previous attempt or retake is allowed */}
 {(!previousAttempt) && (
   <>
-    {/* Test Overview - Mobile First */}
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-      <div className="lg:col-span-2 bg-white rounded-xl shadow-lg p-4 md:p-6">
-        <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6 flex items-center">
-          <BarChart3 className="h-5 w-5 mr-2 text-blue-600" />
-          Test Overview
+      <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-neutral-200 p-4 md:p-6">
+        <h2 className="text-lg font-semibold text-neutral-900 mb-4 flex items-center">
+          <BarChart3 className="h-5 w-5 mr-2 text-neutral-600" />
+          Test overview
         </h2>
-        
-        {/* Mobile-first grid */}
-        <div className="grid grid-cols-2 gap-3 md:gap-6 mb-6">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6">
           <div className="flex items-center space-x-2 md:space-x-3">
-            <Target className="h-6 w-6 md:h-8 md:w-8 text-blue-600 flex-shrink-0" />
+            <Target className="h-6 w-6 text-neutral-600 flex-shrink-0" />
             <div>
-              <p className="text-xs md:text-sm text-gray-600">Questions</p>
-              <p className="text-lg md:text-xl font-bold">{testInfo.total_questions}</p>
+              <p className="text-xs md:text-sm text-neutral-600">Questions</p>
+              <p className="text-lg md:text-xl font-bold text-neutral-900">{testInfo.total_questions}</p>
             </div>
           </div>
-          
           <div className="flex items-center space-x-2 md:space-x-3">
-            <Timer className="h-6 w-6 md:h-8 md:w-8 text-green-600 flex-shrink-0" />
+            <Timer className="h-6 w-6 text-neutral-600 flex-shrink-0" />
             <div>
-              <p className="text-xs md:text-sm text-gray-600">Duration</p>
-              <p className="text-lg md:text-xl font-bold">
-                {Math.floor(testInfo.duration / 60)}h {testInfo.duration % 60}m
-              </p>
+              <p className="text-xs md:text-sm text-neutral-600">Duration</p>
+              <p className="text-lg md:text-xl font-bold text-neutral-900">{Math.floor(testInfo.duration / 60)}h {testInfo.duration % 60}m</p>
             </div>
           </div>
-          
           <div className="flex items-center space-x-2 md:space-x-3">
-            <Zap className="h-6 w-6 md:h-8 md:w-8 text-purple-600 flex-shrink-0" />
+            <Zap className="h-6 w-6 text-neutral-600 flex-shrink-0" />
             <div>
-              <p className="text-xs md:text-sm text-gray-600">Difficulty</p>
-              <p className="text-lg md:text-xl font-bold capitalize">{testInfo.difficulty}</p>
+              <p className="text-xs md:text-sm text-neutral-600">Difficulty</p>
+              <p className="text-lg md:text-xl font-bold text-neutral-900 capitalize">{testInfo.difficulty}</p>
             </div>
           </div>
-          
           <div className="flex items-center space-x-2 md:space-x-3">
-            <Award className="h-6 w-6 md:h-8 md:w-8 text-orange-600 flex-shrink-0" />
+            <Award className="h-6 w-6 text-neutral-600 flex-shrink-0" />
             <div>
-              <p className="text-xs md:text-sm text-gray-600">Max Score</p>
-              <p className="text-lg md:text-xl font-bold">{testInfo.total_questions * 100}</p>
+              <p className="text-xs md:text-sm text-neutral-600">Max score</p>
+              <p className="text-lg md:text-xl font-bold text-neutral-900">{testInfo.total_questions * 100}</p>
             </div>
           </div>
         </div>
-
-        {/* Additional Test Details */}
-        <div className="border-t pt-4 mb-4">
-          <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-3">Test Details</h3>
-          <div className="space-y-3">
-             
-            <div className="flex items-center justify-between py-2 border-b border-gray-100">
-              <span className="text-sm text-gray-600 flex items-center">
-                <Clock className="h-4 w-4 mr-2 text-blue-500" />
-                Avg. Time per Question
-              </span>
-              <span className="text-sm font-medium">{Math.round(testInfo.duration / testInfo.total_questions * 60)} seconds</span>
-            </div>
-            <div className="flex items-center justify-between py-2 border-b border-gray-100">
-              <span className="text-sm text-gray-600 flex items-center">
-                <Brain className="h-4 w-4 mr-2 text-purple-500" />
-                Question Type
-              </span>
-              <span className="text-sm font-medium">Multiple Choice (MCQ)</span>
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-gray-600 flex items-center">
-                <Flag className="h-4 w-4 mr-2 text-yellow-500" />
-                Review Option
-              </span>
-              <span className="text-sm font-medium">Available</span>
-            </div>
+        <div className="border-t border-neutral-200 pt-4 space-y-2 text-sm text-neutral-600">
+          <div className="flex justify-between py-2 border-b border-neutral-100">
+            <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" /> Avg. time per question</span>
+            <span className="font-medium text-neutral-800">{Math.round(testInfo.duration / testInfo.total_questions * 60)}s</span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-neutral-100">
+            <span className="flex items-center gap-1.5"><Brain className="h-4 w-4" /> Type</span>
+            <span className="font-medium text-neutral-800">MCQ</span>
+          </div>
+          <div className="flex justify-between py-2">
+            <span className="flex items-center gap-1.5"><Flag className="h-4 w-4" /> Mark for review</span>
+            <span className="font-medium text-neutral-800">Available</span>
           </div>
         </div>
-
-        {/* {testInfo.description && (
-          <div className="mt-4 md:mt-6 p-3 md:p-4 bg-gray-50 rounded-lg">
-            <h4 className="text-sm font-semibold text-gray-800 mb-2">Description</h4>
-            <p className="text-sm md:text-base text-gray-700">{testInfo.description}</p>
-          </div>
-        )} */}
-
-        {/* Preparation Tips - Mobile */}
-        <div className="mt-4 p-3 bg-blue-50 rounded-lg md:hidden">
-          <h4 className="text-sm font-semibold text-blue-900 mb-2 flex items-center">
-            <Star className="h-4 w-4 mr-1" />
-            Quick Tips
-          </h4>
-          <ul className="text-xs text-blue-800 space-y-1">
-            <li>• Manage time: ~{Math.round(testInfo.duration / testInfo.total_questions * 60)} sec per question</li>
-            <li>• Mark difficult questions for later review</li>
-            <li>• Don&apos;t spend too long on any single question</li>
-            <li>• Review marked questions if time permits</li>
+        <div className="mt-4 p-3 bg-neutral-50 rounded-lg border border-neutral-200 md:hidden">
+          <h4 className="text-sm font-semibold text-neutral-900 mb-2 flex items-center"><Star className="h-4 w-4 mr-1" /> Quick tips</h4>
+          <ul className="text-xs text-neutral-700 space-y-1">
+            <li>• ~{Math.round(testInfo.duration / testInfo.total_questions * 60)}s per question</li>
+            <li>• Mark difficult ones; review if time permits</li>
           </ul>
         </div>
       </div>
 
-      {/* Instructions - Mobile Optimized */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl p-4 md:p-6">
-        <h3 className="text-base md:text-lg font-semibold text-blue-900 mb-3 md:mb-4">
-          <BookOpen className="h-4 w-4 md:h-5 md:w-5 inline mr-2" />
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-4 md:p-6">
+        <h3 className="text-base font-semibold text-neutral-900 mb-3 flex items-center">
+          <BookOpen className="h-4 w-4 mr-2 text-neutral-600" />
           Instructions
         </h3>
-        
-        <div className="space-y-4">
-          {/* Navigation Instructions */}
-          <div>
-            <h4 className="text-sm font-semibold text-blue-900 mb-2">Navigation</h4>
-            <ul className="space-y-2 text-xs md:text-sm text-blue-800">
-              <li className="flex items-start">
-                <CheckCircle className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Swipe left/right or use nav buttons
-              </li>
-              <li className="flex items-start">
-                <CheckCircle className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Jump to any question using grid
-              </li>
-              <li className="flex items-start">
-                <CheckCircle className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Questions auto-saved on selection
-              </li>
-            </ul>
-          </div>
-
-          {/* Answering Instructions */}
-          <div>
-            <h4 className="text-sm font-semibold text-blue-900 mb-2">Answering</h4>
-            <ul className="space-y-2 text-xs md:text-sm text-blue-800">
-              <li className="flex items-start">
-                <Flag className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Mark questions for review
-              </li>
-              <li className="flex items-start">
-                <XCircle className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Clear/change answers anytime
-              </li>
-              <li className="flex items-start">
-                <SkipForward className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Skip difficult questions first
-              </li>
-            </ul>
-          </div>
-
-          {/* System Features */}
-          <div>
-            <h4 className="text-sm font-semibold text-blue-900 mb-2">Features</h4>
-            <ul className="space-y-2 text-xs md:text-sm text-blue-800">
-              <li className="flex items-start">
-                <Save className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Auto-save every 30 seconds
-              </li>
-              <li className="flex items-start">
-                <AlertTriangle className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Time warnings at 10, 5, 1 minute
-              </li>
-              <li className="flex items-start">
-                <RefreshCw className="h-3 w-3 md:h-4 md:w-4 mr-2 mt-0.5 flex-shrink-0" />
-                Auto-submit when time ends
-              </li>
-            </ul>
-          </div>
-
-          {/* Mobile Specific Instructions */}
-          <div className="md:hidden bg-white/50 p-3 rounded-lg">
-            <h4 className="text-sm font-semibold text-blue-900 mb-2">Mobile Tips</h4>
-            <ul className="space-y-1 text-xs text-blue-800">
-              <li>• Use portrait mode for best experience</li>
-              <li>• Tap menu button for question overview</li>
-              <li>• Double-tap to zoom in on questions</li>
-              <li>• Progress saved offline if connection lost</li>
-            </ul>
-          </div>
-        </div>
+        <ul className="space-y-2 text-sm text-neutral-600">
+          <li className="flex items-start gap-2"><CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" /> Use nav or grid to move between questions</li>
+          <li className="flex items-start gap-2"><CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-600" /> Answers auto-saved</li>
+          <li className="flex items-start gap-2"><Flag className="h-4 w-4 mt-0.5 flex-shrink-0" /> Mark for review; clear/change anytime</li>
+          <li className="flex items-start gap-2"><Save className="h-4 w-4 mt-0.5 flex-shrink-0" /> Auto-save every 30s; time warnings at 10, 5, 1 min</li>
+          <li className="flex items-start gap-2"><AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" /> Test auto-submits when time ends</li>
+        </ul>
       </div>
     </div>
 
-    {/* Subject Breakdown - If available */}
-    {/* {state.questionsQueue.length > 0 && ( */}
-      {/* <div className="bg-white rounded-xl shadow-lg p-4 md:p-6 mb-6 md:mb-8">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-          <Brain className="h-5 w-5 mr-2 text-purple-600" />
-          Subject Distribution
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Calculate subject distribution */}
-          {/* {Object.entries(
-            state.questionsQueue.reduce((acc, q) => {
-              acc[q.subject] = (acc[q.subject] || 0) + 1;
-              return acc;
-            }, {})
-          ).map(([subject, count]) => (
-            <div key={subject} className="bg-gray-50 p-3 rounded-lg text-center">
-              <div className="text-xl font-bold text-gray-800">{count}</div>
-              <div className="text-xs text-gray-600 capitalize">{subject}</div>
-              <div className="text-xs text-blue-600 font-medium">
-                {Math.round((count / state.questionsQueue.length) * 100)}%
-              </div>
-            </div>
-          ))}
-        </div> */}
-      {/* </div> } */}
-    {/* )} */}
-
-     
-
-    {/* Start Test Button - Enhanced Mobile */}
-    <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t p-4 md:relative md:bg-transparent md:border-0 md:p-0">
+    <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-neutral-200 p-4 md:relative md:bg-transparent md:border-0 md:p-0">
       <div className="text-center">
         <button
           onClick={startTestAttempt}
           disabled={!state.questionsQueue.length}
-          className="w-full md:w-auto inline-flex items-center justify-center px-6 md:px-8 py-4 md:py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-lg md:text-xl font-bold rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl active:scale-95 min-h-[56px]"
+          className="w-full md:w-auto inline-flex items-center justify-center px-6 md:px-8 py-4 bg-neutral-900 text-white text-base md:text-lg font-semibold rounded-xl hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[52px]"
         >
-          <Play className="h-6 w-6 md:h-7 md:w-7 mr-3" />
-          <span>Start {testInfo.total_questions} Question Test</span>
+          <Play className="h-5 w-5 mr-2" />
+          Start {testInfo.total_questions} question test
         </button>
-        
-        {/* Additional info below button - Mobile */}
-        <div className="mt-3 md:mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            🔒 Secure Test Environment
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
-            Test will start immediately after clicking. Ensure stable internet connection.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    {/* Pre-test Checklist - Mobile Optimized */}
-    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mt-4 md:hidden">
-      <h4 className="text-sm font-semibold text-yellow-800 mb-3 flex items-center">
-        <AlertCircle className="h-4 w-4 mr-2" />
-        Before You Start
-      </h4>
-      <div className="space-y-2 text-xs text-yellow-700">
-        <label className="flex items-center">
-          <input type="checkbox" className="mr-2 rounded" />
-          Stable internet connection
-        </label>
-        <label className="flex items-center">
-          <input type="checkbox" className="mr-2 rounded" />
-          Quiet environment for {Math.floor(testInfo.duration / 60)} hours
-        </label>
-        <label className="flex items-center">
-          <input type="checkbox" className="mr-2 rounded" />
-          Device battery above 20%
-        </label>
-        <label className="flex items-center">
-          <input type="checkbox" className="mr-2 rounded" />
-          No distractions or interruptions
-        </label>
+        <p className="mt-2 text-xs text-neutral-500">Test starts immediately. Progress is auto-saved.</p>
       </div>
     </div>
   </>
 )}
 
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // Main test interface - Mobile First
-return (
-  <div className="min-h-screen bg-gray-50">
-    {/* Network Status Bar */}
-    {networkError && (
-      <div className="bg-red-600 text-white px-4 py-2 text-center text-xs md:text-sm">
-        <WifiOff className="h-3 w-3 md:h-4 md:w-4 inline mr-2" />
-        No internet connection. Your progress is saved locally.
-      </div>
-    )}
+  // Main test interface
+  const totalQ = state.questionsQueue.length;
+  const currentQ = state.currentQuestionIndex + 1;
+  const progressPct = totalQ > 0 ? (currentQ / totalQ) * 100 : 0;
 
-    <div className="container mx-auto px-2 md:px-4 py-2 md:py-4">
-      {state.currentQuestion ? (
-        <MathJaxContext config={config}>
-          {/* Mobile Header Bar */}
-          <div className="bg-white rounded-lg md:rounded-xl shadow-lg p-3 md:p-4 lg:p-6 mb-2 md:mb-4">
-            {/* Top row - Mobile first */}
-            <div className="flex items-center justify-between mb-3 md:mb-4">
-              {/* Left side - Test info */}
-              <div className="flex items-center space-x-2 md:space-x-4 min-w-0 flex-1">
-                <div className="hidden md:block w-8 h-8 lg:w-10 lg:h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="h-4 w-4 lg:h-5 lg:w-5 text-blue-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-sm md:text-lg font-bold text-gray-900 truncate">
-                    {testInfo.name}
-                  </h2>
-                  <p className="text-xs md:text-sm text-gray-600">
-                    Q {state.currentQuestionIndex + 1}/{state.questionsQueue.length}
-                  </p>
-                </div>
-              </div>
+  return (
+    <div className="min-h-screen bg-neutral-50">
+      <Navbar />
+      <MetaDataJobs seoTitle={testInfo.name} seoDescription={`Taking ${testInfo.name} - ${categoryLabel} mock test.`} />
+      {networkError && (
+        <div className="bg-red-600 text-white px-4 py-2 text-center text-xs md:text-sm">
+          <WifiOff className="h-3 w-3 md:h-4 md:w-4 inline mr-2" />
+          No internet. Progress saved locally.
+        </div>
+      )}
 
-              {/* Right side - Timer and actions */}
-              <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
-              <TimerDisplay 
-  testDuration={state.testDuration}
-  testStarted={state.testStarted}
-  testStartTime={state.testStartTime}
-  onTimeEnd={handleTimeEnd}
-  onTimeWarning={handleTimeWarning}
-/>
-
-                
-                {/* Mobile menu button */}
-                <button
-                  onClick={() => dispatch({ type: "TOGGLE_QUESTION_GRID" })}
-                  className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg active:bg-gray-200"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-                
-                {/* Submit button */}
-                <button
-                  onClick={() => setShowConfirmSubmit(true)}
-                  disabled={isSubmitting}
-                  className="bg-red-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center text-xs md:text-sm active:bg-red-800"
-                >
-                  <AlertTriangle className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
-                  <span className="hidden sm:inline">Submit</span>
-                  <span className="sm:hidden">End</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Bottom row - Connection status and progress */}
-            <div className="flex justify-between items-center text-xs">
-              <ConnectionStatus isOnline={state.isOnline} lastSaved={state.lastSaved} />
-              <div className="flex items-center space-x-2 md:space-x-4">
-                <span className="text-gray-500">
-                  {Math.round(((state.currentQuestionIndex + 1) / state.questionsQueue.length) * 100)}%
-                </span>
-                <div className="w-16 md:w-20 bg-gray-200 rounded-full h-1.5">
-                  <div 
-                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-                    style={{ 
-                      width: `${((state.currentQuestionIndex + 1) / state.questionsQueue.length) * 100}%` 
-                    }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col lg:flex-row gap-2 md:gap-4">
-            {/* Desktop Sidebar */}
-            <div className="hidden lg:block w-80 bg-white rounded-xl shadow-lg">
-              <div className="p-4">
-                {/* Progress Overview */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                    <LineChart className="h-5 w-5 mr-2 text-blue-600" />
-                    Progress
-                  </h3>
-                  
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <div className="bg-green-50 p-3 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-green-700">{state.questionsAnswered}</div>
-                      <div className="text-green-600 text-sm">Answered</div>
-                    </div>
-                    <div className="bg-yellow-50 p-3 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-yellow-700">{state.markedForReview.length}</div>
-                      <div className="text-yellow-600 text-sm">Marked</div>
-                    </div>
+      <div className="pt-24 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        {state.currentQuestion ? (
+          <MathJaxContext config={config}>
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-3 md:p-4 lg:p-5 mb-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 md:space-x-4 min-w-0 flex-1">
+                  <div className="hidden md:block w-8 h-8 lg:w-10 lg:h-10 bg-neutral-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <BookOpen className="h-4 w-4 lg:h-5 lg:w-5 text-neutral-700" />
                   </div>
-
-                  <div className="mb-2">
-                    <ProgressRing 
-                      progress={(state.currentQuestionIndex + 1) / state.questionsQueue.length * 100}
-                      size={80}
-                      className="mx-auto"
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm md:text-lg font-bold text-neutral-900 truncate">
+                      {testInfo.name}
+                    </h2>
+                    <p className="text-xs md:text-sm text-neutral-600">
+                      Q {currentQ}/{totalQ}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
+                  <TimerDisplay
+                    testDuration={state.testDuration}
+                    testStarted={state.testStarted}
+                    testStartTime={state.testStartTime}
+                    onTimeEnd={handleTimeEnd}
+                    onTimeWarning={handleTimeWarning}
+                    onTick={(tick) => dispatch({ type: "UPDATE_TIME", payload: tick })}
+                  />
+                  <button
+                    onClick={() => dispatch({ type: "TOGGLE_QUESTION_GRID" })}
+                    className="md:hidden p-2 text-neutral-600 hover:bg-neutral-100 rounded-lg"
+                    aria-label="Question list"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => setShowConfirmSubmit(true)}
+                    disabled={isSubmitting}
+                    className="bg-red-600 text-white px-3 md:px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center text-xs md:text-sm font-medium"
+                  >
+                    <AlertTriangle className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+                    <span className="hidden sm:inline">Submit</span>
+                    <span className="sm:hidden">End</span>
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <ConnectionStatus isOnline={state.isOnline} lastSaved={state.lastSaved} />
+                <div className="flex items-center space-x-2 md:space-x-4">
+                  <span className="text-neutral-500">{Math.round(progressPct)}%</span>
+                  <div className="w-16 md:w-20 bg-neutral-200 rounded-full h-1.5">
+                    <div
+                      className="bg-neutral-700 h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${progressPct}%` }}
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+            </div>
 
-                {/* Question Grid */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Questions</h4>
-                  <div className="grid grid-cols-5 gap-2 max-h-64 overflow-y-auto">
-                    {state.questionsQueue.map((q, index) => (
-                      <button
-                        key={q.id || index}
-                        className={`relative p-2 text-sm font-semibold rounded-lg transition-all duration-200 ${getQuestionStatus(q.id, index)}`}
-                        onClick={() => handleNavigation(index)}
-                        title={`Question ${index + 1}`}
-                      >
-                        {index + 1}
-                        {state.markedForReview.includes(q.id) && (
-                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full"></div>
-                        )}
-                      </button>
-                    ))}
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="hidden lg:block w-72 xl:w-80 bg-white rounded-xl shadow-sm border border-neutral-200 flex-shrink-0">
+              <div className="p-4">
+                <h3 className="text-base font-semibold text-neutral-900 mb-3 flex items-center">
+                  <LineChart className="h-4 w-4 mr-2 text-neutral-600" />
+                  Progress
+                </h3>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="bg-neutral-50 p-3 rounded-lg text-center border border-neutral-200">
+                    <div className="text-xl font-bold text-neutral-900">{state.questionsAnswered}</div>
+                    <div className="text-neutral-600 text-xs">Answered</div>
+                  </div>
+                  <div className="bg-neutral-50 p-3 rounded-lg text-center border border-neutral-200">
+                    <div className="text-xl font-bold text-neutral-900">{state.markedForReview.length}</div>
+                    <div className="text-neutral-600 text-xs">Marked</div>
                   </div>
                 </div>
-
-                {/* Legend */}
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <h5 className="text-xs font-semibold text-gray-700 mb-2">Legend</h5>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-blue-600 rounded"></div>
-                      <span>Current</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-green-400 rounded"></div>
-                      <span>Answered</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-yellow-400 rounded"></div>
-                      <span>Marked</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-gray-200 rounded"></div>
-                      <span>Pending</span>
-                    </div>
+                <div className="mb-2 flex justify-center">
+                  <ProgressRing progress={progressPct} size={72} className="mx-auto" />
+                </div>
+                <h4 className="text-xs font-semibold text-neutral-700 mb-2">Questions</h4>
+                <div className="grid grid-cols-5 gap-1.5 max-h-48 overflow-y-auto">
+                  {state.questionsQueue.map((q, index) => (
+                    <button
+                      key={q.id || index}
+                      className={`relative p-2 text-xs font-semibold rounded-lg transition-all duration-200 ${getQuestionStatus(q.id, index)}`}
+                      onClick={() => handleNavigation(index)}
+                      title={`Question ${index + 1}`}
+                    >
+                      {index + 1}
+                      {state.markedForReview.includes(q.id) && <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full" />}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 bg-neutral-50 rounded-lg p-2 border border-neutral-200">
+                  <div className="grid grid-cols-2 gap-1 text-xs text-neutral-600">
+                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-neutral-900 rounded" /><span>Current</span></div>
+                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-neutral-600 rounded" /><span>Done</span></div>
+                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-amber-500 rounded" /><span>Marked</span></div>
+                    <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 bg-neutral-200 rounded" /><span>Pending</span></div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Question Area - Mobile First */}
-            <div 
-              className="flex-1 bg-white rounded-lg md:rounded-xl shadow-lg"
+            <div
+              className="flex-1 bg-white rounded-xl shadow-sm border border-neutral-200 min-w-0"
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
@@ -1762,23 +1574,22 @@ return (
                 {/* Question Header - Mobile First */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 md:mb-6 space-y-3 md:space-y-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="bg-blue-100 text-blue-800 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm font-medium">
+                    <span className="bg-neutral-100 text-neutral-800 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm font-medium">
                       {state.currentQuestion.subject}
                     </span>
-                    <span className="bg-gray-100 text-gray-700 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm">
+                    <span className="bg-neutral-100 text-neutral-700 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm">
                       {state.currentQuestion.topic}
                     </span>
-                    <span className="bg-purple-100 text-purple-700 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm capitalize">
+                    <span className="bg-neutral-100 text-neutral-700 px-2 md:px-3 py-1 rounded-full text-xs md:text-sm capitalize">
                       {state.currentQuestion.difficulty}
                     </span>
                   </div>
-                  
                   <button
                     onClick={handleMarkForReview}
-                    className={`flex items-center px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium transition-all active:scale-95 ${
+                    className={`flex items-center px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium transition-all ${
                       state.markedForReview.includes(state.currentQuestion.id)
-                        ? 'bg-yellow-100 text-yellow-800 border border-yellow-400'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-400'
+                        : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 border border-transparent'
                     }`}
                   >
                     <Flag className="h-3 w-3 md:h-4 md:w-4 mr-1" />
@@ -1798,10 +1609,10 @@ return (
                     {["A", "B", "C", "D"].map((option) => (
                       <label
                         key={option}
-                        className={`flex items-start p-3 md:p-4 lg:p-5 border-2 rounded-lg md:rounded-xl cursor-pointer transition-all active:scale-[0.98] ${
-                          state.userAnswer === option 
-                            ? "bg-blue-50 border-blue-500 shadow-md" 
-                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                        className={`flex items-start p-3 md:p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                          state.userAnswer === option
+                            ? "bg-neutral-100 border-neutral-700 shadow-sm"
+                            : "border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
                         }`}
                       >
                         <input
@@ -1810,12 +1621,10 @@ return (
                           value={option}
                           checked={state.userAnswer === option}
                           onChange={() => handleAnswerSelect(option)}
-                          className="h-4 w-4 md:h-5 md:w-5 text-blue-600 focus:ring-blue-500 mr-3 md:mr-4 mt-0.5 flex-shrink-0"
+                          className="h-4 w-4 md:h-5 md:w-5 text-neutral-700 focus:ring-neutral-600 mr-3 md:mr-4 mt-0.5 flex-shrink-0"
                         />
                         <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs md:text-sm font-bold mr-3 md:mr-4 flex-shrink-0 ${
-                          state.userAnswer === option 
-                            ? 'bg-blue-600 text-white' 
-                            : 'bg-gray-200 text-gray-600'
+                          state.userAnswer === option ? "bg-neutral-900 text-white" : "bg-neutral-200 text-neutral-600"
                         }`}>
                           {option}
                         </div>
@@ -1830,128 +1639,106 @@ return (
 
                 {/* Action Buttons - Mobile First */}
                 <div className="mt-6 md:mt-8">
-                  {/* Mobile Navigation */}
                   <div className="flex justify-between items-center mb-4 md:hidden">
-                    <button
-                      onClick={() => handleNavigation('prev')}
-                      disabled={state.currentQuestionIndex === 0}
-                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:bg-gray-300"
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-1" /> Prev
-                    </button>
-                    
-                    <button
-                      onClick={() => dispatch({ type: "TOGGLE_QUESTION_GRID" })}
-                      className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg flex items-center hover:bg-blue-200 transition-colors active:bg-blue-300"
-                    >
-                      <Target className="h-4 w-4 mr-1" />
-                      {state.currentQuestionIndex + 1}/{state.questionsQueue.length}
-                    </button>
-                    
-                    <button
-                      onClick={() => handleNavigation('next')}
-                      disabled={state.currentQuestionIndex === state.questionsQueue.length - 1}
-                      className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:bg-gray-300"
-                    >
-                      Next <ChevronRight className="h-4 w-4 ml-1" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleNavigation('prev')}
+                    disabled={state.currentQuestionIndex === 0}
+                    className="bg-neutral-100 text-neutral-700 px-4 py-2 rounded-lg flex items-center hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                  </button>
+                  <button
+                    onClick={() => dispatch({ type: "TOGGLE_QUESTION_GRID" })}
+                    className="bg-neutral-100 text-neutral-800 px-4 py-2 rounded-lg flex items-center hover:bg-neutral-200 font-medium"
+                  >
+                    <Target className="h-4 w-4 mr-1" />
+                    {currentQ}/{totalQ}
+                  </button>
+                  <button
+                    onClick={() => handleNavigation('next')}
+                    disabled={currentQ >= totalQ}
+                    className="bg-neutral-100 text-neutral-700 px-4 py-2 rounded-lg flex items-center hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                  >
+                    Next <ChevronRight className="h-4 w-4 ml-1" />
+                  </button>
+                </div>
 
-                  {/* Mobile Action Buttons */}
-                  <div className="space-y-3 md:hidden">
+                <div className="space-y-3 md:hidden">
+                  {state.userAnswer && (
+                    <button
+                      onClick={() => {
+                        if (currentQ < totalQ) handleNavigation('next');
+                        else setShowConfirmSubmit(true);
+                      }}
+                      className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center font-medium"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {state.currentQuestionIndex + 1 < state.questionsQueue.length ? 'Save & Next' : 'Save & Finish'}
+                    </button>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    {state.userAnswer && (
+                      <button
+                        onClick={() => dispatch({ type: "ANSWER_QUESTION", payload: { userAnswer: "" } })}
+                        className="bg-neutral-100 text-neutral-700 py-3 px-4 rounded-lg hover:bg-neutral-200 transition-colors flex items-center justify-center font-medium"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" /> Clear
+                      </button>
+                    )}
+                    {currentQ < totalQ && (
+                      <button
+                        onClick={() => handleNavigation('next')}
+                        className="bg-neutral-900 text-white py-3 px-4 rounded-lg hover:bg-neutral-800 transition-colors flex items-center justify-center font-medium"
+                      >
+                        <SkipForward className="h-4 w-4 mr-2" /> Skip
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="hidden md:flex flex-wrap justify-between items-center gap-3">
+                  <button
+                    onClick={() => handleNavigation('prev')}
+                    disabled={state.currentQuestionIndex === 0}
+                    className="bg-neutral-100 text-neutral-700 px-5 py-2.5 rounded-lg flex items-center hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                  >
+                    <ChevronLeft className="h-5 w-5 mr-2" /> Previous
+                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
                     {state.userAnswer && (
                       <button
                         onClick={() => {
-                          if (state.currentQuestionIndex + 1 < state.questionsQueue.length) {
-                            handleNavigation('next');
-                          } else {
-                            setShowConfirmSubmit(true);
-                          }
+                          if (state.currentQuestionIndex + 1 < state.questionsQueue.length) handleNavigation('next');
+                          else setShowConfirmSubmit(true);
                         }}
-                        className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center active:bg-green-800"
+                        className="bg-green-600 text-white px-5 py-2.5 rounded-lg flex items-center hover:bg-green-700 transition-colors font-medium"
                       >
                         <Save className="h-4 w-4 mr-2" />
                         {state.currentQuestionIndex + 1 < state.questionsQueue.length ? 'Save & Next' : 'Save & Finish'}
                       </button>
                     )}
-                    
-                    <div className="grid grid-cols-2 gap-3">
-                      {state.userAnswer && (
-                        <button
-                          onClick={() => dispatch({ type: "ANSWER_QUESTION", payload: { userAnswer: "" } })}
-                          className="bg-gray-200 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors flex items-center justify-center active:bg-gray-400"
-                        >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Clear
-                        </button>
-                      )}
-                      
-                      {state.currentQuestionIndex + 1 < state.questionsQueue.length && (
-                        <button
-                          onClick={() => handleNavigation('next')}
-                          className="bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center active:bg-blue-800"
-                        >
-                          <SkipForward className="h-4 w-4 mr-2" />
-                          Skip
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Desktop Action Buttons */}
-                  <div className="hidden md:flex md:flex-col lg:flex-row justify-between items-center space-y-4 lg:space-y-0 lg:space-x-3 w-full lg:w-auto">
-                    <button
-                      onClick={() => handleNavigation('prev')}
-                      disabled={state.currentQuestionIndex === 0}
-                      className="w-full lg:w-auto bg-gray-100 text-gray-700 px-6 py-3 rounded-lg flex items-center justify-center hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ChevronLeft className="h-5 w-5 mr-2" /> Previous
-                    </button>
-                    
-                    <div className="flex flex-col lg:flex-row space-y-2 lg:space-y-0 lg:space-x-3 w-full lg:w-auto">
-                      {state.userAnswer && (
-                        <button
-                          onClick={() => {
-                            if (state.currentQuestionIndex + 1 < state.questionsQueue.length) {
-                              handleNavigation('next');
-                            } else {
-                              setShowConfirmSubmit(true);
-                            }
-                          }}
-                          className="w-full lg:w-auto bg-green-600 text-white px-6 py-3 rounded-lg flex items-center justify-center hover:bg-green-700 transition-colors"
-                        >
-                          <Save className="h-4 w-4 mr-2" />
-                          {state.currentQuestionIndex + 1 < state.questionsQueue.length ? 'Save & Next' : 'Save & Finish'}
-                        </button>
-                      )}
-                      
-                      {state.userAnswer && (
-                        <button
-                          onClick={() => dispatch({ type: "ANSWER_QUESTION", payload: { userAnswer: "" } })}
-                          className="w-full lg:w-auto bg-gray-200 text-gray-700 px-4 py-3 rounded-lg flex items-center justify-center hover:bg-gray-300 transition-colors"
-                        >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Clear
-                        </button>
-                      )}
-                      
-                      {state.currentQuestionIndex + 1 < state.questionsQueue.length && (
-                        <button
-                          onClick={() => handleNavigation('next')}
-                          className="w-full lg:w-auto bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center justify-center hover:bg-blue-700 transition-colors"
-                        >
-                          <SkipForward className="h-4 w-4 mr-2" />
-                          Skip
-                        </button>
-                      )}
-                    </div>
+                    {state.userAnswer && (
+                      <button
+                        onClick={() => dispatch({ type: "ANSWER_QUESTION", payload: { userAnswer: "" } })}
+                        className="bg-neutral-100 text-neutral-700 px-4 py-2.5 rounded-lg flex items-center hover:bg-neutral-200 font-medium"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" /> Clear
+                      </button>
+                    )}
+                    {currentQ < totalQ && (
+                      <button
+                        onClick={() => handleNavigation('next')}
+                        className="bg-neutral-900 text-white px-5 py-2.5 rounded-lg flex items-center hover:bg-neutral-800 font-medium"
+                      >
+                        <SkipForward className="h-4 w-4 mr-2" /> Skip
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Mobile Question Grid Modal */}
           {state.showQuestionGrid && (
             <QuestionGrid
               questions={state.questionsQueue}
@@ -1962,77 +1749,54 @@ return (
               onClose={() => dispatch({ type: "TOGGLE_QUESTION_GRID" })}
             />
           )}
+          </div>
         </MathJaxContext>
       ) : (
-        <div className="text-center py-12 bg-white rounded-xl shadow-lg">
-          <AlertTriangle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-xl text-gray-600 mb-6">No questions available</p>
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-neutral-200">
+          <AlertTriangle className="h-14 w-14 text-neutral-400 mx-auto mb-4" />
+          <p className="text-lg text-neutral-600 mb-6">No questions available</p>
           <button
             onClick={() => router.push(`/mock-test/${examcategory}`)}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            className="bg-neutral-900 text-white px-6 py-3 rounded-lg hover:bg-neutral-800 transition-colors font-medium"
           >
-            Back to Tests
+            Back to tests
           </button>
         </div>
       )}
     </div>
 
-    {/* Submit Confirmation Modal - Mobile Optimized */}
     {showConfirmSubmit && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-4 md:p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <AlertTriangle className="h-6 w-6 md:h-8 md:w-8 text-red-600 flex-shrink-0" />
-              <h3 className="text-lg md:text-xl font-bold text-gray-900">Submit Test?</h3>
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-xl shadow-xl border border-neutral-200 max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-5 md:p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="h-8 w-8 text-red-600 flex-shrink-0" />
+              <h3 className="text-lg font-bold text-neutral-900">Submit test?</h3>
             </div>
-            
-            <p className="text-gray-600 mb-4 md:mb-6 text-sm md:text-base">
-              Are you sure you want to submit? You cannot change answers after submission.
+            <p className="text-neutral-600 mb-4 text-sm">
+              You cannot change answers after submission.
             </p>
-            
-            <div className="bg-gray-50 rounded-lg p-3 md:p-4 mb-4 md:mb-6 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span>Total Questions:</span>
-                <span className="font-semibold">{state.questionsQueue.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Answered:</span>
-                <span className="font-semibold text-green-600">{state.questionsAnswered}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Skipped:</span>
-                <span className="font-semibold text-red-600">{state.questionsQueue.length - state.questionsAnswered}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Marked:</span>
-                <span className="font-semibold text-yellow-600">{state.markedForReview.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Time Left:</span>
-                <span className="font-semibold">{formatTime(state.timeRemaining)}</span>
-              </div>
+            <div className="bg-neutral-50 rounded-lg p-4 mb-5 border border-neutral-200 space-y-2 text-sm text-neutral-700">
+              <div className="flex justify-between"><span>Total</span><span className="font-semibold text-neutral-900">{state.questionsQueue.length}</span></div>
+              <div className="flex justify-between"><span>Answered</span><span className="font-semibold text-green-600">{state.questionsAnswered}</span></div>
+              <div className="flex justify-between"><span>Skipped</span><span className="font-semibold text-neutral-900">{state.questionsQueue.length - state.questionsAnswered}</span></div>
+              <div className="flex justify-between"><span>Marked</span><span className="font-semibold text-neutral-900">{state.markedForReview.length}</span></div>
+              <div className="flex justify-between"><span>Time left</span><span className="font-semibold">{formatTime(state.timeRemaining)}</span></div>
             </div>
-            
-            <div className="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => setShowConfirmSubmit(false)}
                 disabled={isSubmitting}
-                className="flex-1 bg-gray-200 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-300 disabled:opacity-50 transition-colors active:bg-gray-400"
+                className="flex-1 bg-neutral-100 text-neutral-800 px-4 py-3 rounded-lg hover:bg-neutral-200 disabled:opacity-50 font-medium"
               >
-                Continue Test
+                Continue test
               </button>
               <button
-                onClick={() => {
-                  setShowConfirmSubmit(false);
-                  submitTest();
-                }}
+                onClick={() => { setShowConfirmSubmit(false); submitTest(); }}
                 disabled={isSubmitting}
-                className="flex-1 bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center active:bg-red-800"
+                className="flex-1 bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center justify-center font-medium"
               >
-                {isSubmitting ? (
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                ) : null}
+                {isSubmitting ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Submit
               </button>
             </div>

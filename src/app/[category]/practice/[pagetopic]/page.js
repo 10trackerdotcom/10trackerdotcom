@@ -749,6 +749,7 @@ const Pagetracker = memo(() => {
                     </div>
                   ) : questions.length > 0 ? (
                     <>
+                    {console.log(JSON.stringify(questions))}
                       {questions.map((question, index) => (
                         <QuestionCard
                           key={question._id}

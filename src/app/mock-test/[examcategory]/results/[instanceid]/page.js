@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { createClient } from "@supabase/supabase-js";
@@ -9,21 +10,34 @@ import {
   XCircle,
   AlertCircle,
   ChevronDown,
-  TrendingUp,
   Clock,
-  Award,
   BookOpen,
   ArrowLeft,
-  Zap,
   BarChart3,
-  Target,
-  Timer,
-  Brain
+  Target
 } from "lucide-react";
 import toast, { Toaster } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
-import MockTestNav from '../../components/MockTestNav';
+import MetaDataJobs from '@/components/Seo';
+
+// MathJax 3 config (same as attempt page) so $...$ and $$...$$ are processed
+const MATHJAX_CONFIG = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    processEscapes: true,
+  },
+  messageStyle: 'none',
+  showMathMenu: false,
+};
+
+// Normalize LaTeX: [latex]...[/latex] → $...$ for MathJax
+function convertLatexTags(text) {
+  if (!text) return text;
+  return String(text)
+    .replace(/\[latex\]/g, '$')
+    .replace(/\[\/latex\]/g, '$');
+}
 
 // Supabase configuration
 const supabase = createClient(
@@ -31,21 +45,55 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// MathJax configuration
-const config = {
-  "fast-preview": { disabled: true },
-  tex2jax: {
-    inlineMath: [["$", "$"], ["\\(", "\\)"]],
-    displayMath: [["$$", "$$"], ["\\[", "\\]"]],
-  },
-  messageStyle: "none",
-};
+// Renders HTML and triggers MathJax typeset so $...$ and $$...$$ are processed (wrapper + manual typeset for dynamic HTML)
+const MathHtml = React.memo(function MathHtml({ html, className = '', as: Tag = 'div' }) {
+  const ref = useRef(null);
+
+  const normalizedHtml = useMemo(() => convertLatexTags(html), [html]);
+
+  useEffect(() => {
+    if (!ref.current || !normalizedHtml || typeof window === 'undefined') return;
+    const node = ref.current;
+    const id = setTimeout(() => {
+      if (window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+        window.MathJax.typesetPromise([node]).catch(() => {});
+      }
+    }, 50);
+    return () => clearTimeout(id);
+  }, [normalizedHtml]);
+
+  if (!normalizedHtml) return null;
+  return (
+    <MathJax inline dynamic>
+      <Tag ref={ref} className={className} dangerouslySetInnerHTML={{ __html: normalizedHtml }} />
+    </MathJax>
+  );
+});
+
+const FILTER_TABS = [
+  { key: 'all', label: 'All', icon: BarChart3 },
+  { key: 'correct', label: 'Correct', icon: CheckCircle },
+  { key: 'incorrect', label: 'Incorrect', icon: XCircle },
+  { key: 'unanswered', label: 'Skipped', icon: AlertCircle }
+];
 
 export default function TestResultPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { instanceid } = useParams();
-  const attemptId = instanceid;
+  const { instanceid: attemptId, examcategory } = useParams();
+
+  const userEmail = useMemo(
+    () =>
+      user?.primaryEmailAddress?.emailAddress ||
+      user?.emailAddresses?.[0]?.emailAddress ||
+      user?.email ||
+      null,
+    [user]
+  );
+  const categoryLabel = useMemo(
+    () => (examcategory?.toUpperCase?.() || 'GATE CSE').replace(/-/g, ' '),
+    [examcategory]
+  );
 
   const [isLoading, setIsLoading] = useState(true);
   const [attempt, setAttempt] = useState(null);
@@ -55,10 +103,62 @@ export default function TestResultPage() {
   const [enhancedQuestions, setEnhancedQuestions] = useState({});
   const [activeTab, setActiveTab] = useState('all');
 
+  const fetchAttemptDetails = useCallback(async () => {
+    if (!attemptId || !userEmail) return;
+    const startTime = Date.now();
+    try {
+      setIsLoading(true);
+      const { data: attemptData, error: attemptError } = await fetchAttemptData(attemptId, userEmail);
+      if (attemptError || !attemptData) {
+        toast.error('Test attempt not found or unauthorized');
+        router.push(`/mock-test/${examcategory}?tab=progress`);
+        return;
+      }
+      setAttempt(attemptData);
+      setTestInfo(attemptData.mock_tests);
+
+      const questionIds = (attemptData.all_questions || []).map((q) => q.id).filter(Boolean);
+      if (questionIds.length === 0) {
+        toast.error('No questions found in this test attempt');
+        setIsLoading(false);
+        return;
+      }
+
+      const { data: questionsData, error: questionsError } = await fetchQuestionsData(questionIds);
+      if (questionsError) {
+        setIsLoading(false);
+        return;
+      }
+
+      const { questionsMap, answersMap } = buildMaps(questionsData, attemptData.answers);
+      const { breakdown, enhancedQuestions: enhanced } = buildBreakdown(
+        attemptData.all_questions || [],
+        questionsMap,
+        answersMap
+      );
+      setTopicBreakdown(breakdown);
+      setEnhancedQuestions(enhanced);
+
+      if (startTime) {
+        const duration = Date.now() - startTime;
+        if (process.env.NODE_ENV === 'development' && duration > 500) {
+          console.warn(`Fetch completed in ${duration}ms`);
+        }
+      }
+      toast.success('Results loaded');
+    } catch (err) {
+      console.error('Error in fetchAttemptDetails:', err);
+      toast.error('Failed to load test results');
+      router.push(`/mock-test/${examcategory}?tab=progress`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [attemptId, userEmail, examcategory, router]);
+
   useEffect(() => {
-    if (attemptId && user) fetchAttemptDetails();
-    // eslint-disable-next-line
-  }, [attemptId, user]);
+    if (authLoading) return;
+    if (attemptId && userEmail) fetchAttemptDetails();
+  }, [authLoading, attemptId, userEmail, fetchAttemptDetails]);
 
   // --- Helpers ---
   const fetchAttemptData = async (attemptId, userEmail) => {
@@ -207,108 +307,53 @@ export default function TestResultPage() {
     return { breakdown, enhancedQuestions };
   };
 
-  // --- Main function with performance logging ---
-  const fetchAttemptDetails = async () => {
-    const startTime = Date.now();
-    try {
-      setIsLoading(true);
-
-      // Step 1: Fetch attempt
-      const { data: attemptData, error: attemptError } = await fetchAttemptData(attemptId, user.email);
-      if (attemptError || !attemptData) {
-        toast.error("Test attempt not found or unauthorized");
-        router.push("/gate-cse/mock-test");
-        return;
-      }
-      setAttempt(attemptData);
-      setTestInfo(attemptData.mock_tests);
-
-      // Step 2: Collect question IDs
-      const questionIds = (attemptData.all_questions || []).map((q) => q.id).filter(Boolean);
-      if (questionIds.length === 0) {
-        toast.error("No questions found in this test attempt");
-        return;
-      }
-
-      // Step 3: Fetch questions
-      const { data: questionsData, error: questionsError } = await fetchQuestionsData(questionIds);
-      if (questionsError) console.error("Error fetching questions:", questionsError);
-
-      // Step 4: Maps + breakdown
-      const { questionsMap, answersMap } = buildMaps(questionsData, attemptData.answers);
-      const { breakdown, enhancedQuestions } = buildBreakdown(
-        attemptData.all_questions || [],
-        questionsMap,
-        answersMap
-      );
-
-      setTopicBreakdown(breakdown);
-      setEnhancedQuestions(enhancedQuestions);
-
-      // Step 5: Debug logging
-      const missing = questionIds.filter((id) => !questionsMap.has(id));
-      if (missing.length > 0) {
-        console.warn(`Missing question data for IDs: ${missing.join(", ")}`);
-      }
-
-      // Performance metrics
-      const duration = Date.now() - startTime;
-      console.log(`Fetch completed in ${duration}ms
-      - Questions expected: ${questionIds.length}
-      - Questions fetched: ${questionsData?.length || 0}
-      - Completeness: ${((questionsData?.length || 0) / questionIds.length * 100).toFixed(1)}%`);
-
-      toast.success("Test results loaded successfully");
-    } catch (err) {
-      console.error("Error in fetchAttemptDetails:", err);
-      toast.error("Failed to load test results");
-      router.push("/gate-cse/mock-test");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getAccuracyColor = (accuracy) => {
-    if (accuracy >= 80) return 'text-emerald-600';
+  const getAccuracyColor = useCallback((accuracy) => {
+    if (accuracy >= 80) return 'text-green-600';
     if (accuracy >= 60) return 'text-amber-600';
     if (accuracy >= 40) return 'text-orange-600';
-    return 'text-rose-600';
-  };
+    return 'text-red-600';
+  }, []);
 
-  const getScoreGradient = (percentage) => {
-    if (percentage >= 80) return 'from-emerald-500 to-teal-600';
-    if (percentage >= 60) return 'from-amber-500 to-orange-600';
-    if (percentage >= 40) return 'from-orange-500 to-red-600';
-    return 'from-rose-500 to-red-600';
-  };
+  const toggleTopic = useCallback((topic) => {
+    setExpandedTopics((prev) => ({ ...prev, [topic]: !prev[topic] }));
+  }, []);
 
-  const toggleTopic = (topic) => {
-    setExpandedTopics(prev => ({
-      ...prev,
-      [topic]: !prev[topic],
-    }));
-  };
+  const filteredQuestions = useMemo(() => {
+    return Object.entries(topicBreakdown).reduce((acc, [topic, data]) => {
+      if (activeTab === 'all') acc[topic] = data;
+      else if (activeTab === 'correct') acc[topic] = { ...data, incorrect: [], unanswered: [] };
+      else if (activeTab === 'incorrect') acc[topic] = { ...data, correct: [], unanswered: [] };
+      else if (activeTab === 'unanswered') acc[topic] = { ...data, correct: [], incorrect: [] };
+      return acc;
+    }, {});
+  }, [topicBreakdown, activeTab]);
 
-  const filteredQuestions = Object.entries(topicBreakdown).reduce((acc, [topic, data]) => {
-    if (activeTab === 'all') acc[topic] = data;
-    else if (activeTab === 'correct') acc[topic] = { ...data, incorrect: [], unanswered: [] };
-    else if (activeTab === 'incorrect') acc[topic] = { ...data, correct: [], unanswered: [] };
-    else if (activeTab === 'unanswered') acc[topic] = { ...data, correct: [], incorrect: [] };
-    return acc;
-  }, {});
+  // Show loading until auth is resolved; then show loading again while fetching data (never flash "Sign in required" first)
+  if (authLoading) {
+    return (
+      <>
+        <Navbar />
+        <div className="pt-24 min-h-screen bg-neutral-50 flex items-center justify-center">
+          <div className="text-center max-w-xs px-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 border-2 border-neutral-200 rounded-full animate-spin border-t-neutral-700 mx-auto mb-4" />
+            <p className="text-sm sm:text-base text-neutral-600 font-medium">Checking sign-in...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (!user) {
     return (
       <>
         <Navbar />
-        <div className="min-h-[70vh] flex items-center justify-center bg-gray-50">
-          <div className="text-center p-8 bg-white rounded-xl shadow-sm border">
-            <BookOpen className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Sign In Required</h2>
-            <p className="text-gray-600">Please sign in to view test results.</p>
+        <div className="pt-24 min-h-screen bg-neutral-50 flex items-center justify-center px-4">
+          <div className="text-center p-6 sm:p-8 bg-white rounded-xl shadow-sm border border-neutral-200 max-w-md w-full">
+            <BookOpen className="w-12 h-12 text-neutral-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-neutral-900 mb-2">Sign in required</h2>
+            <p className="text-neutral-600 text-sm sm:text-base">Sign in to view test results.</p>
           </div>
         </div>
-        <Footer />
       </>
     );
   }
@@ -317,13 +362,12 @@ export default function TestResultPage() {
     return (
       <>
         <Navbar />
-        <div className="min-h-[70vh] flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin border-t-blue-600 mb-4 mx-auto"></div>
-            <p className="text-gray-600 font-medium">Loading your results...</p>
+        <div className="pt-24 min-h-screen bg-neutral-50 flex items-center justify-center">
+          <div className="text-center max-w-xs px-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 border-2 border-neutral-200 rounded-full animate-spin border-t-neutral-700 mx-auto mb-4" />
+            <p className="text-sm sm:text-base text-neutral-600 font-medium">Loading results...</p>
           </div>
         </div>
-        <Footer />
       </>
     );
   }
@@ -332,102 +376,110 @@ export default function TestResultPage() {
     return (
       <>
         <Navbar />
-        <div className="min-h-[70vh] flex items-center justify-center bg-gray-50">
-          <div className="text-center p-8 bg-white rounded-xl shadow-sm border">
+        <div className="pt-24 min-h-screen bg-neutral-50 flex items-center justify-center px-4">
+          <div className="text-center p-6 sm:p-8 bg-white rounded-xl shadow-sm border border-neutral-200 max-w-md w-full">
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Test Attempt Not Found</h2>
-            <p className="text-gray-600">The requested test attempt could not be found.</p>
+            <h2 className="text-xl font-semibold text-neutral-900 mb-2">Attempt not found</h2>
+            <p className="text-neutral-600 text-sm sm:text-base mb-4">The requested test attempt could not be found.</p>
+            <Link
+              href={`/mock-test/${examcategory}?tab=progress`}
+              className="inline-flex items-center gap-2 text-neutral-800 font-medium hover:text-neutral-900"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to results
+            </Link>
           </div>
         </div>
-        <Footer />
       </>
     );
   }
 
+  const testName = testInfo?.name || 'Test result';
+
   return (
     <>
+      <MetaDataJobs
+        seoTitle={`${testName} - ${categoryLabel} Results`}
+        seoDescription={`View your ${testName} result and topic-wise breakdown.`}
+      />
+      <style jsx>{`
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+      `}</style>
       <Navbar />
-      <div className="min-h-screen bg-gray-50">
-        <MathJaxContext config={config}>
-          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-neutral-50">
+        <MathJaxContext config={MATHJAX_CONFIG}>
+          <div className="pt-24 max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16">
+            {/* Back link */}
+            <Link
+              href={`/mock-test/${examcategory}?tab=progress`}
+              className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 mb-4 sm:mb-6"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to results
+            </Link>
+
             {/* Header Card */}
-            <div className="bg-white rounded-xl shadow-sm border mb-6">
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-6">
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">{testInfo.name}</h1>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                        {testInfo.category}
-                      </span>
-                      <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">
-                        {testInfo.difficulty}
-                      </span>
-                    </div>
-                  </div>
-                   
+            <div className="bg-white rounded-xl shadow-sm border border-neutral-200 mb-4 sm:mb-6 overflow-hidden">
+              <div className="p-4 sm:p-6">
+                <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900 mb-2 sm:mb-3">{testName}</h1>
+                <div className="flex flex-wrap gap-2 mb-4 sm:mb-6">
+                  <span className="px-2.5 py-1 bg-neutral-100 text-neutral-700 rounded-full text-xs font-medium">
+                    {testInfo.category || categoryLabel}
+                  </span>
+                  <span className="px-2.5 py-1 bg-neutral-100 text-neutral-700 rounded-full text-xs font-medium">
+                    {testInfo.difficulty || '—'}
+                  </span>
                 </div>
 
-                {/* Performance Overview */}
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                   
-
-                  {/* Stats Grid */}
-                  <div className="lg:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <CheckCircle className="w-5 h-5 text-green-600" />
-                        <span className="text-2xl font-bold text-green-900">{attempt.correct_answers}</span>
-                      </div>
-                      <div className="text-sm font-medium text-green-700">Correct</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="bg-green-50 p-3 sm:p-4 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" />
+                      <span className="text-lg sm:text-2xl font-bold text-green-900">{attempt.correct_answers}</span>
                     </div>
-
-                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <XCircle className="w-5 h-5 text-red-600" />
-                        <span className="text-2xl font-bold text-red-900">{attempt.wrong_answers}</span>
-                      </div>
-                      <div className="text-sm font-medium text-red-700">Incorrect</div>
+                    <div className="text-xs sm:text-sm font-medium text-green-700">Correct</div>
+                  </div>
+                  <div className="bg-red-50 p-3 sm:p-4 rounded-lg border border-red-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <XCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" />
+                      <span className="text-lg sm:text-2xl font-bold text-red-900">{attempt.wrong_answers}</span>
                     </div>
-
-                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <AlertCircle className="w-5 h-5 text-yellow-600" />
-                        <span className="text-2xl font-bold text-yellow-900">{attempt.unanswered}</span>
-                      </div>
-                      <div className="text-sm font-medium text-yellow-700">Skipped</div>
+                    <div className="text-xs sm:text-sm font-medium text-red-700">Incorrect</div>
+                  </div>
+                  <div className="bg-amber-50 p-3 sm:p-4 rounded-lg border border-amber-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 flex-shrink-0" />
+                      <span className="text-lg sm:text-2xl font-bold text-amber-900">{attempt.unanswered}</span>
                     </div>
-
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <Timer className="w-5 h-5 text-blue-600" />
-                        <span className="text-2xl font-bold text-blue-900">
-                          {Math.floor(attempt.duration_taken / 60)}m
-                        </span>
-                      </div>
-                      <div className="text-sm font-medium text-blue-700">Time Taken</div>
+                    <div className="text-xs sm:text-sm font-medium text-amber-700">Skipped</div>
+                  </div>
+                  <div className="bg-neutral-50 p-3 sm:p-4 rounded-lg border border-neutral-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-600 flex-shrink-0" />
+                      <span className="text-lg sm:text-2xl font-bold text-neutral-900">
+                        {Math.floor(attempt.duration_taken / 60)}m
+                      </span>
                     </div>
+                    <div className="text-xs sm:text-sm font-medium text-neutral-700">Time</div>
                   </div>
                 </div>
 
-                {/* Test Details */}
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-neutral-200">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm text-neutral-600">
                     <div>
-                      <span className="font-medium">Started:</span>
-                      <div>{new Date(attempt.started_at).toLocaleString()}</div>
+                      <span className="font-medium text-neutral-500">Started</span>
+                      <div className="text-neutral-800">{new Date(attempt.started_at).toLocaleString()}</div>
                     </div>
                     <div>
-                      <span className="font-medium">Submitted:</span>
-                      <div>{new Date(attempt.submitted_at).toLocaleString()}</div>
+                      <span className="font-medium text-neutral-500">Submitted</span>
+                      <div className="text-neutral-800">{new Date(attempt.submitted_at).toLocaleString()}</div>
                     </div>
                     <div>
-                      <span className="font-medium">Questions:</span>
-                      <div>{attempt.attempted_questions}/{attempt.total_questions}</div>
+                      <span className="font-medium text-neutral-500">Questions</span>
+                      <div className="text-neutral-800">{attempt.attempted_questions}/{attempt.total_questions}</div>
                     </div>
                     <div>
-                      <span className="font-medium">Duration:</span>
-                      <div>{Math.floor(attempt.duration_taken / 60)}m {attempt.duration_taken % 60}s</div>
+                      <span className="font-medium text-neutral-500">Duration</span>
+                      <div className="text-neutral-800">{Math.floor(attempt.duration_taken / 60)}m {attempt.duration_taken % 60}s</div>
                     </div>
                   </div>
                 </div>
@@ -435,38 +487,31 @@ export default function TestResultPage() {
             </div>
 
             {/* Filter Tabs */}
-            <div className="bg-white rounded-xl shadow-sm border mb-6">
-              <div className="p-4">
-                <div className="flex space-x-1">
-                  {[
-                    { key: 'all', label: 'All Questions', icon: BarChart3 },
-                    { key: 'correct', label: 'Correct', icon: CheckCircle },
-                    { key: 'incorrect', label: 'Incorrect', icon: XCircle },
-                    { key: 'unanswered', label: 'Skipped', icon: AlertCircle }
-                  ].map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
-                        activeTab === tab.key
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <tab.icon className="w-4 h-4" />
-                      <span className="hidden sm:inline">{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
+            <div className="bg-white rounded-xl shadow-sm border border-neutral-200 mb-4 sm:mb-6 overflow-hidden">
+              <div className="p-1 sm:p-2 flex overflow-x-auto scrollbar-hide gap-1">
+                {FILTER_TABS.map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
+                      activeTab === tab.key
+                        ? 'bg-neutral-900 text-white'
+                        : 'text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <tab.icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
             {/* Topic Breakdown */}
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {Object.keys(filteredQuestions).length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl shadow-sm border">
-                  <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 text-lg">No questions found for this filter.</p>
+                <div className="text-center py-10 sm:py-12 px-4 bg-white rounded-xl shadow-sm border border-neutral-200">
+                  <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-neutral-400 mx-auto mb-3" />
+                  <p className="text-neutral-600 text-sm sm:text-base">No questions for this filter.</p>
                 </div>
               ) : (
                 Object.entries(filteredQuestions).map(([topic, data]) => {
@@ -476,51 +521,47 @@ export default function TestResultPage() {
                   const isExpanded = expandedTopics[topic];
 
                   return (
-                    <div key={topic} className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                      <div
-                        className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+                    <div key={topic} className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+                      <button
+                        type="button"
+                        className="w-full p-4 sm:p-5 text-left cursor-pointer hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-200 focus:ring-inset"
                         onClick={() => toggleTopic(topic)}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="w-1 h-8 bg-blue-600 rounded-full"></div>
-                              <h3 className="text-lg font-semibold text-gray-900">{topic}</h3>
-                              <div className="flex items-center gap-1 ml-auto">
-                                <Target className="w-4 h-4 text-gray-400" />
-                                <span className={`font-semibold ${getAccuracyColor(accuracy)}`}>
-                                  {accuracy.toFixed(1)}%
-                                </span>
-                              </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                              <div className="w-1 h-6 sm:h-8 bg-neutral-400 rounded-full flex-shrink-0" />
+                              <h3 className="text-base sm:text-lg font-semibold text-neutral-900 truncate">{topic}</h3>
+                              <span className={`font-semibold text-sm sm:text-base flex-shrink-0 ${getAccuracyColor(accuracy)}`}>
+                                {accuracy.toFixed(1)}%
+                              </span>
                             </div>
-
-                            <div className="flex flex-wrap gap-6 text-sm">
-                              <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                <span className="text-green-700 font-medium">{data.correct.length} Correct</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                                <span className="text-red-700 font-medium">{data.incorrect.length} Incorrect</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                                <span className="text-yellow-700 font-medium">{data.unanswered.length} Skipped</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Clock className="w-3 h-3 text-gray-400" />
-                                <span className="text-gray-600">{Math.floor(data.timeSpent / 60)}m {data.timeSpent % 60}s</span>
-                              </div>
+                            <div className="flex flex-wrap gap-3 sm:gap-4 text-xs sm:text-sm">
+                              <span className="flex items-center gap-1.5 text-green-700">
+                                <span className="w-2 h-2 bg-green-500 rounded-full" />
+                                {data.correct.length} correct
+                              </span>
+                              <span className="flex items-center gap-1.5 text-red-700">
+                                <span className="w-2 h-2 bg-red-500 rounded-full" />
+                                {data.incorrect.length} incorrect
+                              </span>
+                              <span className="flex items-center gap-1.5 text-amber-700">
+                                <span className="w-2 h-2 bg-amber-500 rounded-full" />
+                                {data.unanswered.length} skipped
+                              </span>
+                              <span className="flex items-center gap-1.5 text-neutral-600">
+                                <Clock className="w-3 h-3" />
+                                {Math.floor(data.timeSpent / 60)}m {data.timeSpent % 60}s
+                              </span>
                             </div>
                           </div>
-
-                          <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          <ChevronDown className={`w-5 h-5 text-neutral-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                         </div>
-                      </div>
+                      </button>
 
                       {isExpanded && (
-                        <div className="px-6 pb-6 border-t border-gray-200">
-                          <div className="pt-6 space-y-6">
+                        <div className="px-4 sm:px-6 pb-4 sm:pb-6 border-t border-neutral-200">
+                          <div className="pt-4 sm:pt-6 space-y-4 sm:space-y-6">
                             {/* Correct Questions */}
                             {data.correct.length > 0 && (
                               <QuestionSection
@@ -572,10 +613,20 @@ export default function TestResultPage() {
           </div>
 
           <Toaster
-            position="top-right"
+            position="bottom-right"
             toastOptions={{
-              className: 'bg-white border shadow-lg rounded-lg',
-              duration: 4000,
+              duration: 2000,
+              style: {
+                background: '#fff',
+                color: '#171717',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                fontSize: '14px',
+                padding: '12px 16px',
+                maxWidth: '90vw',
+              },
+              success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
+              error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
             }}
           />
         </MathJaxContext>
@@ -584,67 +635,68 @@ export default function TestResultPage() {
   );
 }
 
-// Question Section Component
-function QuestionSection({ title, questions, type, icon: Icon, bgColor, borderColor, textColor }) {
+// Question Section Component — memoized; question/options/solution wrapped in MathJax for LaTeX
+const QuestionSection = React.memo(function QuestionSection({ title, questions, type, icon: Icon, bgColor, borderColor, textColor }) {
+  const getOptionHtml = useCallback((q, option) => {
+    const key = `options_${option}`;
+    if (q[key]) return q[key];
+    if (q.options && typeof q.options[option] !== 'undefined') return q.options[option];
+    return '';
+  }, []);
+
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4">
-        <div className={`w-6 h-6 ${bgColor} rounded-lg flex items-center justify-center`}>
+      <div className="flex items-center gap-2 mb-3 sm:mb-4">
+        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${bgColor}`}>
           <Icon className="w-4 h-4 text-current" />
         </div>
-        <h4 className={`font-semibold ${textColor}`}>{title}</h4>
+        <h4 className={`font-semibold text-sm sm:text-base ${textColor}`}>{title}</h4>
       </div>
-      <div className="space-y-4">
-        {questions.map((q, index) => (
-          <MathJax hideUntilTypeset={"first"} inline dynamic key={index}>
-            <div className={`${bgColor} p-4 rounded-lg ${borderColor} border`}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className={`${bgColor.replace('50', '100')} ${textColor} px-2 py-1 rounded-full text-xs font-bold`}>
+      <div className="space-y-3 sm:space-y-4">
+        {questions.map((q, index) => {
+          const questionHtml = q.questionText || q.question || '';
+          return (
+            <div key={q.question_order ?? index} className={`${bgColor} p-3 sm:p-4 rounded-lg border ${borderColor}`}>
+              <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
+                <span className={`${bgColor.replace('50', '100')} ${textColor} px-2 py-0.5 rounded-full text-xs font-bold`}>
                   Q{q.question_order}
                 </span>
-                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">
+                <span className="bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full text-xs">
                   {q.difficulty}
                 </span>
-                <span className="ml-auto text-xs text-gray-600 font-medium">
-                  {type === 'correct' ? '✓' : type === 'incorrect' ? '✗' : 'Skipped'} {q.timeSpent}s
+                <span className="ml-auto text-xs text-neutral-600 font-medium">
+                  {type === 'correct' ? '✓' : type === 'incorrect' ? '✗' : '—'} {q.timeSpent}s
                 </span>
               </div>
-              
-              <div dangerouslySetInnerHTML={{ __html: q.question }} className="mb-3 text-gray-800" />
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 text-sm">
-                {['A', 'B', 'C', 'D'].map(option => (
-                  <div key={option} className="p-2 bg-white rounded border">
-                    <strong>{option}:</strong> <span dangerouslySetInnerHTML={{ __html: q[`options_${option}`] || "" }} />
-                  </div>
-                ))}
+              <MathHtml html={questionHtml} className="mb-2 sm:mb-3 text-neutral-800 text-sm sm:text-base prose prose-neutral max-w-none" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2 sm:mb-3 text-xs sm:text-sm">
+                {['A', 'B', 'C', 'D'].map((opt) => {
+                  const optHtml = getOptionHtml(q, opt) || '—';
+                  return (
+                    <div key={opt} className="p-2 bg-white rounded border border-neutral-200">
+                      <strong>{opt}:</strong>{' '}
+                      <MathHtml html={optHtml} as="span" />
+                    </div>
+                  );
+                })}
               </div>
-              
-              <div className="flex items-center justify-between">
-                <div className="flex gap-4">
-                  {type === 'incorrect' && (
-                    <>
-                      <span className="text-red-700 font-semibold">Your: {q.userAnswer}</span>
-                      <span className="text-green-700 font-semibold">Correct: {q.correctAnswer}</span>
-                    </>
-                  )}
-                  {type === 'correct' && (
-                    <span className="text-green-700 font-semibold">Your Answer: {q.userAnswer}</span>
-                  )}
-                  {type === 'unanswered' && (
-                    <span className="text-green-700 font-semibold">Correct Answer: {q.correctAnswer}</span>
-                  )}
-                </div>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm">
+                {type === 'incorrect' && (
+                  <>
+                    <span className="text-red-700 font-semibold">Your: {q.userAnswer}</span>
+                    <span className="text-green-700 font-semibold">Correct: {q.correctAnswer}</span>
+                  </>
+                )}
+                {type === 'correct' && <span className="text-green-700 font-semibold">Your answer: {q.userAnswer}</span>}
+                {type === 'unanswered' && <span className="text-green-700 font-semibold">Correct: {q.correctAnswer}</span>}
               </div>
               {q.solutiontext && (
-
-                  
-<div dangerouslySetInnerHTML={{ __html: q.solutiontext }} className="mt-4 mb-3 text-gray-800 overflow-x-auto" />
-                )}
+                <MathHtml html={q.solutiontext} className="mt-3 sm:mt-4 text-neutral-800 text-sm sm:text-base overflow-x-auto border-t border-neutral-200 pt-3" />
+              )}
             </div>
-          </MathJax>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
-}
+});

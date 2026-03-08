@@ -3,9 +3,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { 
   BookOpen, Search, Clock, Target, Zap, 
-  Grid3X3, List, Play, X, ChevronDown, AlertCircle
+  Grid3X3, List, Play, X, ChevronDown, AlertCircle,
+  ClipboardCheck, ArrowRight
 } from 'lucide-react';
 import MetaDataJobs from '@/components/Seo';
 import Navbar from '@/components/Navbar';
@@ -309,6 +311,61 @@ const QuickStats = React.memo(({ data }) => {
 
 QuickStats.displayName = 'QuickStats';
 
+// Practice vs Mock tests: clear navigation for both features
+const PracticePathCards = React.memo(({ category }) => {
+  const mockTestHref = `/mock-test/${category || 'gate-cse'}`;
+  const practiceSectionId = 'practice-content';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.05 }}
+      className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8"
+    >
+      <a
+        href={`#${practiceSectionId}`}
+        className="group block bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200 p-4 sm:p-6 text-left"
+      >
+        <div className="flex items-start gap-3 sm:gap-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-200 transition-colors">
+            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-700" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-neutral-900 text-base sm:text-lg mb-1">Practice topic-wise</h3>
+            <p className="text-sm text-neutral-600 mb-3 sm:mb-4">
+              Pick a subject or topic. Practice with solutions and track progress.
+            </p>
+            <span className="inline-flex items-center font-medium text-neutral-800 text-sm">
+              Browse below <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+            </span>
+          </div>
+        </div>
+      </a>
+      <Link
+        href={mockTestHref}
+        className="group block bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200 p-4 sm:p-6 text-left"
+      >
+        <div className="flex items-start gap-3 sm:gap-4">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-200 transition-colors">
+            <ClipboardCheck className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-700" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-neutral-900 text-base sm:text-lg mb-1">Mock tests</h3>
+            <p className="text-sm text-neutral-600 mb-3 sm:mb-4">
+              Full-length timed tests with score and analytics. Simulate the exam.
+            </p>
+            <span className="inline-flex items-center font-medium text-neutral-800 text-sm">
+              Go to mock tests <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+            </span>
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+  );
+});
+PracticePathCards.displayName = 'PracticePathCards';
+
 // Memoized Search Component
 const SearchBar = React.memo(({ searchTerm, setSearchTerm, viewMode, setViewMode }) => (
   <motion.div
@@ -415,7 +472,7 @@ const SkeletonCard = () => (
 const SkeletonLoading = () => (
   <div className="min-h-screen bg-neutral-50">
     <Navbar />
-    <div className="pt-20">
+    <div className="pt-24">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-6 sm:pb-8">
         {/* Hero Skeleton */}
         <div className="text-center mb-8 space-y-3">
@@ -455,7 +512,7 @@ const SkeletonLoading = () => (
 const ErrorDisplay = ({ error, onRetry }) => (
   <div className="min-h-screen bg-neutral-50">
     <Navbar />
-    <div className="flex justify-center items-center min-h-[60vh] pt-20 px-4">
+    <div className="flex justify-center items-center min-h-[60vh] pt-24 px-4">
       <div className="text-center p-6 sm:p-8 bg-white rounded-xl shadow-sm border border-neutral-200 max-w-md w-full">
         <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
           <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
@@ -644,7 +701,7 @@ const ExamTracker = () => {
           seoDescription={`Practice ${formattedCategory} PYQs Topic-Wise with detailed solutions.`}
         />
         <Navbar />
-        <div className="flex justify-center items-center min-h-[60vh] pt-20 px-4">
+        <div className="flex justify-center items-center min-h-[60vh] pt-24 px-4">
           <div className="text-center p-6 sm:p-8 bg-white rounded-xl shadow-sm border border-neutral-200 max-w-md w-full">
             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
               <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-neutral-400" />
@@ -675,7 +732,7 @@ const ExamTracker = () => {
       />
       <Navbar />
       
-      <div className="pt-20">
+      <div className="pt-24 min-h-screen">
         {/* Hero Section */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-6 sm:pb-8">
           <motion.div 
@@ -684,19 +741,30 @@ const ExamTracker = () => {
             transition={{ duration: 0.5 }}
             className="text-center mb-6 sm:mb-8"
           >
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 mb-2 sm:mb-3 tracking-tight px-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 mb-2 sm:mb-3 tracking-tight px-2 scroll-mt-24">
               {formattedCategory}
             </h1>
             <p className="text-sm sm:text-base md:text-lg text-neutral-600 max-w-2xl mx-auto px-4">
-              Practice topic-wise with curated questions. Minimal distractions—just progress.
+              Practice topic-wise or take full-length mock tests. Choose how you want to prepare.
             </p>
           </motion.div>
-          
+
+          <PracticePathCards category={safeCategory} />
+
           <QuickStats data={data} />
         </div>
 
-        {/* Content */}
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20">
+        {/* Practice content: subjects & topics */}
+        <div id="practice-content" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 scroll-mt-24">
+          <motion.h2
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-lg sm:text-xl font-semibold text-neutral-900 mb-4 flex items-center"
+          >
+            <BookOpen className="w-5 h-5 mr-2 text-neutral-600" />
+            Practice topic-wise
+          </motion.h2>
           <SearchBar 
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}

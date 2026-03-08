@@ -4,6 +4,64 @@ import { CheckCircle, BarChart2, BookOpen } from "lucide-react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
 
+const CODE_BLOCK_REGEX =
+  /<pre><code(?: class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/gi;
+
+const decodeHtml = (html) => {
+  if (typeof window === "undefined") return html;
+  const txt = document.createElement("textarea");
+  txt.innerHTML = html;
+  return txt.value;
+};
+
+const renderRichContent = (html) => {
+  if (!html) return null;
+
+  const elements = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = CODE_BLOCK_REGEX.exec(html)) !== null) {
+    const [fullMatch, lang, codeHtml] = match;
+
+    const precedingHtml = html.slice(lastIndex, match.index);
+    if (precedingHtml.trim()) {
+      elements.push(
+        <MathJax dynamic key={`mj-${lastIndex}`}>
+          <div dangerouslySetInnerHTML={{ __html: precedingHtml }} />
+        </MathJax>
+      );
+    }
+
+    const code = decodeHtml(codeHtml);
+    elements.push(
+      <div className="my-4" key={`code-${match.index}`}>
+        <SyntaxHighlighter
+          language={lang || "javascript"}
+          style={docco}
+          wrapLongLines
+          showLineNumbers={false}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
+    );
+
+    lastIndex = match.index + fullMatch.length;
+  }
+
+  const remainingHtml = html.slice(lastIndex);
+  if (remainingHtml.trim()) {
+    elements.push(
+      <MathJax dynamic key={`mj-end-${lastIndex}`}>
+        <div dangerouslySetInnerHTML={{ __html: remainingHtml }} />
+      </MathJax>
+    );
+  }
+
+  return elements;
+};
+
 const QuestionCard = ({
   question,
   index,
@@ -54,9 +112,7 @@ const QuestionCard = ({
 
         {/* Question Content */}
         <div className="p-4">
-          <MathJax dynamic>
-            <div dangerouslySetInnerHTML={{ __html: question.question }} />
-          </MathJax>
+          {renderRichContent(question.question)}
 
           {/* Options */}
           {question.options_A && (
@@ -117,9 +173,7 @@ const QuestionCard = ({
           {showSolution && question.solution && (
             <div className="mt-4 p-4 bg-gray-100 rounded-lg">
               <h3 className="text-gray-700 font-semibold">Solution:</h3>
-              <MathJax dynamic>
-                <div dangerouslySetInnerHTML={{ __html: question.solution }} />
-              </MathJax>
+              {renderRichContent(question.solution)}
             </div>
           )}
         </div>

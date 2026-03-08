@@ -49,7 +49,7 @@ export default function PlacementTracker() {
     }
 
     try {
-      const subscription = SUBSCRIPTION_DATA.find(sub => sub.email === user.email && sub.subscription_status === 'active');
+      const subscription = SUBSCRIPTION_DATA.find(sub => sub.email === user?.emailAddresses[0]?.emailAddress && sub.subscription_status === 'active');
       setIsSubscribed(!!subscription);
     } catch (err) {
       console.error('Subscription check error:', err);
@@ -194,7 +194,7 @@ export default function PlacementTracker() {
         .from('user_progress_placement_tracker')
         .upsert({
           user_id: user.id,
-          user_mail: user.email,
+          user_mail: user?.emailAddresses[0]?.emailAddress,
           task_id: taskId,
           status,
           user_notes: userProgress[taskId]?.user_notes || ''

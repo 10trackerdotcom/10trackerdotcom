@@ -66,6 +66,184 @@ const convertNewlinesToBreaks = (text, isUpscPrelims) => {
   return processed;
 };
 
+// Helper: detect and render <pre> code blocks with syntax highlighting
+const CODE_PRE_REGEX = /<pre([^>]*)>([\s\S]*?)<\/pre>/gi;
+
+const extractLanguageFromPre = (preAttrs) => {
+  if (!preAttrs) return null;
+  const classMatch = /class=["']([^"']*)["']/i.exec(preAttrs);
+  if (!classMatch) return null;
+  const classes = classMatch[1].split(/\s+/);
+  const langClass = classes.find((cls) => cls.startsWith("lang-"));
+  if (!langClass) return null;
+  const raw = langClass.replace("lang-", "").toLowerCase();
+  if (raw === "c_cpp") return "cpp";
+  return raw || null;
+};
+
+const autoFormatCode = (code, language) => {
+  if (!code) return code;
+  const cLikeLanguages = ["c", "cpp", "c_cpp", "java", "javascript", "js"];
+  if (!cLikeLanguages.includes((language || "").toLowerCase())) {
+    return code;
+  }
+
+  let formatted = code.trim();
+
+  // Ensure preprocessor directives start on their own line
+  formatted = formatted.replace(/#include/g, "\n#include");
+
+  // Newlines before common C constructs
+  formatted = formatted
+    .replace(/\s*(for\s*\()/g, "\nfor (")
+    .replace(/\s*(if\s*\()/g, "\nif (")
+    .replace(/\s*(else\s+if\s*\()/g, "\nelse if (")
+    .replace(/\s*(else\b)/g, "\nelse")
+    .replace(/\s*(while\s*\()/g, "\nwhile (")
+    .replace(/\s*(do\s*\b)/g, "\ndo ");
+
+  // Add newlines after semicolons
+  formatted = formatted.replace(/;\s*/g, ";\n");
+
+  // Add newlines after opening braces
+  formatted = formatted.replace(/{\s*/g, "{\n");
+
+  // Add newlines before closing braces
+  formatted = formatted.replace(/\s*}\s*/g, "\n}\n");
+
+  // Collapse multiple blank lines
+  formatted = formatted.replace(/\n{3,}/g, "\n\n");
+
+  // Apply indentation based on braces
+  const lines = formatted
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l, idx, arr) => !(l === "" && (idx === 0 || arr[idx - 1] === "")));
+
+  let indentLevel = 0;
+  const indentSize = 2;
+  const indentedLines = lines.map((line) => {
+    if (line === "") return "";
+    const trimmed = line.trim();
+    const closesBlock = trimmed.startsWith("}") || trimmed.startsWith("};");
+
+    if (closesBlock && indentLevel > 0) {
+      indentLevel -= 1;
+    }
+
+    const prefix = " ".repeat(indentLevel * indentSize);
+    const result = prefix + trimmed;
+
+    const opensBlock = trimmed.endsWith("{");
+    if (opensBlock) {
+      indentLevel += 1;
+    }
+
+    return result;
+  });
+
+  return indentedLines.join("\n").trimEnd();
+};
+
+const decodeHtmlEntities = (html) => {
+  if (typeof window === "undefined" || !html) return html;
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = html;
+  let decoded = textarea.value;
+
+  // Convert common HTML line-break representations into real newlines
+  decoded = decoded.replace(/<br\s*\/?>/gi, "\n");
+  // Handle escaped \n that may have been stored as text
+  decoded = decoded.replace(/\\n/g, "\n");
+
+  return decoded;
+};
+
+const renderHtmlWithCodeBlocks = (html, isUpscPrelims) => {
+  if (!html) return null;
+
+  const processed = convertRelativeImageUrls(html);
+  const segments = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = CODE_PRE_REGEX.exec(processed)) !== null) {
+    const [fullMatch, preAttrs, codeHtml] = match;
+
+    const beforeHtml = processed.slice(lastIndex, match.index);
+    if (beforeHtml.trim()) {
+      segments.push(
+        <div
+          key={`html-${lastIndex}`}
+          className="mb-2 break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto"
+          dangerouslySetInnerHTML={{
+            __html: convertNewlinesToBreaks(
+              convertLatexTags(beforeHtml),
+              isUpscPrelims
+            ),
+          }}
+        />
+      );
+    }
+
+    const language = extractLanguageFromPre(preAttrs) || "text";
+    let code = decodeHtmlEntities(codeHtml);
+    // Strip presentational HTML that sometimes gets copied with code
+    code = code
+      .replace(/<\/?span[^>]*>/gi, "")
+      .replace(/<\/?font[^>]*>/gi, "")
+      .replace(/<\/?div[^>]*>/gi, "")
+      .replace(/&nbsp;/gi, " ");
+    code = autoFormatCode(code, language);
+
+    segments.push(
+      <div
+        key={`code-${match.index}`}
+        className="mt-3 mb-3 rounded-lg overflow-x-auto shadow-sm border border-gray-200/50 max-w-full"
+      >
+        <SyntaxHighlighter
+          language={language}
+          style={atomOneDark}
+          customStyle={{
+            margin: 0,
+            padding: "12px",
+            maxWidth: "100%",
+            overflowX: "auto",
+          }}
+          wrapLines
+          wrapLongLines
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
+    );
+
+    lastIndex = match.index + fullMatch.length;
+  }
+
+  const remainingHtml = processed.slice(lastIndex);
+  if (remainingHtml.trim()) {
+    segments.push(
+      <div
+        key={`html-end-${lastIndex}`}
+        className="mt-2 break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto"
+        dangerouslySetInnerHTML={{
+          __html: convertNewlinesToBreaks(
+            convertLatexTags(remainingHtml),
+            isUpscPrelims
+          ),
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
+      {segments}
+    </div>
+  );
+};
+
 // Memoized QuestionCard component
 const QuestionCard = memo(({ question, category, index, onAnswer, questionId: questionIdProp, isCompleted, isCorrect, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
   const { user } = useAuth();
@@ -381,7 +559,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
                 {questionData.directionHTML && questionData.directionHTML !== null && (
                   <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded-r break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(questionData.directionHTML)), isUpscPrelims) }} />
                 )}
-                <div className="break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(questionData.question)), isUpscPrelims) }} />
+                {renderHtmlWithCodeBlocks(questionData.question, isUpscPrelims)}
 
                 {questionData.questionextratext && (
                   <div className="mt-2 text-gray-600 text-xs break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(questionData.questionextratext)), isUpscPrelims) }} />

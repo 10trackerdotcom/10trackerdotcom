@@ -12,7 +12,7 @@ const Signin = () => {
       {user ? (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center text-xl font-bold text-white">
-            {user.displayName ? user.displayName[0].toUpperCase() : user.email ? user.email[0].toUpperCase() : ""}
+            {user.displayName ? user.displayName[0].toUpperCase() : user?.emailAddresses[0]?.emailAddress ? user?.emailAddresses[0]?.emailAddress[0].toUpperCase() : ""}
           </div>
           <button
             onClick={signOut}

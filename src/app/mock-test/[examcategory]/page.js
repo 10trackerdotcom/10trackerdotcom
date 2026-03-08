@@ -1,18 +1,19 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback, memo, lazy, Suspense } from 'react';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { useAuth } from '@/app/context/AuthContext';
 import { createClient } from "@supabase/supabase-js";
-import { 
-  BookOpen, Clock, Users, BarChart3, Play, Eye, Calendar, Target, CheckCircle,
-  Filter, Search, ChevronRight, Activity, Star, Zap, Brain, Trophy, ArrowRight,
-  TrendingUp, Award, Sparkles, Gauge, TrendingDown, ChevronLeft, Grid, History,
-  FileText, BarChart2, PieChart, User, Lock, Unlock, BarChart, TrendingUp as TrendingUpIcon,
-  Bookmark, Settings, Bell, Menu, X, Plus, Minus, RefreshCw, Download, Share2
+import {
+  BookOpen, Clock, Users, Play, Target, CheckCircle, Filter, Search, ChevronRight,
+  Star, Trophy, ArrowRight, TrendingUp, Award, TrendingDown, ChevronLeft, Grid,
+  History, FileText, PieChart, Lock, BarChart, BarChart3, TrendingUp as TrendingUpIcon,
+  Gauge, Activity, Zap, Brain, RefreshCw, Eye, Calendar, Hexagon, Layers, AlertCircle
 } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import Navbar from '@/components/Navbar';
-import { useParams, useRouter } from 'next/navigation';
+import MetaDataJobs from '@/components/Seo';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 // Supabase configuration with connection pooling
 const supabase = createClient(
@@ -49,65 +50,63 @@ const sanitizeData = (value, type = 'string', defaultValue = null) => {
 
 const debounce = (func, wait) => {
   let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
+  const executedFunction = (...args) => {
     clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
+    timeout = setTimeout(() => func(...args), wait);
   };
+  executedFunction.cancel = () => clearTimeout(timeout);
+  return executedFunction;
 };
 
 // Ultra-fast loading components
 const FullPageLoader = (() => (
-  <div className="fixed inset-0 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center z-50 p-3 sm:p-4">
+  <div className="fixed inset-0 bg-neutral-50 flex items-center justify-center z-50 p-3 sm:p-4">
     <div className="text-center max-w-xs w-full">
       <div className="relative mb-4 sm:mb-6">
-        <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 border-3 sm:border-4 border-blue-200 rounded-full animate-pulse mx-auto"></div>
-        <div className="absolute inset-0 w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 border-3 sm:border-4 border-blue-600 rounded-full border-t-transparent animate-spin mx-auto"></div>
+        <div className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 border-3 sm:border-4 border-neutral-200 rounded-full animate-pulse mx-auto"></div>
+        <div className="absolute inset-0 w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 border-3 sm:border-4 border-neutral-700 rounded-full border-t-transparent animate-spin mx-auto"></div>
       </div>
-      <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-gray-800 mb-1">Loading Dashboard</h3>
-      <p className="text-xs sm:text-sm text-gray-600">Preparing analytics...</p>
+      <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-neutral-800 mb-1">Loading</h3>
+      <p className="text-xs sm:text-sm text-neutral-600">Preparing...</p>
     </div>
   </div>
 ));
 
-// Modern Tab Navigation Component
+const MOCK_TEST_TABS = [
+  { id: 'dashboard', label: 'Dashboard', icon: Grid, requiresAuth: false },
+  { id: 'tests', label: 'Mock Tests', icon: BookOpen, requiresAuth: false },
+  { id: 'progress', label: 'My Progress', icon: BarChart3, requiresAuth: true },
+];
+
 const TabNavigation = memo(function TabNavigation({ activeTab, onTabChange, isAuthenticated }) {
-  const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: Grid, requiresAuth: false },
-    { id: 'tests', label: 'Mock Tests', icon: BookOpen, requiresAuth: false },
-    { id: 'sessions', label: 'Recent Sessions', icon: History, requiresAuth: true },
-    { id: 'subjects', label: 'Subject Analysis', icon: PieChart, requiresAuth: true }
-  ];
+  const tabs = MOCK_TEST_TABS;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-6">
-      <div className="flex overflow-x-auto scrollbar-hide">
+    <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden mb-4 sm:mb-6">
+      <div className="flex overflow-x-auto scrollbar-hide p-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           const isDisabled = tab.requiresAuth && !isAuthenticated;
-          
+
           return (
             <button
               key={tab.id}
               onClick={() => !isDisabled && onTabChange(tab.id)}
               disabled={isDisabled}
               className={`
-                flex items-center space-x-2 px-4 py-3 text-sm font-medium transition-all duration-200 whitespace-nowrap
-                ${isActive 
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg' 
+                flex items-center space-x-2 px-3 sm:px-4 py-2.5 sm:py-3 text-sm font-medium transition-all duration-200 whitespace-nowrap rounded-lg
+                ${isActive
+                  ? 'bg-neutral-900 text-white shadow-sm'
                   : isDisabled
-                    ? 'text-gray-400 cursor-not-allowed'
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                    ? 'text-neutral-400 cursor-not-allowed'
+                    : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900'
                 }
               `}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 flex-shrink-0" />
               <span>{tab.label}</span>
-              {isDisabled && <Lock className="h-3 w-3" />}
+              {isDisabled && <Lock className="h-3 w-3 flex-shrink-0" />}
             </button>
           );
         })}
@@ -118,93 +117,91 @@ const TabNavigation = memo(function TabNavigation({ activeTab, onTabChange, isAu
 
 // Public Dashboard Component for Non-Authenticated Users
 const PublicDashboard = memo(function PublicDashboard({ tests, examcategory }) {
+  const categoryLabel = (examcategory?.toUpperCase?.() || 'GATE CSE').replace(/-/g, ' ');
   return (
     <div className="space-y-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-6 text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
-        <div className="relative z-10">
-          <h2 className="text-2xl font-bold mb-2">Welcome to {examcategory?.toUpperCase() || 'GATE CSE'} Mock Tests</h2>
-          <p className="text-blue-100 mb-4">Practice with comprehensive mock tests and track your progress</p>
-          <div className="flex items-center space-x-4 text-sm">
-            <div className="flex items-center space-x-1">
-              <BookOpen className="h-4 w-4" />
-              <span>{tests.length} Tests Available</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <Users className="h-4 w-4" />
-              <span>Join 10,000+ Students</span>
-            </div>
-          </div>
+      {/* Welcome Section - neutral */}
+      <div className="bg-neutral-900 rounded-xl p-6 text-white">
+        <h2 className="text-xl sm:text-2xl font-semibold mb-2">Welcome to {categoryLabel} Mock Tests</h2>
+        <p className="text-neutral-300 mb-4 text-sm sm:text-base">Practice with full-length tests and track your progress.</p>
+        <div className="flex flex-wrap items-center gap-4 text-sm text-neutral-300">
+          <span className="flex items-center gap-1.5">
+            <BookOpen className="h-4 w-4" />
+            {tests.length} tests
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Users className="h-4 w-4" />
+            Join thousands of students
+          </span>
         </div>
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-200">
           <div className="flex items-center space-x-3">
-            <div className="bg-blue-100 p-2 rounded-lg">
-              <BookOpen className="h-5 w-5 text-blue-600" />
+            <div className="bg-neutral-100 p-2 rounded-lg">
+              <BookOpen className="h-5 w-5 text-neutral-700" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{tests.length}</p>
-              <p className="text-sm text-gray-600">Available Tests</p>
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">{tests.length}</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Available Tests</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-200">
           <div className="flex items-center space-x-3">
-            <div className="bg-green-100 p-2 rounded-lg">
-              <Target className="h-5 w-5 text-green-600" />
+            <div className="bg-neutral-100 p-2 rounded-lg">
+              <Target className="h-5 w-5 text-neutral-700" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">1000+</p>
-              <p className="text-sm text-gray-600">Questions</p>
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">1000+</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Questions</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-200">
           <div className="flex items-center space-x-3">
-            <div className="bg-purple-100 p-2 rounded-lg">
-              <Clock className="h-5 w-5 text-purple-600" />
+            <div className="bg-neutral-100 p-2 rounded-lg">
+              <Clock className="h-5 w-5 text-neutral-700" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">180m</p>
-              <p className="text-sm text-gray-600">Avg Duration</p>
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">180m</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Avg Duration</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-neutral-200">
           <div className="flex items-center space-x-3">
-            <div className="bg-orange-100 p-2 rounded-lg">
-              <Trophy className="h-5 w-5 text-orange-600" />
+            <div className="bg-neutral-100 p-2 rounded-lg">
+              <Trophy className="h-5 w-5 text-neutral-700" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">95%</p>
-              <p className="text-sm text-gray-600">Success Rate</p>
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">95%</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Success Rate</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Featured Tests */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
-          <h3 className="text-lg font-bold text-white flex items-center">
-            <Star className="h-5 w-5 mr-2" />
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 border-b border-neutral-200">
+          <h3 className="text-lg font-semibold text-neutral-900 flex items-center">
+            <Star className="h-5 w-5 mr-2 text-neutral-600" />
             Featured Mock Tests
           </h3>
         </div>
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {tests.slice(0, 6).map((test) => (
-              <div key={test.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:shadow-md transition-shadow">
+              <div key={test.id} className="bg-neutral-50 rounded-xl p-4 border border-neutral-200 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900 mb-1">{test.name}</h4>
-                    <p className="text-sm text-gray-600">{test.total_questions} Questions</p>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-neutral-900 mb-1 truncate">{test.name}</h4>
+                    <p className="text-sm text-neutral-600">{test.total_questions} Questions</p>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ml-2 ${
                     test.difficulty === 'easy' ? 'bg-green-100 text-green-700' :
                     test.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700' :
                     'bg-red-100 text-red-700'
@@ -212,18 +209,18 @@ const PublicDashboard = memo(function PublicDashboard({ tests, examcategory }) {
                     {test.difficulty || 'Mixed'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm text-gray-600 mb-3">
-                  <div className="flex items-center space-x-1">
+                <div className="flex items-center justify-between text-sm text-neutral-600 mb-3">
+                  <span className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    <span>{test.duration} min</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
+                    {test.duration} min
+                  </span>
+                  <span className="flex items-center gap-1">
                     <Users className="h-4 w-4" />
-                    <span>{test.attemptCount} attempts</span>
-                  </div>
+                    {test.attemptCount} attempts
+                  </span>
                 </div>
-                <button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-2 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all">
-                  Sign In to Start
+                <button className="w-full bg-neutral-900 text-white py-2.5 rounded-lg font-medium hover:bg-neutral-800 transition-colors">
+                  Sign in to start
                 </button>
               </div>
             ))}
@@ -232,15 +229,190 @@ const PublicDashboard = memo(function PublicDashboard({ tests, examcategory }) {
       </div>
 
       {/* Call to Action */}
-      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-6 border border-indigo-200">
+      <div className="bg-neutral-100 rounded-xl p-6 border border-neutral-200">
         <div className="text-center">
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to Start Your Journey?</h3>
-          <p className="text-gray-600 mb-4">Sign in to access detailed analytics, track your progress, and unlock personalized insights</p>
-          <button className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg">
-            Sign In to Continue
+          <h3 className="text-lg sm:text-xl font-semibold text-neutral-900 mb-2">Ready to start?</h3>
+          <p className="text-neutral-600 mb-4 text-sm sm:text-base">Sign in to access analytics and track your progress.</p>
+          <button className="bg-neutral-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-neutral-800 transition-colors">
+            Sign in to continue
           </button>
         </div>
       </div>
+    </div>
+  );
+});
+
+// Rich Dashboard for authenticated users: stats, quick start, recent activity, insights
+const AuthenticatedDashboard = memo(function AuthenticatedDashboard({
+  tests,
+  userStats,
+  examTrackerStats,
+  examcategory,
+  categoryLabel,
+  onStartTest,
+  onOpenProgress,
+}) {
+  const suggestedTests = useMemo(() => {
+    const notDone = tests.filter((t) => !t.userCompleted);
+    const done = tests.filter((t) => t.userCompleted);
+    return [...notDone.slice(0, 2), ...done.slice(0, 1)].filter(Boolean).slice(0, 3);
+  }, [tests]);
+  const recentForDashboard = (examTrackerStats.recentAttempts || []).slice(0, 3);
+  const strongest = examTrackerStats.strongestSubject || (examTrackerStats.subjectWisePerformance?.[0]?.subject);
+  const weakest = examTrackerStats.weakestSubject || (examTrackerStats.subjectWisePerformance?.length ? examTrackerStats.subjectWisePerformance[examTrackerStats.subjectWisePerformance.length - 1]?.subject : null);
+
+  return (
+    <div className="space-y-6 sm:space-y-8">
+      {/* Welcome + key stats */}
+      <div className="bg-neutral-900 rounded-xl p-4 sm:p-6 text-white">
+        <h2 className="text-lg sm:text-xl font-semibold mb-1">Welcome back</h2>
+        <p className="text-neutral-300 text-sm mb-4">Here’s your {categoryLabel} mock test overview.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white/10 rounded-lg p-3 sm:p-4">
+            <p className="text-2xl sm:text-3xl font-bold">{tests.length}</p>
+            <p className="text-neutral-300 text-xs sm:text-sm">Tests available</p>
+          </div>
+          <div className="bg-white/10 rounded-lg p-3 sm:p-4">
+            <p className="text-2xl sm:text-3xl font-bold">{userStats.completedTests}</p>
+            <p className="text-neutral-300 text-xs sm:text-sm">Completed</p>
+          </div>
+          <div className="bg-white/10 rounded-lg p-3 sm:p-4">
+            <p className="text-2xl sm:text-3xl font-bold">{userStats.completedTests > 0 ? `${userStats.bestScore}%` : '—'}</p>
+            <p className="text-neutral-300 text-xs sm:text-sm">Best score</p>
+          </div>
+          <div className="bg-white/10 rounded-lg p-3 sm:p-4">
+            <p className="text-2xl sm:text-3xl font-bold">{userStats.totalStudyTime}h</p>
+            <p className="text-neutral-300 text-xs sm:text-sm">Study time</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick start: suggested tests */}
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-200 flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-base sm:text-lg font-semibold text-neutral-900 flex items-center">
+            <Zap className="h-5 w-5 mr-2 text-amber-500" />
+            Quick start
+          </h3>
+          <button
+            type="button"
+            onClick={onOpenProgress}
+            className="text-sm font-medium text-neutral-600 hover:text-neutral-900 flex items-center gap-1"
+          >
+            My Progress <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-4 sm:p-6">
+          {suggestedTests.length === 0 ? (
+            <p className="text-neutral-500 text-sm">No tests in this category yet.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {suggestedTests.map((test) => (
+                <div key={test.id} className="bg-neutral-50 rounded-xl p-4 border border-neutral-200 hover:border-neutral-300 transition-colors">
+                  <h4 className="font-semibold text-neutral-900 text-sm sm:text-base truncate mb-1">{test.name}</h4>
+                  <p className="text-xs text-neutral-600 mb-3">{test.total_questions} Q · {test.duration} min</p>
+                  <button
+                    type="button"
+                    onClick={() => onStartTest(test)}
+                    className="w-full py-2 rounded-lg text-sm font-medium bg-neutral-900 text-white hover:bg-neutral-800 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {test.userCompleted ? (
+                      <> <CheckCircle className="h-4 w-4" /> View result </>
+                    ) : (
+                      <> <Play className="h-4 w-4" /> Start test </>
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recent activity */}
+      {recentForDashboard.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-neutral-200 flex items-center justify-between flex-wrap gap-2">
+            <h3 className="text-base sm:text-lg font-semibold text-neutral-900 flex items-center">
+              <History className="h-5 w-5 mr-2 text-neutral-600" />
+              Recent activity
+            </h3>
+            <button
+              type="button"
+              onClick={onOpenProgress}
+              className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
+            >
+              View all
+            </button>
+          </div>
+          <div className="p-4 sm:p-6">
+            <ul className="space-y-3">
+              {recentForDashboard.map((attempt) => (
+                <li key={attempt.id}>
+                  <Link
+                    href={`/mock-test/${examcategory}/results/${attempt.id}`}
+                    className="flex items-center justify-between p-3 rounded-lg bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-neutral-900 truncate text-sm sm:text-base">{attempt.test_name || 'Test'}</p>
+                      <p className="text-xs text-neutral-500">
+                        {attempt.created_at ? new Date(attempt.created_at).toLocaleDateString() : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <span className="font-bold text-neutral-900">{Math.round(attempt.percentage ?? attempt.score ?? 0)}%</span>
+                      <ChevronRight className="h-4 w-4 text-neutral-400" />
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Insights one-liner */}
+      {(strongest || weakest) && (
+        <div className="bg-neutral-100 rounded-xl p-4 sm:p-5 border border-neutral-200">
+          <h3 className="text-sm font-semibold text-neutral-900 mb-2 flex items-center">
+            <Brain className="h-4 w-4 mr-2 text-neutral-600" />
+            Insights
+          </h3>
+          <p className="text-sm text-neutral-700">
+            {strongest && <span>Strongest: <strong>{strongest}</strong></span>}
+            {strongest && weakest && ' · '}
+            {weakest && <span>Focus more: <strong>{weakest}</strong></span>}
+          </p>
+        </div>
+      )}
+
+      {/* CTA to Mock Tests tab */}
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={onOpenProgress}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-neutral-300 text-neutral-700 text-sm font-medium hover:bg-neutral-100"
+        >
+          <BarChart3 className="h-4 w-4" />
+          Full progress & analytics
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// My Progress tab: stats + recent sessions + subject analysis in one scroll
+const MyProgressTab = memo(function MyProgressTab({ examTrackerStats, userStats, examcategory }) {
+  return (
+    <div className="space-y-6 sm:space-y-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <AnimatedStatsCard icon={CheckCircle} title="Tests completed" value={userStats.completedTests} color="green" delay={0} />
+        <AnimatedStatsCard icon={Trophy} title="Best score" value={userStats.completedTests > 0 ? `${userStats.bestScore}%` : '—'} color="yellow" delay={50} />
+        <AnimatedStatsCard icon={TrendingUpIcon} title="Accuracy" value={`${examTrackerStats.averageAccuracy}%`} color="blue" delay={100} />
+        <AnimatedStatsCard icon={Clock} title="Study time" value={`${userStats.totalStudyTime}h`} color="orange" delay={150} />
+      </div>
+      <RecentSessionsTab examTrackerStats={examTrackerStats} examcategory={examcategory} />
+      <AnalyticsTab examTrackerStats={examTrackerStats} userStats={userStats} />
     </div>
   );
 });
@@ -250,11 +422,11 @@ const AnalyticsTab = memo(function AnalyticsTab({ examTrackerStats, userStats })
   if (!examTrackerStats.subjectWisePerformance.length) {
     return (
       <div className="text-center py-12">
-        <div className="bg-gray-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-          <BarChart className="h-10 w-10 text-gray-400" />
+        <div className="bg-neutral-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+          <BarChart className="h-10 w-10 text-neutral-400" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-600 mb-2">No Analytics Data Yet</h3>
-        <p className="text-gray-500">Complete some mock tests to see detailed analytics</p>
+        <h3 className="text-lg font-semibold text-neutral-600 mb-2">No analytics yet</h3>
+        <p className="text-neutral-500">Complete mock tests to see detailed analytics.</p>
       </div>
     );
   }
@@ -262,40 +434,40 @@ const AnalyticsTab = memo(function AnalyticsTab({ examTrackerStats, userStats })
   return (
     <div className="space-y-6">
       {/* Overall Performance */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
-          <h3 className="text-lg font-bold text-white flex items-center">
-            <TrendingUpIcon className="h-5 w-5 mr-2" />
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 border-b border-neutral-200">
+          <h3 className="text-lg font-semibold text-neutral-900 flex items-center">
+            <TrendingUpIcon className="h-5 w-5 mr-2 text-neutral-600" />
             Overall Performance
           </h3>
         </div>
-        <div className="p-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="text-center p-4 bg-blue-50 rounded-xl">
-              <p className="text-2xl font-bold text-blue-600">{examTrackerStats.overallStats?.totalQuestions || 0}</p>
-              <p className="text-sm text-blue-700">Total Questions</p>
+        <div className="p-4 sm:p-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <div className="text-center p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">{examTrackerStats.overallStats?.totalQuestions || 0}</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Total Questions</p>
             </div>
-            <div className="text-center p-4 bg-green-50 rounded-xl">
-              <p className="text-2xl font-bold text-green-600">{examTrackerStats.overallStats?.overallAccuracy || 0}%</p>
-              <p className="text-sm text-green-700">Accuracy</p>
+            <div className="text-center p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">{examTrackerStats.overallStats?.overallAccuracy || 0}%</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Accuracy</p>
             </div>
-            <div className="text-center p-4 bg-purple-50 rounded-xl">
-              <p className="text-2xl font-bold text-purple-600">{examTrackerStats.overallStats?.overallAttemptRate || 0}%</p>
-              <p className="text-sm text-purple-700">Attempt Rate</p>
+            <div className="text-center p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">{examTrackerStats.overallStats?.overallAttemptRate || 0}%</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Attempt Rate</p>
             </div>
-            <div className="text-center p-4 bg-orange-50 rounded-xl">
-              <p className="text-2xl font-bold text-orange-600">{examTrackerStats.overallStats?.totalSubjects || 0}</p>
-              <p className="text-sm text-orange-700">Subjects</p>
+            <div className="text-center p-4 bg-neutral-50 rounded-xl border border-neutral-200">
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900">{examTrackerStats.overallStats?.totalSubjects || 0}</p>
+              <p className="text-xs sm:text-sm text-neutral-600">Subjects</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Subject Performance */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
-          <h3 className="text-lg font-bold text-white flex items-center">
-            <PieChart className="h-5 w-5 mr-2" />
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 border-b border-neutral-200">
+          <h3 className="text-lg font-semibold text-neutral-900 flex items-center">
+            <PieChart className="h-5 w-5 mr-2 text-neutral-600" />
             Subject-wise Performance
           </h3>
         </div>
@@ -316,25 +488,25 @@ const RecentSessionsTab = memo(function RecentSessionsTab({ examTrackerStats, ex
   if (!examTrackerStats.recentAttempts.length) {
     return (
       <div className="text-center py-12">
-        <div className="bg-gray-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-          <History className="h-10 w-10 text-gray-400" />
+        <div className="bg-neutral-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+          <History className="h-10 w-10 text-neutral-400" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-600 mb-2">No Recent Sessions</h3>
-        <p className="text-gray-500">Start taking mock tests to see your session history</p>
+        <h3 className="text-lg font-semibold text-neutral-600 mb-2">No recent sessions</h3>
+        <p className="text-neutral-500">Start mock tests to see session history.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4">
-          <h3 className="text-lg font-bold text-white flex items-center">
-            <History className="h-5 w-5 mr-2" />
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 border-b border-neutral-200">
+          <h3 className="text-lg font-semibold text-neutral-900 flex items-center">
+            <History className="h-5 w-5 mr-2 text-neutral-600" />
             Recent Test Sessions
           </h3>
         </div>
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {examTrackerStats.recentAttempts.map((attempt) => (
               <RecentTestSession key={attempt.id} attempt={attempt} examcategory={examcategory} />
@@ -347,19 +519,19 @@ const RecentSessionsTab = memo(function RecentSessionsTab({ examTrackerStats, ex
 });
 
 const StatsCardSkeleton = (() => (
-  <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-2 sm:p-3 lg:p-4 animate-pulse">
-    <div className="flex items-center space-x-2 sm:space-x-3">
-      <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 bg-gray-200 rounded-lg flex-shrink-0"></div>
+  <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-3 sm:p-4 animate-pulse">
+    <div className="flex items-center space-x-3">
+      <div className="w-8 h-8 sm:w-10 sm:h-10 bg-neutral-200 rounded-lg flex-shrink-0"></div>
       <div className="flex-1 min-w-0">
-        <div className="h-2 sm:h-2.5 lg:h-3 bg-gray-200 rounded w-12 sm:w-16 mb-1 sm:mb-2"></div>
-        <div className="h-3 sm:h-4 lg:h-5 bg-gray-200 rounded w-8 sm:w-10 lg:w-12"></div>
+        <div className="h-2.5 sm:h-3 bg-neutral-200 rounded w-16 mb-2"></div>
+        <div className="h-4 sm:h-5 bg-neutral-200 rounded w-12"></div>
       </div>
     </div>
   </div>
 ));
 
 // Highly optimized stats card with reduced re-renders
-const AnimatedStatsCard = (({ 
+const AnimatedStatsCard = memo(function AnimatedStatsCard({ 
   icon: Icon, 
   title, 
   value, 
@@ -368,16 +540,16 @@ const AnimatedStatsCard = (({
   trend = null,
   delay = 0,
   loading = false 
-}) => {
+}) {
   const [isVisible, setIsVisible] = useState(false);
 
   const colorClasses = useMemo(() => ({
-    blue: "bg-gradient-to-br from-blue-400 to-blue-600 text-white",
-    green: "bg-gradient-to-br from-green-400 to-green-600 text-white",
-    purple: "bg-gradient-to-br from-purple-400 to-purple-600 text-white",
-    orange: "bg-gradient-to-br from-orange-400 to-orange-600 text-white",
-    red: "bg-gradient-to-br from-red-400 to-red-600 text-white",
-    yellow: "bg-gradient-to-br from-yellow-400 to-yellow-600 text-white"
+    blue: "bg-neutral-700 text-white",
+    green: "bg-green-600 text-white",
+    purple: "bg-neutral-600 text-white",
+    orange: "bg-orange-600 text-white",
+    red: "bg-red-600 text-white",
+    yellow: "bg-amber-600 text-white"
   }), []);
 
   useEffect(() => {
@@ -393,15 +565,15 @@ const AnimatedStatsCard = (({
         isVisible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
       }`}
     >
-      <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-2 sm:p-3 lg:p-4 hover:shadow-md transition-shadow duration-200">
+      <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-3 sm:p-4 hover:shadow-md transition-shadow duration-200">
         <div className="flex items-start justify-between mb-2 sm:mb-3">
-          <div className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 xl:w-12 xl:h-12 rounded-lg sm:rounded-xl ${colorClasses[color]} shadow-sm flex-shrink-0`}>
+          <div className={`inline-flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 xl:w-12 xl:h-12 rounded-lg ${colorClasses[color]} shadow-sm flex-shrink-0`}>
             <Icon className="h-3 w-3 sm:h-4 sm:w-4 lg:h-5 lg:w-5 xl:h-6 xl:w-6" />
           </div>
           {trend !== null && (
             <div className={`flex items-center text-xs font-semibold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full ${
               trend > 0 ? 'bg-green-100 text-green-700' : 
-              trend < 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+              trend < 0 ? 'bg-red-100 text-red-700' : 'bg-neutral-100 text-neutral-700'
             }`}>
               {trend > 0 ? <TrendingUp className="h-2 w-2 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> : 
                trend < 0 ? <TrendingDown className="h-2 w-2 sm:h-3 sm:w-3 mr-0.5 sm:mr-1" /> : null}
@@ -409,22 +581,22 @@ const AnimatedStatsCard = (({
             </div>
           )}
         </div>
-        <h3 className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-gray-900 mb-0.5 sm:mb-1 leading-tight truncate">{value}</h3>
-        <p className="text-xs sm:text-sm font-semibold text-gray-700 mb-0.5 sm:mb-1 leading-tight truncate">{title}</p>
-        {subtitle && <p className="text-xs text-gray-500 leading-tight truncate">{subtitle}</p>}
+        <h3 className="text-base sm:text-lg lg:text-xl xl:text-2xl font-bold text-neutral-900 mb-0.5 sm:mb-1 leading-tight truncate">{value}</h3>
+        <p className="text-xs sm:text-sm font-semibold text-neutral-700 mb-0.5 sm:mb-1 leading-tight truncate">{title}</p>
+        {subtitle && <p className="text-xs text-neutral-500 leading-tight truncate">{subtitle}</p>}
       </div>
     </div>
   );
 });
 
 // Mobile-optimized test list item
-const TestListItem = (({ test, onStartTest, onPreview, examcategory }) => {
+const TestListItem = memo(function TestListItem({ test, onStartTest, onPreview, examcategory }) {
   const getDifficultyColor = useMemo(() => {
     switch (test.difficulty?.toLowerCase()) {
       case 'easy': return 'text-green-600 bg-green-100';
       case 'medium': return 'text-yellow-600 bg-yellow-100';
       case 'hard': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
+      default: return 'text-neutral-600 bg-neutral-100';
     }
   }, [test.difficulty]);
 
@@ -435,13 +607,13 @@ const TestListItem = (({ test, onStartTest, onPreview, examcategory }) => {
   }, []);
 
   return (
-    <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-6 hover:shadow-md transition-shadow duration-200">
+    <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-4 sm:p-5 hover:shadow-md hover:border-neutral-300 transition-all duration-200">
       {/* Mobile-first layout */}
       <div className="space-y-3 sm:space-y-4">
         {/* Header with icon and title */}
         <div className="flex items-start space-x-3">
-          <div className="bg-gradient-to-br from-blue-100 to-indigo-200 p-1.5 sm:p-2 rounded-lg sm:rounded-xl flex-shrink-0">
-            <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
+          <div className="bg-neutral-100 p-1.5 sm:p-2 rounded-lg flex-shrink-0">
+            <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-neutral-700" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-col space-y-2">
@@ -461,7 +633,7 @@ const TestListItem = (({ test, onStartTest, onPreview, examcategory }) => {
         {/* Stats grid - responsive */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs sm:text-sm text-gray-600">
           <div className="flex items-center space-x-1 truncate">
-            <Target className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500 flex-shrink-0" />
+            <Target className="h-3 w-3 sm:h-4 sm:w-4 text-neutral-600 flex-shrink-0" />
             <span className="truncate">{test.total_questions} Questions</span>
           </div>
           <div className="flex items-center space-x-1 truncate">
@@ -469,7 +641,7 @@ const TestListItem = (({ test, onStartTest, onPreview, examcategory }) => {
             <span className="truncate">{formatDuration(test.duration)}</span>
           </div>
           <div className="flex items-center space-x-1 truncate">
-            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500 flex-shrink-0" />
+            <Users className="h-3 w-3 sm:h-4 sm:w-4 text-neutral-600 flex-shrink-0" />
             <span className="truncate">{test.attemptCount} Attempts</span>
           </div>
         </div>
@@ -489,20 +661,20 @@ const TestListItem = (({ test, onStartTest, onPreview, examcategory }) => {
           {test.userCompleted ? (
             <button
               onClick={() => onStartTest(test)}
-              className="flex items-center justify-center bg-gradient-to-r from-green-600 to-emerald-600 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium hover:from-green-700 hover:to-emerald-700 transition-colors"
+              className="flex items-center justify-center w-full bg-neutral-800 text-white px-3 py-2.5 rounded-lg text-xs sm:text-sm font-medium hover:bg-neutral-700 transition-colors"
             >
-              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Attempted - See Solution
-              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
+              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 flex-shrink-0" />
+              View results
+              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2 flex-shrink-0" />
             </button>
           ) : (
             <button
               onClick={() => onStartTest(test)}
-              className="flex items-center justify-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium hover:from-blue-700 hover:to-indigo-700 transition-colors"
+              className="flex items-center justify-center w-full bg-neutral-900 text-white px-3 py-2.5 rounded-lg text-xs sm:text-sm font-medium hover:bg-neutral-800 transition-colors"
             >
-              <Play className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Start
-              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
+              <Play className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 flex-shrink-0" />
+              Start test
+              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2 flex-shrink-0" />
             </button>
           )}
         </div>
@@ -512,7 +684,7 @@ const TestListItem = (({ test, onStartTest, onPreview, examcategory }) => {
 });
 
 // Optimized recent test session
-const RecentTestSession = (({ attempt, examcategory }) => {
+const RecentTestSession = memo(function RecentTestSession({ attempt, examcategory }) {
   const getScoreColor = useCallback((score) => {
     const validScore = sanitizeData(score, 'number', 0);
     if (validScore >= 80) return 'bg-green-500 text-white';
@@ -561,9 +733,9 @@ const RecentTestSession = (({ attempt, examcategory }) => {
       </div>
       
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 mb-3">
-        <div className="text-center p-1.5 sm:p-2 bg-blue-50 rounded-lg">
-          <p className="text-blue-600 font-bold text-xs sm:text-sm">{attemptedQuestions}</p>
-          <p className="text-blue-700 text-xs">Attempted</p>
+        <div className="text-center p-1.5 sm:p-2 bg-neutral-100 rounded-lg">
+          <p className="text-neutral-800 font-bold text-xs sm:text-sm">{attemptedQuestions}</p>
+          <p className="text-neutral-600 text-xs">Attempted</p>
         </div>
         <div className="text-center p-1.5 sm:p-2 bg-green-50 rounded-lg">
           <p className="text-green-600 font-bold text-xs sm:text-sm">{correctAnswers}</p>
@@ -586,7 +758,7 @@ const RecentTestSession = (({ attempt, examcategory }) => {
         </div>
         <Link
           href={`/mock-test/${examcategory}/results/${attempt.id}`}
-          className="text-blue-600 hover:text-blue-700 font-medium flex items-center self-end"
+          className="text-neutral-800 hover:text-neutral-900 font-medium flex items-center self-end"
         >
           Details
           <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 flex-shrink-0" />
@@ -597,7 +769,7 @@ const RecentTestSession = (({ attempt, examcategory }) => {
 });
 
 // Mobile-optimized subject performance card
-const SubjectPerformanceCard = (({ subject }) => {
+const SubjectPerformanceCard = memo(function SubjectPerformanceCard({ subject }) {
   const performanceColor = useMemo(() => {
     if (subject.accuracy >= 80) return 'border-green-300 bg-green-50';
     if (subject.accuracy >= 60) return 'border-yellow-300 bg-yellow-50';
@@ -658,7 +830,7 @@ const SubjectPerformanceCard = (({ subject }) => {
           </div>
           <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
             <div
-              className="h-1.5 sm:h-2 rounded-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-1000"
+              className="h-1.5 sm:h-2 rounded-full bg-neutral-600 transition-all duration-1000"
               style={{ width: `${subject.attemptRate}%` }}
             />
           </div>
@@ -667,8 +839,8 @@ const SubjectPerformanceCard = (({ subject }) => {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2 mb-3 sm:mb-4">
         <div className="text-center p-1.5 sm:p-2 bg-white/70 rounded">
-          <p className="text-blue-600 font-bold text-xs sm:text-sm">{subject.totalQuestions}</p>
-          <p className="text-blue-700 text-xs">Total</p>
+          <p className="text-neutral-800 font-bold text-xs sm:text-sm">{subject.totalQuestions}</p>
+          <p className="text-neutral-600 text-xs">Total</p>
         </div>
         <div className="text-center p-1.5 sm:p-2 bg-white/70 rounded">
           <p className="text-green-600 font-bold text-xs sm:text-sm">{subject.correctAnswers}</p>
@@ -695,7 +867,7 @@ const SubjectPerformanceCard = (({ subject }) => {
         </div>
       </div>
 
-      <div className="pt-2 sm:pt-3 border-t border-gray-200">
+      <div className="pt-2 sm:pt-3 border-t border-neutral-200">
         <p className="text-xs text-gray-600">
           <span className="font-medium text-gray-700">💡 Tip:</span> {subject.recommendedAction}
         </p>
@@ -705,38 +877,33 @@ const SubjectPerformanceCard = (({ subject }) => {
 });
 
 // Smart pagination with mobile optimization
-const Pagination = (({ currentPage, totalPages, onPageChange }) => {
-  if (totalPages <= 1) return null;
-
-  const getVisiblePages = (() => {
+const Pagination = memo(function Pagination({ currentPage, totalPages, onPageChange }) {
+  const getVisiblePages = useMemo(() => {
+    if (totalPages <= 1) return [];
     if (totalPages <= 5) {
       return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
-    
     const delta = 1;
     const range = [];
-    const rangeWithDots = [];
-
     for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
       range.push(i);
     }
-
+    const rangeWithDots = [];
     if (currentPage - delta > 2) {
       rangeWithDots.push(1, '...');
     } else {
       rangeWithDots.push(1);
     }
-
     rangeWithDots.push(...range);
-
     if (currentPage + delta < totalPages - 1) {
       rangeWithDots.push('...', totalPages);
     } else if (totalPages > 1) {
       rangeWithDots.push(totalPages);
     }
-
     return rangeWithDots;
   }, [currentPage, totalPages]);
+
+  if (totalPages <= 1) return null;
 
   return (
     <div className="flex items-center justify-center space-x-1 sm:space-x-2 mt-6 sm:mt-8 px-2">
@@ -758,10 +925,10 @@ const Pagination = (({ currentPage, totalPages, onPageChange }) => {
             disabled={page === '...' || page === currentPage}
             className={`min-w-[2.5rem] px-3 py-2 text-sm rounded-lg transition-colors ${
               page === currentPage
-                ? 'bg-blue-600 text-white'
+                ? 'bg-neutral-900 text-white'
                 : page === '...'
-                ? 'text-gray-400 cursor-default'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'text-neutral-400 cursor-default'
+                : 'text-neutral-600 hover:bg-neutral-100'
             }`}
             aria-label={page === '...' ? 'More pages' : `Go to page ${page}`}
           >
@@ -771,14 +938,14 @@ const Pagination = (({ currentPage, totalPages, onPageChange }) => {
       </div>
       
       {/* Mobile pagination */}
-      <div className="sm:hidden px-3 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg min-w-[4rem] text-center">
+      <div className="sm:hidden px-3 py-2 text-sm text-neutral-600 bg-neutral-100 rounded-lg min-w-[4rem] text-center">
         {currentPage} / {totalPages}
       </div>
       
       <button
         onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         disabled={currentPage === totalPages}
-        className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+        className="p-2 rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
         aria-label="Next page"
       >
         <ChevronRight className="h-4 w-4" />
@@ -898,8 +1065,21 @@ export default function OptimizedMockTestDashboard() {
   const { examcategory } = useParams();
   const router = useRouter();
   
-  // Tab state
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const normalizedTab = useMemo(() => {
+    if (tabParam === 'results' || tabParam === 'sessions' || tabParam === 'subjects') return 'progress';
+    return ['dashboard', 'tests', 'progress'].includes(tabParam) ? tabParam : 'dashboard';
+  }, [tabParam]);
+  const [activeTab, setActiveTab] = useState(() => normalizedTab);
+  const prevTabParamRef = React.useRef(tabParam);
+
+  useEffect(() => {
+    if (tabParam !== prevTabParamRef.current) {
+      prevTabParamRef.current = tabParam;
+      setActiveTab(normalizedTab);
+    }
+  }, [tabParam, normalizedTab]);
   
   const [tests, setTests] = useState([]);
   const [userStats, setUserStats] = useState({
@@ -929,6 +1109,20 @@ export default function OptimizedMockTestDashboard() {
   const [difficultyFilter, setDifficultyFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const testsPerPage = 10;
+
+  const categoryLabel = useMemo(
+    () => (examcategory?.toUpperCase?.() || 'GATE CSE').replace(/-/g, ' '),
+    [examcategory]
+  );
+
+  const userEmail = useMemo(
+    () =>
+      user?.primaryEmailAddress?.emailAddress ||
+      user?.emailAddresses?.[0]?.emailAddress ||
+      user?.email ||
+      null,
+    [user]
+  );
 
   // Optimized debounced search with cleanup
   const debouncedSearch = useCallback(
@@ -962,8 +1156,6 @@ export default function OptimizedMockTestDashboard() {
         .in('category', [normalized, normalizedAlt])
         .order('created_at', { ascending: false });
 
-        console.log(testsResponse)
-
       if (testsResponse.error) throw testsResponse.error;
 
       let testsWithDetails = (testsResponse.data || []).map(test => ({
@@ -974,24 +1166,27 @@ export default function OptimizedMockTestDashboard() {
       }));
 
 
-      // If user is authenticated, fetch additional data
-      if (user?.email) {
-        const catList = [normalized, normalizedAlt];
+      // If user is authenticated, fetch additional data (DB-friendly: limit by test IDs)
+      if (userEmail) {
+        const testIdsArr = testsWithDetails.map((t) => t.id).filter(Boolean);
         const [userAttemptsResponse, allAttemptsResponse] = await Promise.all([
           supabase
             .from('user_test_attempts')
             .select('id, test_id, score, percentage, submitted_at')
-            .eq('user_email', user.email)
+            .eq('user_email', userEmail)
             .eq('is_completed', true)
             .order('submitted_at', { ascending: false }),
-            supabase
-            .from('user_test_attempts')
-            .select('test_id')
-            .eq('is_completed', true)
+          testIdsArr.length > 0
+            ? supabase
+                .from('user_test_attempts')
+                .select('test_id')
+                .eq('is_completed', true)
+                .in('test_id', testIdsArr)
+            : { data: [], error: null }
         ]);
 
         if (userAttemptsResponse.error) throw userAttemptsResponse.error;
-        if (allAttemptsResponse.error) throw allAttemptsResponse.error;
+        if (allAttemptsResponse?.error) throw allAttemptsResponse.error;
 
         // Get test IDs for current category
         const currentCategoryTestIds = new Set(testsWithDetails.map(test => test.id));
@@ -1051,26 +1246,32 @@ export default function OptimizedMockTestDashboard() {
       toast.error('Failed to load tests');
       setTests([]);
     }
-  }, [user?.email, examcategory]);
+  }, [userEmail, examcategory]);
 
   const fetchOptimizedUserStats = useCallback(async () => {
-    if (!user?.email) return;
+    if (!userEmail) return;
 
     try {
       const normalized = examcategory?.toUpperCase?.() || '';
-      const normalizedAlt = normalized.replace('-', '_');
-      const catList = [normalized, normalizedAlt];
-      const { data: allUserAttempts, error: allAttemptsError } = await supabase
+      const normalizedAlt = normalized.replace(/-/g, '_');
+      const { data: rawAttempts, error: allAttemptsError } = await supabase
         .from('user_test_attempts')
-        .select('id, test_id, score, percentage, duration_taken, attempted_questions, correct_answers, wrong_answers, unanswered, all_questions, created_at, submitted_at')
-        .eq('user_email', user.email)
+        .select('id, test_id, score, percentage, duration_taken, attempted_questions, correct_answers, wrong_answers, unanswered, all_questions, created_at, submitted_at, examcategory')
+        .eq('user_email', userEmail)
         .eq('is_completed', true)
-        .in('examcategory', catList)
-        .order('created_at', { ascending: false });
+        .order('submitted_at', { ascending: false })
+        .limit(200);
 
       if (allAttemptsError) throw allAttemptsError;
 
-      if (!allUserAttempts || allUserAttempts.length === 0) {
+      const allUserAttempts = (rawAttempts || []).filter(
+        (a) =>
+          a?.examcategory === normalized ||
+          a?.examcategory === normalizedAlt ||
+          !a?.examcategory
+      );
+
+      if (allUserAttempts.length === 0) {
         setUserStats({
           completedTests: 0,
           averageScore: 0,
@@ -1096,7 +1297,7 @@ export default function OptimizedMockTestDashboard() {
       }
 
       // Get test names efficiently with null check
-      const testIds = [...new Set(allUserAttempts.map(a => a?.test_id).filter(Boolean))];
+      const testIds = [...new Set(allUserAttempts.map((a) => a?.test_id).filter(Boolean))];
       const { data: mockTests } = await supabase
         .from('mock_tests')
         .select('id, name')
@@ -1114,8 +1315,8 @@ export default function OptimizedMockTestDashboard() {
       const uniqueTests = testIds.length;
       
       const scores = allUserAttempts
-        .map(attempt => sanitizeData(attempt?.percentage || attempt?.score, 'number', 0))
-        .filter(score => score > 0);
+        .map((attempt) => sanitizeData(attempt?.percentage ?? attempt?.score, 'number', 0))
+        .filter((score) => score > 0);
       
       const averageScore = scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
       const bestScore = scores.length > 0 ? Math.max(...scores) : 0;
@@ -1187,7 +1388,7 @@ export default function OptimizedMockTestDashboard() {
       console.error('Error fetching user stats:', error);
       toast.error('Failed to load performance data');
     }
-  }, [user?.email, examcategory]);
+  }, [userEmail, examcategory]);
 
   // Optimized data fetching with better loading states and memory leak prevention
   useEffect(() => {
@@ -1201,8 +1402,8 @@ export default function OptimizedMockTestDashboard() {
         // Always fetch tests (public data)
         await fetchAvailableTests();
         
-        // Only fetch user stats if authenticated
-        if (user?.email && isMounted) {
+        // Only fetch user stats if we have a resolved user email
+        if (userEmail && isMounted) {
           await fetchOptimizedUserStats();
         }
       } catch (error) {
@@ -1222,7 +1423,7 @@ export default function OptimizedMockTestDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [user?.email, fetchAvailableTests, fetchOptimizedUserStats]);
+  }, [user, userEmail, fetchAvailableTests, fetchOptimizedUserStats]);
 
   // Memoized event handlers
   const handleStartTest = useCallback((test) => {
@@ -1266,100 +1467,65 @@ export default function OptimizedMockTestDashboard() {
     return { filteredTests: filtered, paginatedTests: paginated, totalPages };
   }, [tests, searchTerm, difficultyFilter, currentPage, testsPerPage]);
 
+  const openProgressTab = useCallback(() => {
+    setActiveTab('progress');
+    router.replace(`/mock-test/${examcategory}?tab=progress`);
+  }, [router, examcategory]);
+
+  const handleTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
+    router.replace(`/mock-test/${examcategory}?tab=${tabId}`, { scroll: false });
+  }, [router, examcategory]);
+
   // Render content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
         return user ? (
-          <div className="space-y-6">
-            {/* Authenticated User Dashboard */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-              <AnimatedStatsCard
-                icon={BookOpen}
-                title="Available Tests"
-                value={tests.length}
-                subtitle="Ready to practice"
-                color="blue"
-                delay={50}
-              />
-              <AnimatedStatsCard
-                icon={CheckCircle}
-                title="Tests Completed"
-                value={userStats.completedTests}
-                subtitle="Unique tests finished"
-                color="green"
-                delay={100}
-              />
-              <AnimatedStatsCard
-                icon={Trophy}
-                title="Average Score"
-                value={userStats.completedTests > 0 ? `${userStats.averageScore}%` : '--'}
-                subtitle="Keep improving"
-                color="purple"
-                trend={userStats.improvement || null}
-                delay={150}
-              />
-              <AnimatedStatsCard
-                icon={Award}
-                title="Best Score"
-                value={userStats.completedTests > 0 ? `${userStats.bestScore}%` : '--'}
-                subtitle="Personal best"
-                color="yellow"
-                delay={200}
-              />
-              <AnimatedStatsCard
-                icon={FileText}
-                title="Total Questions"
-                value={userStats.totalQuestions}
-                subtitle="Questions attempted"
-                color="orange"
-                delay={250}
-              />
-              <AnimatedStatsCard
-                icon={Clock}
-                title="Study Time"
-                value={`${userStats.totalStudyTime}h`}
-                subtitle="Total practice"
-                color="red"
-                delay={300}
-              />
-            </div>
-          </div>
+          <AuthenticatedDashboard
+            tests={tests}
+            userStats={userStats}
+            examTrackerStats={examTrackerStats}
+            examcategory={examcategory}
+            categoryLabel={categoryLabel}
+            onStartTest={handleStartTest}
+            onOpenProgress={openProgressTab}
+          />
         ) : (
           <PublicDashboard tests={tests} examcategory={examcategory} />
         );
-      
+
       case 'tests':
         return (
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
-              <h3 className="text-lg font-bold text-white flex items-center">
-                <Grid className="h-5 w-5 mr-2" />
+          <div className="bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden">
+            <div className="px-4 sm:px-6 py-4 border-b border-neutral-200">
+              <h3 className="text-lg font-semibold text-neutral-900 flex items-center">
+                <Grid className="h-5 w-5 mr-2 text-neutral-600" />
                 Available Mock Tests
               </h3>
             </div>
-            
+
             {/* Search and Filter */}
-            <div className="p-6 border-b border-gray-200 bg-gray-50">
+            <div className="p-4 sm:p-6 border-b border-neutral-200 bg-neutral-50/50">
               <div className="flex flex-col space-y-3 sm:flex-row sm:gap-4">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-neutral-400" />
                   <input
                     type="text"
                     placeholder="Search tests..."
                     onChange={(e) => debouncedSearch(e.target.value)}
-                    className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base"
+                    className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800 transition-all text-sm sm:text-base"
                   />
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 flex-shrink-0" />
+                  <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-neutral-500 flex-shrink-0" />
                   <select
                     value={difficultyFilter}
                     onChange={(e) => {
                       setDifficultyFilter(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="flex-1 sm:flex-initial px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base"
+                    className="flex-1 sm:flex-initial px-3 sm:px-4 py-2.5 sm:py-3 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800 text-sm sm:text-base"
                   >
                     <option value="all">All Difficulties</option>
                     <option value="easy">Easy</option>
@@ -1372,19 +1538,19 @@ export default function OptimizedMockTestDashboard() {
             </div>
 
             {/* Tests List */}
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {filteredTests.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="bg-gray-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
-                    <BookOpen className="h-10 w-10 text-gray-400" />
+                <div className="text-center py-12 px-4">
+                  <div className="bg-neutral-100 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                    <BookOpen className="h-10 w-10 text-neutral-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-600 mb-2">
+                  <h3 className="text-lg font-semibold text-neutral-600 mb-2">
                     {searchTerm || difficultyFilter !== 'all' ? 'No tests found' : 'No tests available'}
                   </h3>
-                  <p className="text-gray-500 mb-6">
-                    {searchTerm || difficultyFilter !== 'all' 
-                      ? 'Try adjusting your search criteria or filters' 
-                      : 'New comprehensive tests will appear here soon'}
+                  <p className="text-neutral-500 mb-6 text-sm sm:text-base">
+                    {searchTerm || difficultyFilter !== 'all'
+                      ? 'Try adjusting search or filters.'
+                      : 'New tests will appear here soon.'}
                   </p>
                 </div>
               ) : (
@@ -1409,15 +1575,15 @@ export default function OptimizedMockTestDashboard() {
           </div>
         );
       
-      case 'analytics':
-        return <AnalyticsTab examTrackerStats={examTrackerStats} userStats={userStats} />;
-      
-      case 'sessions':
-        return <RecentSessionsTab examTrackerStats={examTrackerStats} examcategory={examcategory} />;
-      
-      case 'subjects':
-        return <AnalyticsTab examTrackerStats={examTrackerStats} userStats={userStats} />;
-      
+      case 'progress':
+        return (
+          <MyProgressTab
+            examTrackerStats={examTrackerStats}
+            userStats={userStats}
+            examcategory={examcategory}
+          />
+        );
+
       default:
         return <PublicDashboard tests={tests} examcategory={examcategory} />;
     }
@@ -1428,7 +1594,7 @@ export default function OptimizedMockTestDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-neutral-50">
       <style jsx>{`
         .scrollbar-hide {
           -ms-overflow-style: none;
@@ -1438,105 +1604,87 @@ export default function OptimizedMockTestDashboard() {
           display: none;
         }
         .animate-fade-in {
-          animation: fadeIn 0.5s ease-in-out;
+          animation: fadeIn 0.4s ease-out;
         }
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-slide-up {
-          animation: slideUp 0.3s ease-out;
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
+          from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      <MetaDataJobs
+        seoTitle={`${categoryLabel} Mock Tests`}
+        seoDescription={`Practice ${categoryLabel} mock tests and track your performance.`}
+      />
       <Navbar />
-      
-      <div className="max-w-7xl mt-16 sm:mt-20 mx-auto py-4 sm:py-6 lg:py-8 px-3 sm:px-4 lg:px-8">
-        {/* Modern Header Banner */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl shadow-2xl p-6 lg:p-8 mb-6 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 sm:w-48 sm:h-48 lg:w-64 lg:h-64 bg-white opacity-10 rounded-full -mr-16 sm:-mr-24 lg:-mr-32 -mt-16 sm:-mt-24 lg:-mt-32"></div>
-          <div className="absolute bottom-0 left-0 w-24 h-24 sm:w-36 sm:h-36 lg:w-48 lg:h-48 bg-white opacity-10 rounded-full -ml-12 sm:-ml-18 lg:-ml-24 -mb-12 sm:-mb-18 lg:-mb-24"></div>
-          
-          <div className="relative z-10">
-            <div className="flex flex-col space-y-4 lg:space-y-0 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex-1">
-                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3">
-                  {examcategory?.toUpperCase() || 'GATE CSE'} Mock Tests
-                </h1>
-                <p className="text-base lg:text-lg text-blue-100 mb-4 leading-relaxed">
-                  Master your skills with comprehensive practice tests and AI-powered insights
-                </p>
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Sparkles className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">AI Analytics</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Trophy className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">Performance Tracking</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Target className="h-4 w-4 flex-shrink-0" />
-                    <span className="text-sm">Personalized Learning</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="lg:block">
-                <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-6 text-center">
-                  <div className="text-2xl lg:text-3xl font-bold mb-2">{tests.length}</div>
-                  <div className="text-sm text-blue-100">Available Tests</div>
-                </div>
-              </div>
+
+      {/* Spacer to clear fixed navbar (h-20 = 80px; pt-24 = 96px for safe clearance) */}
+      <div className="pt-24 min-h-screen">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16">
+          {/* Hero - motion-aligned with [category] */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="text-center mb-6 sm:mb-8 pt-2"
+          >
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 mb-2 sm:mb-3 tracking-tight px-2 scroll-mt-24" id="page-title">
+              {categoryLabel} Mock Tests
+            </h1>
+            <p className="text-sm sm:text-base md:text-lg text-neutral-600 max-w-2xl mx-auto px-4 mb-4">
+              Timed full-length tests with detailed analytics. Minimal distractions—just progress.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-neutral-600 text-xs sm:text-sm">
+              <span className="flex items-center gap-1.5">
+                <BookOpen className="h-4 w-4" />
+                {tests.length} tests
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Target className="h-4 w-4" />
+                Full-length
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Trophy className="h-4 w-4" />
+                Analytics
+              </span>
             </div>
-          </div>
+          </motion.div>
+
+          {/* Tab Navigation */}
+          <TabNavigation
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            isAuthenticated={!!user}
+          />
+
+          {/* Tab Content */}
+          <Suspense fallback={<div className="text-center py-12 text-neutral-500">Loading...</div>}>
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              {renderTabContent()}
+            </motion.div>
+          </Suspense>
         </div>
-
-        {/* Tab Navigation */}
-        <TabNavigation 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab} 
-          isAuthenticated={!!user} 
-        />
-
-        {/* Tab Content */}
-        <Suspense fallback={<div className="text-center py-12">Loading...</div>}>
-          <div className="animate-fade-in">
-            {renderTabContent()}
-          </div>
-        </Suspense>
-
-
       </div>
 
-      <Toaster 
+      <Toaster
         position="bottom-right"
         toastOptions={{
           duration: 2000,
           style: {
-            background: 'linear-gradient(90deg, #1F2937 0%, #374151 100%)',
-            color: '#F9FAFB',
-            borderRadius: '12px',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+            background: '#fff',
+            color: '#171717',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             fontSize: '14px',
             padding: '12px 16px',
             maxWidth: '90vw',
           },
-          success: {
-            iconTheme: {
-              primary: '#10B981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#EF4444',
-              secondary: '#fff',
-            },
-          },
+          success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
+          error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
         }}
       />
     </div>
