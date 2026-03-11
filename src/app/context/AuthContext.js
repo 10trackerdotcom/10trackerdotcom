@@ -32,8 +32,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
-  const isAdmin = !!(user && user.primaryEmailAddress && adminEmails.includes(user.primaryEmailAddress.emailAddress));
+  const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const isAdmin = !!(user && adminEmails.length > 0 && (
+    // primary email
+    (user.primaryEmailAddress?.emailAddress &&
+      adminEmails.includes(user.primaryEmailAddress.emailAddress.toLowerCase())) ||
+    // any other email on the account
+    (Array.isArray(user.emailAddresses) &&
+      user.emailAddresses.some(e =>
+        e.emailAddress && adminEmails.includes(e.emailAddress.toLowerCase())
+      ))
+  ));
 
   const value = useMemo(() => ({
     user,
