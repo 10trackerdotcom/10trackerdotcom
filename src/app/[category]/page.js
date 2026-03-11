@@ -311,10 +311,49 @@ const QuickStats = React.memo(({ data }) => {
 
 QuickStats.displayName = 'QuickStats';
 
-// Practice vs Mock tests: clear navigation for both features
-const PracticePathCards = React.memo(({ category }) => {
-  const mockTestHref = `/mock-test/${category || 'gate-cse'}`;
+// Category hub: PYQs tracker, topic tests, mock tests, daily material
+const PracticePathCards = React.memo(({ category, onOpenPracticeTopics }) => {
   const practiceSectionId = 'practice-content';
+  const examCategory = category || 'gate-cse';
+  const mockTestHref = `/mock-test/${examCategory}`;
+  const topicTestsHref = `/mock-test/${examCategory}?tab=tests`;
+  const dailyPracticeHref = `/${examCategory}/daily-practice`;
+
+  const cards = [
+    {
+      id: 'pyq-tracker',
+      href: `#${practiceSectionId}`,
+      title: 'Practice PYQs with tracker',
+      description: 'Solve past year questions with detailed solutions and smart tracking.',
+      icon: BookOpen,
+      badge: 'Recommended start',
+      onClick: () => onOpenPracticeTopics && onOpenPracticeTopics(),
+    },
+    {
+      id: 'topic-tests',
+      href: topicTestsHref,
+      title: 'Topic-wise tests',
+      description: 'Timed mini-tests focused on individual topics to fix weak areas.',
+      icon: Grid3X3,
+      badge: 'Speed + accuracy',
+    },
+    {
+      id: 'mock-tests',
+      href: mockTestHref,
+      title: 'Full mock tests',
+      description: 'Simulate the real exam with curated full-length tests and analytics.',
+      icon: ClipboardCheck,
+      badge: 'Exam simulation',
+    },
+    {
+      id: 'daily-practice',
+      href: dailyPracticeHref,
+      title: 'Daily practice material',
+      description: 'Curated questions, notes and revision lists for your daily study slot.',
+      icon: Target,
+      badge: 'Consistency',
+    },
+  ];
 
   return (
     <motion.div
@@ -323,44 +362,38 @@ const PracticePathCards = React.memo(({ category }) => {
       transition={{ duration: 0.4, delay: 0.05 }}
       className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8"
     >
-      <a
-        href={`#${practiceSectionId}`}
-        className="group block bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200 p-4 sm:p-6 text-left"
-      >
-        <div className="flex items-start gap-3 sm:gap-4">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-200 transition-colors">
-            <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-700" />
+      {cards.map(({ id, href, title, description, icon: Icon, badge, onClick }) => (
+        <Link
+          key={id}
+          href={href}
+          className="group block bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200 p-4 sm:p-6 text-left"
+          onClick={onClick}
+        >
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-200 transition-colors">
+              <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-700" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <h3 className="font-semibold text-neutral-900 text-base sm:text-lg line-clamp-2">
+                  {title}
+                </h3>
+                {badge && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-neutral-100 text-neutral-700">
+                    {badge}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-neutral-600 mb-3 sm:mb-4 line-clamp-3">
+                {description}
+              </p>
+              <span className="inline-flex items-center font-medium text-neutral-800 text-sm">
+                Explore <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+              </span>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-neutral-900 text-base sm:text-lg mb-1">Practice topic-wise</h3>
-            <p className="text-sm text-neutral-600 mb-3 sm:mb-4">
-              Pick a subject or topic. Practice with solutions and track progress.
-            </p>
-            <span className="inline-flex items-center font-medium text-neutral-800 text-sm">
-              Browse below <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
-            </span>
-          </div>
-        </div>
-      </a>
-      <Link
-        href={mockTestHref}
-        className="group block bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200 p-4 sm:p-6 text-left"
-      >
-        <div className="flex items-start gap-3 sm:gap-4">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-200 transition-colors">
-            <ClipboardCheck className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-700" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-neutral-900 text-base sm:text-lg mb-1">Mock tests</h3>
-            <p className="text-sm text-neutral-600 mb-3 sm:mb-4">
-              Full-length timed tests with score and analytics. Simulate the exam.
-            </p>
-            <span className="inline-flex items-center font-medium text-neutral-800 text-sm">
-              Go to mock tests <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
-            </span>
-          </div>
-        </div>
-      </Link>
+        </Link>
+      ))}
     </motion.div>
   );
 });
@@ -426,6 +459,76 @@ const SearchBar = React.memo(({ searchTerm, setSearchTerm, viewMode, setViewMode
 ));
 
 SearchBar.displayName = 'SearchBar';
+
+// Lightweight news & updates section (dummy content, per category)
+const NewsSection = React.memo(({ category }) => {
+  const normalized = (category || '').toUpperCase() || 'EXAM';
+  const items = [
+    {
+      id: 1,
+      title: `${normalized} strategy deep-dive coming soon`,
+      summary: 'We are preparing an in-depth strategy guide tailored to this exam. Stay tuned.',
+      tag: 'Guide',
+    },
+    {
+      id: 2,
+      title: 'Daily practice sets and revision lists',
+      summary: 'You will soon see curated daily sets here – PYQs, mixed-level questions and quick revisions.',
+      tag: 'Daily practice',
+    },
+    {
+      id: 3,
+      title: 'Exam notifications & important dates',
+      summary: 'This space will show official notifications, important dates and last-minute checklists.',
+      tag: 'Updates',
+    },
+  ];
+
+  return (
+    <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 sm:p-6 lg:p-7"
+      >
+        <div className="flex items-center justify-between mb-4 sm:mb-5">
+          <div>
+            <h2 className="text-lg sm:text-xl font-semibold text-neutral-900">News & updates</h2>
+            <p className="text-xs sm:text-sm text-neutral-500">
+              Placeholder updates for now – you can plug your live news feed here later.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-xl border border-neutral-200 bg-neutral-50/60 p-3.5 sm:p-4 flex flex-col justify-between"
+            >
+              <div>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-neutral-900 text-white mb-2">
+                  {item.tag}
+                </span>
+                <h3 className="text-sm sm:text-base font-semibold text-neutral-900 mb-1.5 line-clamp-2">
+                  {item.title}
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-600 line-clamp-3">
+                  {item.summary}
+                </p>
+              </div>
+              <span className="mt-3 inline-flex items-center text-[11px] sm:text-xs font-medium text-neutral-700">
+                Coming soon
+              </span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    </section>
+  );
+});
+
+NewsSection.displayName = 'NewsSection';
 
 // Memoized No Results Component
 const NoResults = React.memo(({ searchTerm, setSearchTerm, type }) => (
@@ -541,6 +644,7 @@ const ExamTracker = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('subjects');
+  const [practiceFocusMode, setPracticeFocusMode] = useState(false);
   const { category } = useParams();
   
   // AbortController for request cancellation
@@ -733,106 +837,140 @@ const ExamTracker = () => {
       <Navbar />
       
       <div className="pt-24 min-h-screen">
-        {/* Hero Section */}
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-6 sm:pb-8">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-center mb-6 sm:mb-8"
-          >
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 mb-2 sm:mb-3 tracking-tight px-2 scroll-mt-24">
-              {formattedCategory}
-            </h1>
-            <p className="text-sm sm:text-base md:text-lg text-neutral-600 max-w-2xl mx-auto px-4">
-              Practice topic-wise or take full-length mock tests. Choose how you want to prepare.
-            </p>
-          </motion.div>
-
-          <PracticePathCards category={safeCategory} />
-
-          <QuickStats data={data} />
-        </div>
-
-        {/* Practice content: subjects & topics */}
-        <div id="practice-content" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 scroll-mt-24">
-          <motion.h2
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="text-lg sm:text-xl font-semibold text-neutral-900 mb-4 flex items-center"
-          >
-            <BookOpen className="w-5 h-5 mr-2 text-neutral-600" />
-            Practice topic-wise
-          </motion.h2>
-          <SearchBar 
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-          />
-          
-          {/* Show error banner if error exists but data is available */}
-          {error && data.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
+        {/* Hero + metrics + options + news */}
+        {!practiceFocusMode && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-6 sm:pb-8 space-y-6 sm:space-y-7">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2 text-sm text-yellow-800"
+              transition={{ duration: 0.5 }}
+              className="text-center"
             >
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>Showing cached data. Some information may be outdated.</span>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 mb-2 sm:mb-3 tracking-tight px-2 scroll-mt-24">
+                {formattedCategory}
+              </h1>
+              <p className="text-sm sm:text-base md:text-lg text-neutral-600 max-w-2xl mx-auto px-4">
+                Stay on one clean dashboard for {formattedCategory}: metrics, practice paths, news and updates.
+              </p>
             </motion.div>
-          )}
 
-          {/* Results */}
-          <AnimatePresence mode="wait">
-            {viewMode === 'subjects' ? (
-              filteredSubjects.length > 0 ? (
-                <motion.div 
-                  key="subjects"
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="hidden"
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
-                >
-                  {filteredSubjects.map((subject, index) => (
-                    <SubjectCard
-                      key={subject?.subject || index}
-                      subject={subject}
-                      category={safeCategory}
-                      index={index}
-                    />
-                  ))}
-                </motion.div>
-              ) : (
-                <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="subjects" />
-              )
-            ) : (
-              filteredTopics.length > 0 ? (
-                <motion.div 
-                  key="topics"
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="hidden"
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
-                >
-                  {filteredTopics.map((topic, index) => (
-                    <TopicCard
-                      key={topic.uniqueId}
-                      topic={topic}
-                      category={safeCategory}
-                      index={index}
-                    />
-                  ))}
-                </motion.div>
-              ) : (
-                <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="topics" />
-              )
+            {/* Metrics first */}
+            <QuickStats data={data} />
+
+            {/* Primary actions */}
+            <PracticePathCards
+              category={safeCategory}
+              onOpenPracticeTopics={() => {
+                setPracticeFocusMode(true);
+                setSearchTerm('');
+                setViewMode('subjects');
+              }}
+            />
+
+            {/* News & updates */}
+            {/* <NewsSection category={safeCategory} /> */}
+          </div>
+        )}
+
+        {/* Practice content: subjects & topics (shown only in focus mode) */}
+        {practiceFocusMode && (
+          <div
+            id="practice-content"
+            className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 scroll-mt-24 pt-6 sm:pt-8"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <motion.h2
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="text-lg sm:text-xl font-semibold text-neutral-900 flex items-center"
+              >
+                <BookOpen className="w-5 h-5 mr-2 text-neutral-600" />
+                Practice topic-wise
+              </motion.h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setPracticeFocusMode(false);
+                  setSearchTerm('');
+                  setViewMode('subjects');
+                }}
+                className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+              >
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 rotate-180" />
+                Back to overview
+              </button>
+            </div>
+
+            <SearchBar 
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+            />
+            
+            {/* Show error banner if error exists but data is available */}
+            {error && data.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2 text-sm text-yellow-800"
+              >
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>Showing cached data. Some information may be outdated.</span>
+              </motion.div>
             )}
-          </AnimatePresence>
-        </div>
+
+            {/* Results */}
+            <AnimatePresence mode="wait">
+              {viewMode === 'subjects' ? (
+                filteredSubjects.length > 0 ? (
+                  <motion.div 
+                    key="subjects"
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="hidden"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
+                  >
+                    {filteredSubjects.map((subject, index) => (
+                      <SubjectCard
+                        key={subject?.subject || index}
+                        subject={subject}
+                        category={safeCategory}
+                        index={index}
+                      />
+                    ))}
+                  </motion.div>
+                ) : (
+                  <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="subjects" />
+                )
+              ) : (
+                filteredTopics.length > 0 ? (
+                  <motion.div 
+                    key="topics"
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="hidden"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
+                  >
+                    {filteredTopics.map((topic, index) => (
+                      <TopicCard
+                        key={topic.uniqueId}
+                        topic={topic}
+                        category={safeCategory}
+                        index={index}
+                      />
+                    ))}
+                  </motion.div>
+                ) : (
+                  <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="topics" />
+                )
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         {/* Floating Action Button */}
         <motion.div

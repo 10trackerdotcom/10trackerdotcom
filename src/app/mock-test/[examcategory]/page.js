@@ -116,8 +116,10 @@ const TabNavigation = memo(function TabNavigation({ activeTab, onTabChange, isAu
 });
 
 // Public Dashboard Component for Non-Authenticated Users
-const PublicDashboard = memo(function PublicDashboard({ tests, examcategory }) {
+// signInHref: use Link so navigation works even if extensions break onClick
+const PublicDashboard = memo(function PublicDashboard({ tests, examcategory, signInHref }) {
   const categoryLabel = (examcategory?.toUpperCase?.() || 'GATE CSE').replace(/-/g, ' ');
+  const href = signInHref || `/sign-in?redirect=${encodeURIComponent(`/mock-test/${examcategory || 'gate-cse'}`)}`;
   return (
     <div className="space-y-6">
       {/* Welcome Section - neutral */}
@@ -219,9 +221,12 @@ const PublicDashboard = memo(function PublicDashboard({ tests, examcategory }) {
                     {test.attemptCount} attempts
                   </span>
                 </div>
-                <button className="w-full bg-neutral-900 text-white py-2.5 rounded-lg font-medium hover:bg-neutral-800 transition-colors">
+                <Link
+                  href={href}
+                  className="block w-full text-center bg-neutral-900 text-white py-2.5 rounded-lg font-medium hover:bg-neutral-800 transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:ring-offset-2"
+                >
                   Sign in to start
-                </button>
+                </Link>
               </div>
             ))}
           </div>
@@ -233,9 +238,12 @@ const PublicDashboard = memo(function PublicDashboard({ tests, examcategory }) {
         <div className="text-center">
           <h3 className="text-lg sm:text-xl font-semibold text-neutral-900 mb-2">Ready to start?</h3>
           <p className="text-neutral-600 mb-4 text-sm sm:text-base">Sign in to access analytics and track your progress.</p>
-          <button className="bg-neutral-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-neutral-800 transition-colors">
+          <Link
+            href={href}
+            className="inline-block bg-neutral-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-neutral-800 transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:ring-offset-2"
+          >
             Sign in to continue
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -1428,17 +1436,25 @@ export default function OptimizedMockTestDashboard() {
   // Memoized event handlers
   const handleStartTest = useCallback((test) => {
     if (!test?.id) return;
-    
-    if (test.userCompleted && test.userLatestAttemptId) {
-      // Navigate to results page for completed tests
-      toast.success(`Opening ${test.name} results...`);
-      router.push(`/mock-test/${examcategory}/results/${test.userLatestAttemptId}`);
-    } else {
-      // Navigate to attempt page for new tests
-      toast.success(`Starting ${test.name}...`);
-      router.push(`/mock-test/${examcategory}/attempt/${test.id}`);
+
+    const attemptUrl = `/mock-test/${examcategory}/attempt/${test.id}`;
+    const resultsUrl = `/mock-test/${examcategory}/results/${test.userLatestAttemptId}`;
+
+    if (!user) {
+      const redirect = test.userCompleted && test.userLatestAttemptId ? resultsUrl : attemptUrl;
+      router.push(`/sign-in?redirect=${encodeURIComponent(redirect)}`);
+      toast.success('Sign in to continue');
+      return;
     }
-  }, [router, examcategory]);
+
+    if (test.userCompleted && test.userLatestAttemptId) {
+      toast.success(`Opening ${test.name} results...`);
+      router.push(resultsUrl);
+    } else {
+      toast.success(`Starting ${test.name}...`);
+      router.push(attemptUrl);
+    }
+  }, [router, examcategory, user]);
 
   const handlePreviewTest = useCallback((test) => {
     if (!test?.name) return;
@@ -1477,6 +1493,11 @@ export default function OptimizedMockTestDashboard() {
     router.replace(`/mock-test/${examcategory}?tab=${tabId}`, { scroll: false });
   }, [router, examcategory]);
 
+  const signInHref = useMemo(
+    () => `/sign-in?redirect=${encodeURIComponent(`/mock-test/${examcategory || 'gate-cse'}${activeTab && activeTab !== 'dashboard' ? `?tab=${activeTab}` : ''}`)}`,
+    [examcategory, activeTab]
+  );
+
   // Render content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
@@ -1492,7 +1513,7 @@ export default function OptimizedMockTestDashboard() {
             onOpenProgress={openProgressTab}
           />
         ) : (
-          <PublicDashboard tests={tests} examcategory={examcategory} />
+          <PublicDashboard tests={tests} examcategory={examcategory} signInHref={signInHref} />
         );
 
       case 'tests':
@@ -1585,7 +1606,7 @@ export default function OptimizedMockTestDashboard() {
         );
 
       default:
-        return <PublicDashboard tests={tests} examcategory={examcategory} />;
+        return <PublicDashboard tests={tests} examcategory={examcategory} signInHref={signInHref} />;
     }
   };
 

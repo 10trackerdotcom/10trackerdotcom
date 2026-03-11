@@ -1270,7 +1270,7 @@ export default function EnhancedMobileMockTestPage() {
             <h2 className="text-xl md:text-2xl font-bold text-neutral-900 mb-2">Sign In Required</h2>
             <p className="text-neutral-600 mb-6 text-sm md:text-base">Please sign in to take the test.</p>
             <button
-              onClick={() => router.push('/auth/signin')}
+              onClick={() => router.push(`/sign-in?redirect=${encodeURIComponent(`/mock-test/${examcategory}/attempt/${testId}`)}`)}
               className="w-full bg-neutral-900 text-white py-3 px-6 rounded-lg hover:bg-neutral-800 transition-colors font-medium"
             >
               Sign In

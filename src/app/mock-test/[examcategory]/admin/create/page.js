@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import { createClient } from "@supabase/supabase-js";
 import { 
@@ -28,8 +28,21 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+/** Normalize route param for DB/API: gate-cse -> GATE-CSE */
+const normalizeCategory = (param) =>
+  (param || 'gate-cse').toString().trim().toUpperCase().replace(/_/g, '-');
+
+/** Label for UI: gate-cse -> GATE CSE */
+const categoryLabel = (param) =>
+  (param || 'gate-cse').toString().trim().replace(/-/g, ' ').toUpperCase();
+
 export default function CreateTestPage() {
   const router = useRouter();
+  const params = useParams();
+  const examcategory = params?.examcategory || 'gate-cse';
+  const categoryForApi = useMemo(() => normalizeCategory(examcategory), [examcategory]);
+  const categoryDisplay = useMemo(() => categoryLabel(examcategory), [examcategory]);
+
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [subjects, setSubjects] = useState([]);
@@ -48,13 +61,17 @@ export default function CreateTestPage() {
     includeEngineeringMath: true,
     customWeightage: false,
     weightageConfig: [],
-    category: 'GATE-CSE',
-    creationMode: 'manual' // 'manual' or 'auto'
+    category: categoryForApi,
+    creationMode: 'manual',
+    scopeType: 'full',
+    scopeTopic: '',
+    scopeSubject: '',
+    scopeChapter: '',
   });
+  const [chaptersForSubject, setChaptersForSubject] = useState([]);
+  const [chaptersLoading, setChaptersLoading] = useState(false);
 
-  // Check if user is admin
-  console.log(user);
-  const isAdmin = user?.emailAddresses[0]?.emailAddress === 'jain10gunjan@gmail.com';
+  const isAdmin = user?.emailAddresses?.[0]?.emailAddress === 'jain10gunjan@gmail.com';
   const userEmail = useMemo(() => {
     return (
       user?.primaryEmailAddress?.emailAddress ||
@@ -64,28 +81,35 @@ export default function CreateTestPage() {
     );
   }, [user]);
 
-  // Fetch subjects and topics from API
+  // Keep testConfig.category in sync with route category
+  useEffect(() => {
+    setTestConfig(prev => (prev.category === categoryForApi ? prev : { ...prev, category: categoryForApi }));
+  }, [categoryForApi]);
+
+  // Fetch subjects and topics from API (category-agnostic)
   useEffect(() => {
     const fetchTopicsAndSubjects = async () => {
       try {
-        const response = await fetch('/api/gate-cse/mock-test/admin/topics');
+        const response = await fetch(`/api/mock-test/admin/topics?category=${encodeURIComponent(examcategory)}`);
         const data = await response.json();
-        
+
         if (data.success) {
           setAvailableSubjects(data.subjects);
           setAvailableTopics(data.topics);
           setSubjects(data.subjects);
-          
-          // Calculate even weightage
-          const defaultWeightage = data.subjects.map(subject => ({
-            subject: subject,
-            percent: Math.round((100 / data.subjects.length) * 10) / 10
+
+          const count = data.subjects?.length || 1;
+          const defaultWeightage = (data.subjects || []).map((subject) => ({
+            subject,
+            percent: Math.round((100 / count) * 10) / 10,
           }));
 
           setTestConfig(prev => ({
             ...prev,
-            weightageConfig: defaultWeightage
+            weightageConfig: defaultWeightage.length ? defaultWeightage : prev.weightageConfig,
           }));
+        } else {
+          toast.error(data.error || 'Failed to load subjects and topics');
         }
       } catch (error) {
         console.error('Error fetching topics and subjects:', error);
@@ -93,10 +117,34 @@ export default function CreateTestPage() {
       }
     };
 
-    if (user && isAdmin) {
+    if (user && isAdmin && examcategory) {
       fetchTopicsAndSubjects();
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, examcategory]);
+
+  // Fetch chapters when scope is chapter and subject is selected
+  useEffect(() => {
+    if (testConfig.scopeType !== 'chapter' || !testConfig.scopeSubject) {
+      setChaptersForSubject([]);
+      return;
+    }
+    let cancelled = false;
+    setChaptersLoading(true);
+    fetch(`/api/chapters/by-subject?category=${encodeURIComponent(categoryForApi)}&subject=${encodeURIComponent(testConfig.scopeSubject)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && data?.data?.chapters) setChaptersForSubject(data.data.chapters);
+        else if (!cancelled) setChaptersForSubject([]);
+      })
+      .catch(() => { if (!cancelled) setChaptersForSubject([]); })
+      .finally(() => { if (!cancelled) setChaptersLoading(false); });
+    return () => { cancelled = true; };
+  }, [testConfig.scopeType, testConfig.scopeSubject, categoryForApi]);
+
+  // Reset scope chapter when subject changes (chapter scope only)
+  useEffect(() => {
+    if (testConfig.scopeType === 'chapter') setTestConfig((prev) => ({ ...prev, scopeChapter: '' }));
+  }, [testConfig.scopeType, testConfig.scopeSubject]);
 
   // Calculate question distribution for auto mode
   const calculateQuestionDistribution = useCallback(() => {
@@ -159,46 +207,71 @@ export default function CreateTestPage() {
     toast.success('Question updated successfully');
   }, [editingQuestion]);
 
-  // Fetch random questions for auto mode
+  // Fetch random questions for auto mode (supports full category, topic scope, or chapter scope)
   const fetchRandomQuestions = useCallback(async () => {
     try {
+      const { scopeType, scopeTopic, scopeSubject, scopeChapter, category, totalQuestions } = testConfig;
+
+      if (scopeType === 'topic' && scopeTopic) {
+        const { data, error } = await supabase
+          .from('examtracker')
+          .select('_id, question, options_A, options_B, options_C, options_D, correct_option, solution, topic, difficulty, subject')
+          .eq('category', category)
+          .eq('topic', scopeTopic);
+        if (error) throw error;
+        if (!data?.length) {
+          toast.error(`No questions found for topic "${scopeTopic}"`);
+          return [];
+        }
+        const shuffled = [...data].sort(() => Math.random() - 0.5);
+        return shuffled.slice(0, totalQuestions);
+      }
+
+      if (scopeType === 'chapter' && scopeSubject && scopeChapter) {
+        const { data, error } = await supabase
+          .from('examtracker')
+          .select('_id, question, options_A, options_B, options_C, options_D, correct_option, solution, topic, difficulty, subject')
+          .eq('category', category)
+          .eq('subject', scopeSubject)
+          .eq('chapter', scopeChapter);
+        if (error) throw error;
+        if (!data?.length) {
+          toast.error(`No questions found for chapter "${scopeChapter}"`);
+          return [];
+        }
+        const shuffled = [...data].sort(() => Math.random() - 0.5);
+        return shuffled.slice(0, totalQuestions);
+      }
+
       const questionDistribution = calculateQuestionDistribution();
       let allQuestions = [];
 
       for (const dist of questionDistribution) {
         if (dist.count === 0) continue;
-        
         const { data: allSubjectQuestions, error } = await supabase
-          .from("examtracker")
-          .select("_id, question, options_A, options_B, options_C, options_D, correct_option, solution, topic, difficulty, subject")
-          .eq("category", 'GATE-CSE')
-          .eq("subject", dist.subject);
+          .from('examtracker')
+          .select('_id, question, options_A, options_B, options_C, options_D, correct_option, solution, topic, difficulty, subject')
+          .eq('category', category)
+          .eq('subject', dist.subject);
 
         if (error) {
           console.error(`Error fetching ${dist.subject} questions:`, error);
           toast.error(`Error fetching ${dist.subject} questions`);
           continue;
         }
-
-        if (!allSubjectQuestions || allSubjectQuestions.length === 0) {
-          console.log(`No questions available for ${dist.subject}`);
-          toast.error(`No questions available for ${dist.subject}`);
-          continue;
-        }
+        if (!allSubjectQuestions?.length) continue;
 
         const shuffled = allSubjectQuestions.sort(() => Math.random() - 0.5);
-        const selectedQuestions = shuffled.slice(0, dist.count);
-        allQuestions = [...allQuestions, ...selectedQuestions];
+        allQuestions = [...allQuestions, ...shuffled.slice(0, dist.count)];
       }
 
-      const finalQuestions = allQuestions.sort(() => Math.random() - 0.5);
-      return finalQuestions;
+      return allQuestions.sort(() => Math.random() - 0.5);
     } catch (error) {
       console.error('Error fetching questions:', error);
       toast.error('Failed to fetch questions');
       return [];
     }
-  }, [calculateQuestionDistribution]);
+  }, [calculateQuestionDistribution, testConfig.category, testConfig.scopeType, testConfig.scopeTopic, testConfig.scopeSubject, testConfig.scopeChapter, testConfig.totalQuestions]);
 
   // Handle test creation
   const handleCreateTest = async () => {
@@ -212,6 +285,14 @@ export default function CreateTestPage() {
       return;
     }
 
+    if (testConfig.scopeType === 'topic' && !testConfig.scopeTopic?.trim()) {
+      toast.error('Please select a topic for question scope');
+      return;
+    }
+    if (testConfig.scopeType === 'chapter' && (!testConfig.scopeSubject?.trim() || !testConfig.scopeChapter?.trim())) {
+      toast.error('Please select subject and chapter for question scope');
+      return;
+    }
     if (testConfig.creationMode === 'auto') {
       const totalWeight = testConfig.weightageConfig.reduce((sum, item) => sum + item.percent, 0);
       if (testConfig.customWeightage && Math.abs(totalWeight - 100) > 0.1) {
@@ -303,7 +384,7 @@ export default function CreateTestPage() {
         question_order: index + 1,
         subject: q.subject || 'Unknown',
         topic: q.topic || '',
-        difficulty: q.difficulty || 'medium'
+        difficulty: q.difficulty || 'medium'  
       }));
 
       const { error: questionsError } = await supabase
@@ -388,13 +469,13 @@ export default function CreateTestPage() {
       <div className="max-w-7xl mx-auto py-8 px-4">
         <div className="mb-8">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push(`/mock-test/${examcategory}/admin`)}
             className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Admin Panel
           </button>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New GATE CSE Mock Test</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New {categoryDisplay} Mock Test</h1>
           <p className="text-gray-600">Configure and create a new mock test with manual or automatic question selection</p>
         </div>
 
@@ -416,7 +497,7 @@ export default function CreateTestPage() {
                     type="text"
                     value={testConfig.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
-                    placeholder="e.g., GATE CSE Mock Test 2026 - Set 1"
+                    placeholder={`e.g., ${categoryDisplay} Mock Test 2026 - Set 1`}
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -473,6 +554,84 @@ export default function CreateTestPage() {
                       <div className="font-medium">Auto Generation</div>
                       <div className="text-sm text-gray-600">Generate based on weightage</div>
                     </button>
+                  </div>
+                </div>
+
+                {/* Question scope: full category, by topic, or by chapter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Question scope
+                  </label>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="scopeType"
+                        checked={testConfig.scopeType === 'full'}
+                        onChange={() => setTestConfig((p) => ({ ...p, scopeType: 'full', scopeTopic: '', scopeSubject: '', scopeChapter: '' }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">Full category (all subjects & topics)</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="scopeType"
+                        checked={testConfig.scopeType === 'topic'}
+                        onChange={() => setTestConfig((p) => ({ ...p, scopeType: 'topic', scopeSubject: '', scopeChapter: '' }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">From a topic</span>
+                    </label>
+                    {testConfig.scopeType === 'topic' && (
+                      <div className="pl-6">
+                        <select
+                          value={testConfig.scopeTopic}
+                          onChange={(e) => setTestConfig((p) => ({ ...p, scopeTopic: e.target.value }))}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">Select topic</option>
+                          {availableTopics.map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="scopeType"
+                        checked={testConfig.scopeType === 'chapter'}
+                        onChange={() => setTestConfig((p) => ({ ...p, scopeType: 'chapter', scopeTopic: '', scopeChapter: '' }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">From a chapter</span>
+                    </label>
+                    {testConfig.scopeType === 'chapter' && (
+                      <div className="pl-6 space-y-2">
+                        <select
+                          value={testConfig.scopeSubject}
+                          onChange={(e) => setTestConfig((p) => ({ ...p, scopeSubject: e.target.value, scopeChapter: '' }))}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">Select subject</option>
+                          {availableSubjects.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={testConfig.scopeChapter}
+                          onChange={(e) => setTestConfig((p) => ({ ...p, scopeChapter: e.target.value }))}
+                          disabled={!testConfig.scopeSubject || chaptersLoading}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
+                        >
+                          <option value="">{chaptersLoading ? 'Loading chapters...' : 'Select chapter'}</option>
+                          {chaptersForSubject.map((ch) => (
+                            <option key={ch.slug || ch.title} value={ch.title}>{ch.title} ({ch.count ?? 0})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -792,6 +951,10 @@ export default function CreateTestPage() {
           onQuestionToggle={handleQuestionToggle}
           onClose={() => setShowQuestionSelector(false)}
           maxQuestions={testConfig.totalQuestions}
+          examcategory={examcategory}
+          initialTopic={testConfig.scopeType === 'topic' ? testConfig.scopeTopic : undefined}
+          initialSubject={testConfig.scopeType === 'chapter' ? testConfig.scopeSubject : undefined}
+          initialChapter={testConfig.scopeType === 'chapter' ? testConfig.scopeChapter : undefined}
         />
       )}
 

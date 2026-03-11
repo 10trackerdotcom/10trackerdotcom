@@ -1,12 +1,20 @@
 "use client";
 
 import { SignIn } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
+
+// Same-origin redirect only (avoid open redirect)
+const getSafeRedirect = (path) => {
+  if (!path || typeof path !== "string") return null;
+  const p = path.trim();
+  if (!p.startsWith("/") || p.startsWith("//")) return null;
+  return p;
+};
 
 // Lazy load Clerk components for better performance - only load when needed
 const SignInComponent = dynamic(
@@ -23,17 +31,21 @@ const SignInComponent = dynamic(
 
 export default function SignInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isSignedIn, isLoaded } = useUser();
   const mainAppUrl = process.env.NEXT_PUBLIC_MAIN_APP_URL || "/";
   const mainAppUrlSignIn = process.env.NEXT_PUBLIC_MAIN_APP_URL_SIGN_IN || "/";
 
-  // Non-blocking redirect check - don't wait for it, show content immediately
+  const redirectUrl = useMemo(
+    () => getSafeRedirect(searchParams.get("redirect")) || mainAppUrlSignIn,
+    [searchParams, mainAppUrlSignIn]
+  );
+
   useEffect(() => {
-    // Only redirect if we're sure user is signed in (non-blocking)
     if (isLoaded && isSignedIn) {
-      router.replace("/");
+      router.replace(redirectUrl);
     }
-  }, [isLoaded, isSignedIn, router]);
+  }, [isLoaded, isSignedIn, router, redirectUrl]);
 
   // Show content immediately - don't wait for Clerk to load
   // The form will be interactive as soon as Clerk loads in the background
@@ -74,7 +86,7 @@ export default function SignInPage() {
             {/* Clerk SignIn Component with Custom Styling */}
             <div className="[&_.cl-rootBox]:!w-full [&_.cl-card]:!shadow-none [&_.cl-card]:!border-none [&_.cl-main]:!p-0 [&_.cl-formButtonPrimary]:!transition-all">
               <SignInComponent
-                forceRedirectUrl={mainAppUrlSignIn}
+                forceRedirectUrl={redirectUrl}
                 appearance={{
                   elements: {
                     rootBox: "w-full",
@@ -105,7 +117,7 @@ export default function SignInPage() {
                 routing="path"
                 path="/sign-in"
                 signUpUrl="/sign-up"
-                afterSignInUrl={mainAppUrl}
+                afterSignInUrl={redirectUrl}
               />
             </div>
           </div>

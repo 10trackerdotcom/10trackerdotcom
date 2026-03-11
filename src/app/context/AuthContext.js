@@ -23,9 +23,13 @@ export const AuthProvider = ({ children }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  const signInWithGoogle = async () => {
-    // Open Clerk's SignIn modal; configured social providers in Clerk dashboard
-    await openSignIn();
+  const signInWithGoogle = async (options = {}) => {
+    const { redirectUrl } = options;
+    if (redirectUrl) {
+      await openSignIn({ afterSignInUrl: redirectUrl });
+    } else {
+      await openSignIn();
+    }
   };
 
   const adminEmails = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
