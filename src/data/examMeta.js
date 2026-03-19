@@ -423,5 +423,390 @@ Important rules
       },
     ],
   },
+
+  bitsat: {
+    slug: "bitsat",
+    name: "BITSAT 2026: Complete Guide",
+    shortName: "BITSAT",
+    heroTagline:
+      "Complete guide to BITSAT 2026 exam pattern, eligibility, syllabus, fees, preparation strategy, and FAQs.",
+    overview: {
+      level: "National-level entrance examination",
+      conductingBody: "BITS Pilani",
+      frequency: "Annual",
+      mode: "Online (Computer Based Test - CBT)",
+      officialSite: "https://www.bitsadmission.com",
+    },
+    about: `The Birla Institute of Technology and Science Admission Test (BITSAT) is one of India's most competitive private engineering entrance exams.
+
+It is conducted by BITS Pilani for admission to B.E., B.Pharm, and Integrated M.Sc. programs at BITS Pilani, Goa, and Hyderabad campuses.
+
+BITSAT is a speed-based and accuracy-driven exam. Candidates must balance conceptual clarity with fast problem solving to score well.`,
+    highlights: [
+      "Admission gateway to BITS Pilani, Goa, and Hyderabad campuses",
+      "Fully online exam with 140 questions across PCM/PCB + English + Logical Reasoning",
+      "Marking: +3 for correct, -1 for incorrect",
+      "Bonus 12 questions unlocked after attempting all 140 questions",
+      "No reservation policy; merit-based admissions",
+    ],
+    importantDates: [
+      { label: "Application start", value: "January 2026 (expected)" },
+      { label: "Last date to apply", value: "April 2026 (expected)" },
+      { label: "Slot booking", value: "April-May 2026 (expected)" },
+      { label: "Admit card release", value: "May 2026 (expected)" },
+      { label: "Exam dates", value: "May-June 2026 (expected)" },
+      { label: "Result", value: "June 2026 (expected)" },
+    ],
+    eligibility: {
+      nationality:
+        "Indian and eligible international applicants, as per the latest BITS admission brochure.",
+      ageLimit:
+        "No separate age limit is generally specified; candidates must satisfy passing-year criteria in official notification.",
+      education: [
+        "Must have passed Class 12 (10+2) from a recognized board.",
+        "For B.E.: Physics, Chemistry, and Mathematics required in Class 12.",
+        "For B.Pharm: Physics, Chemistry, and Biology required in Class 12.",
+        "Minimum marks: 75% aggregate in PCM/PCB and at least 60% individually in each subject.",
+        "Students who passed Class 12 earlier than the previous year are generally not eligible (as per notification).",
+      ],
+      attempts: "One attempt per year.",
+    },
+    application: {
+      portalName: "BITS Admissions Portal",
+      portalUrl: "https://www.bitsadmission.com",
+      steps: [
+        "Visit the official BITS admissions website and register with email/mobile.",
+        "Fill personal, academic, and program preferences in the application form.",
+        "Upload required documents such as photograph and signature.",
+        "Pay application fee based on category/session choices.",
+        "Submit and download confirmation page for reference.",
+      ],
+    },
+    pattern: [
+      { label: "Mode", value: "Online (CBT)" },
+      { label: "Duration", value: "3 hours" },
+      { label: "Total questions", value: "140" },
+      { label: "Question type", value: "Objective (MCQ)" },
+      { label: "Marking scheme", value: "+3 correct, -1 wrong" },
+      { label: "Bonus questions", value: "12 extra after attempting all 140" },
+    ],
+    patternBreakdown: [
+      { section: "Physics", marks: 90, questions: 30 },
+      { section: "Chemistry", marks: 90, questions: 30 },
+      { section: "English Proficiency + Logical Reasoning", marks: 120, questions: 40 },
+      { section: "Mathematics/Biology", marks: 120, questions: 40 },
+    ],
+    syllabusSummary: [
+      "Physics: Mechanics, Thermodynamics, Electromagnetism, Optics, Modern Physics",
+      "Chemistry: Physical Chemistry, Organic Chemistry, Inorganic Chemistry",
+      "Mathematics: Algebra, Trigonometry, Calculus, Coordinate Geometry",
+      "English Proficiency: Grammar, Vocabulary, Reading comprehension",
+      "Logical Reasoning: Analytical reasoning, verbal and non-verbal logic, puzzles",
+      "Syllabus is largely based on NCERT Class 11 and 12 with application-oriented questions",
+    ],
+    fees: [
+      { label: "Male candidates", value: "INR 3400-INR 5400 (expected, session-dependent)" },
+      { label: "Female candidates", value: "INR 2900-INR 4400 (expected, session-dependent)" },
+      { label: "Both sessions", value: "Higher combined fee (as per official notification)" },
+    ],
+    campuses: [
+      {
+        name: "BITS Pilani (Rajasthan)",
+        notes: ["Oldest and most prestigious campus", "Strong placements and alumni network"],
+      },
+      {
+        name: "BITS Goa",
+        notes: ["Strong tech culture", "Vibrant campus and student life"],
+      },
+      {
+        name: "BITS Hyderabad",
+        notes: ["Modern infrastructure", "Growing placements and research ecosystem"],
+      },
+    ],
+    courses: {
+      bePrograms: [
+        "Computer Science",
+        "Electronics and Communication",
+        "Mechanical Engineering",
+        "Civil Engineering",
+        "Chemical Engineering",
+      ],
+      mscPrograms: ["Physics", "Chemistry", "Mathematics", "Economics", "Biology"],
+      bpharmPrograms: ["B.Pharm"],
+    },
+    cutoffTrends: [
+      { course: "Computer Science", range: "320-390" },
+      { course: "Electronics", range: "290-330" },
+      { course: "Mechanical", range: "250-300" },
+      { course: "Civil", range: "220-260" },
+    ],
+    preparationTips: [
+      "Master NCERT fundamentals first, especially for Chemistry and core concepts.",
+      "Practice for speed and accuracy through regular timed mocks.",
+      "Attempt full-length tests and analyze errors after every mock.",
+      "Continuously revise weak areas and build short revision notes.",
+      "Use quality resources: standard BITSAT guides, PYQs, and reliable mock platforms.",
+    ],
+    comparison: [
+      { feature: "Mode", bitsat: "Online", jee: "Offline + Online" },
+      { feature: "Speed requirement", bitsat: "Very high", jee: "Moderate" },
+      { feature: "Difficulty", bitsat: "Moderate", jee: "High" },
+      { feature: "English + LR", bitsat: "Yes", jee: "No" },
+      { feature: "Bonus questions", bitsat: "Yes", jee: "No" },
+    ],
+    advantages: [
+      "No reservation-based seat allocation (merit-focused admissions)",
+      "Flexible academic structure across BITS campuses",
+      "Practice School (PS) internships integrated in curriculum",
+      "Excellent placements and industry exposure",
+      "Strong alumni network with global opportunities",
+    ],
+    practiceLinks: {
+      topicWisePyqs: "/bitsat",
+      dpp: "/bitsat/daily-practice",
+      topicWiseTests: "/mock-test/bitsat",
+      mockTests: "/mock-test/bitsat",
+    },
+    newsLinks: {
+      examUpdates: "/article/news?tag=bitsat",
+      importantNotices: "/article/news?tag=bitsat-notice",
+    },
+    jobsLinks: null,
+    updates: [
+      {
+        id: "bitsat-u1",
+        title: "BITSAT 2026 admission bulletin expected in early 2026",
+        summary:
+          "Candidates should track official portal for session dates, fee details, and updated eligibility clauses.",
+        date: "Jan 2026",
+        type: "Notification",
+      },
+      {
+        id: "bitsat-u2",
+        title: "Slot booking window likely to open in April-May",
+        summary:
+          "Slots are allotted on first-come-first-serve basis, so early booking is recommended.",
+        date: "Apr 2026",
+        type: "Admit Card/Slot",
+      },
+    ],
+    faqs: [
+      {
+        q: "Is BITSAT easier than JEE?",
+        a: "Generally yes in conceptual depth, but BITSAT is highly speed-driven and accuracy-dependent.",
+      },
+      {
+        q: "Can I appear for both JEE and BITSAT?",
+        a: "Yes, many candidates take both exams.",
+      },
+      {
+        q: "How many attempts are allowed for BITSAT?",
+        a: "One attempt per year.",
+      },
+      {
+        q: "Is calculator allowed in BITSAT exam?",
+        a: "No, physical and virtual calculators are not allowed.",
+      },
+      {
+        q: "What is considered a good BITSAT score?",
+        a: "300+ is good, 330+ is very good, and 350+ is considered excellent (varies by year and branch).",
+      },
+    ],
+  },
+
+  "jee-main": {
+    slug: "jee-main",
+    name: "JEE Main 2026: Complete Guide",
+    shortName: "JEE Main",
+    heroTagline:
+      "Complete guide to JEE Main 2026 exam pattern, eligibility, syllabus, dates, preparation strategy, and FAQs.",
+    overview: {
+      level: "National-level undergraduate entrance examination",
+      conductingBody: "National Testing Agency (NTA)",
+      frequency: "Twice a year (Session 1 and Session 2)",
+      mode: "Computer Based Test (CBT)",
+      officialSite: "https://jeemain.nta.nic.in",
+    },
+    about: `JEE Main is India's most popular and competitive engineering entrance exam.
+
+It is conducted by NTA for admission to NITs, IIITs, and GFTIs, and also serves as the qualifying exam for JEE Advanced.
+
+JEE Main evaluates conceptual understanding, speed, and accuracy across Physics, Chemistry, and Mathematics.`,
+    highlights: [
+      "Gateway to NITs, IIITs, and GFTIs",
+      "Qualifying exam for JEE Advanced",
+      "Two sessions every year; best score is considered for rank",
+      "Percentile-based normalization across shifts",
+      "Paper 1 (B.E./B.Tech) includes MCQ + numerical questions",
+    ],
+    importantDates: [
+      { label: "Session 1 application start", value: "November 2025 (expected)" },
+      { label: "Session 1 last date", value: "December 2025 (expected)" },
+      { label: "Session 1 admit card", value: "January 2026 (expected)" },
+      { label: "Session 1 exam dates", value: "January 2026 (expected)" },
+      { label: "Session 1 result", value: "February 2026 (expected)" },
+      { label: "Session 2 application start", value: "February 2026 (expected)" },
+      { label: "Session 2 last date", value: "March 2026 (expected)" },
+      { label: "Session 2 admit card", value: "April 2026 (expected)" },
+      { label: "Session 2 exam dates", value: "April 2026 (expected)" },
+      { label: "Session 2 result", value: "April 2026 (expected)" },
+    ],
+    eligibility: {
+      nationality:
+        "Indian and eligible foreign candidates as per NTA information bulletin.",
+      ageLimit: "No age limit (as per latest rules).",
+      education: [
+        "Must have passed or be appearing in Class 12 (10+2).",
+        "Physics and Mathematics are mandatory subjects.",
+        "One of Chemistry/Biology/Technical Vocational Subject is required.",
+      ],
+      attempts:
+        "Maximum 3 consecutive years with 2 sessions per year (up to 6 attempts).",
+    },
+    application: {
+      portalName: "NTA JEE Main Portal",
+      portalUrl: "https://jeemain.nta.nic.in",
+      steps: [
+        "Visit official NTA JEE Main website and register with email/mobile.",
+        "Fill personal, academic, and exam city preferences.",
+        "Upload photograph, signature, and required documents.",
+        "Pay application fee as per category and session choices.",
+        "Submit and download confirmation page for future use.",
+      ],
+    },
+    pattern: [
+      { label: "Papers", value: "Paper 1 (B.E./B.Tech), Paper 2A (B.Arch), Paper 2B (B.Planning)" },
+      { label: "Mode", value: "Computer Based Test (CBT)" },
+      { label: "Sessions", value: "2 sessions per year" },
+      { label: "Paper 1 questions", value: "75 (Physics 25, Chemistry 25, Mathematics 25)" },
+      { label: "Paper 1 total marks", value: "300" },
+      { label: "Question types", value: "MCQ + Numerical value questions" },
+      { label: "Marking scheme", value: "+4 correct, -1 incorrect (MCQ); no negative in some numerical questions" },
+    ],
+    patternBreakdown: [
+      { section: "Physics", marks: 100, questions: 25 },
+      { section: "Chemistry", marks: 100, questions: 25 },
+      { section: "Mathematics", marks: 100, questions: 25 },
+    ],
+    syllabusSummary: [
+      "Physics: Mechanics, Thermodynamics, Electrodynamics, Optics, Modern Physics",
+      "Chemistry: Physical Chemistry, Organic Chemistry, Inorganic Chemistry",
+      "Mathematics: Algebra, Calculus, Coordinate Geometry, Trigonometry, Vectors and 3D Geometry",
+      "Syllabus is aligned with NCERT Class 11 and 12, with deeper problem-solving level than boards",
+    ],
+    normalization: [
+      "JEE Main is conducted in multiple shifts and sessions.",
+      "NTA converts raw scores to percentile scores through normalization.",
+      "Final rank uses best percentile across sessions.",
+      "AIR is typically generated after Session 2 results.",
+    ],
+    fees: [
+      { label: "General category", value: "INR 1000-INR 2000 (expected, session-dependent)" },
+      { label: "Reserved categories", value: "Lower fee as per NTA notification" },
+      { label: "Both sessions", value: "Higher combined fee" },
+    ],
+    resultInfo: [
+      "Result is released in percentile format.",
+      "Top approximately 2.5 lakh candidates qualify for JEE Advanced (as per yearly criteria).",
+      "Counselling for NIT/IIIT/GFTI admissions is done through JoSAA/CSAB process.",
+    ],
+    cutoffTrends: [
+      { category: "General", percentile: "88-92" },
+      { category: "OBC", percentile: "70-75" },
+      { category: "SC", percentile: "45-50" },
+      { category: "ST", percentile: "35-40" },
+    ],
+    colleges: [
+      {
+        name: "NITs (National Institutes of Technology)",
+        notes: ["Highly reputed government institutes", "Excellent placements and alumni network"],
+      },
+      {
+        name: "IIITs (Indian Institutes of Information Technology)",
+        notes: ["Strong IT and CS focus", "Industry-oriented curriculum"],
+      },
+      {
+        name: "GFTIs (Government Funded Technical Institutes)",
+        notes: ["Affordable education", "Good infrastructure and opportunities"],
+      },
+    ],
+    comparison: [
+      { feature: "Level", main: "Moderate to Difficult", advanced: "Very Difficult" },
+      { feature: "Purpose", main: "NITs/IIITs/GFTIs", advanced: "IIT admissions" },
+      { feature: "Attempts", main: "Up to 6", advanced: "2" },
+      { feature: "Conducting body", main: "NTA", advanced: "IITs (rotational)" },
+    ],
+    preparationTips: [
+      "Build strong fundamentals first; NCERT should be your base.",
+      "Practice previous year questions and topic-wise tests daily.",
+      "Take full-length mocks regularly and analyze mistakes deeply.",
+      "Use strict time management while solving mixed-subject papers.",
+      "Keep short notes and revise formulas/concepts daily.",
+    ],
+    recommendedBooks: [
+      "NCERT (Physics, Chemistry, Mathematics)",
+      "H.C. Verma - Physics",
+      "O.P. Tandon - Chemistry",
+      "Cengage / Arihant series - Mathematics",
+    ],
+    commonMistakes: [
+      "Ignoring NCERT fundamentals",
+      "Skipping regular mock tests",
+      "Poor time management during tests",
+      "Inconsistent revision",
+      "Over-reliance on coaching without self-practice",
+    ],
+    practiceLinks: {
+      topicWisePyqs: "/jee-main",
+      dpp: "/jee-main/daily-practice",
+      topicWiseTests: "/mock-test/jee-main",
+      mockTests: "/mock-test/jee-main",
+    },
+    newsLinks: {
+      examUpdates: "/article/news?tag=jee-main",
+      importantNotices: "/article/news?tag=jee-main-notice",
+    },
+    jobsLinks: null,
+    updates: [
+      {
+        id: "jee-main-u1",
+        title: "Session 1 notification expected in late 2025",
+        summary:
+          "NTA is expected to release detailed bulletin with schedule, fees, and syllabus references.",
+        date: "Nov 2025",
+        type: "Notification",
+      },
+      {
+        id: "jee-main-u2",
+        title: "Session 2 expected in April 2026",
+        summary:
+          "Candidates can improve score in second session; best percentile is considered for rank.",
+        date: "Apr 2026",
+        type: "Session Update",
+      },
+    ],
+    faqs: [
+      {
+        q: "Is JEE Main very difficult?",
+        a: "It is moderately difficult, but high competition makes it challenging.",
+      },
+      {
+        q: "Can I crack JEE Main without coaching?",
+        a: "Yes, with strong strategy, consistency, PYQ practice, and disciplined revision.",
+      },
+      {
+        q: "Which session is better for JEE Main?",
+        a: "Both sessions are equally valid; best score is considered.",
+      },
+      {
+        q: "What is considered a good score in JEE Main?",
+        a: "150+ good, 200+ very good, and 250+ excellent (varies year to year).",
+      },
+      {
+        q: "Is NCERT enough for JEE Main?",
+        a: "NCERT is essential, especially for Chemistry; Physics and Mathematics need extra problem practice.",
+      },
+    ],
+  },
 };
 

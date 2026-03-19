@@ -1,15 +1,31 @@
 "use client";
 
 import React from "react";
-import { useParams } from "next/navigation";
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import { examMeta } from "@/data/examMeta";
 import { ArrowRight, BookOpen, FileText, Info, ShieldCheck } from "lucide-react";
 
 export default function ExamPage() {
+  const router = useRouter();
   const { slug } = useParams();
-  const exam = examMeta[slug];
+  const rawSlug = Array.isArray(slug) ? slug[0] : slug;
+  const normalizedSlug = decodeURIComponent(rawSlug || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+
+  const exam =
+    examMeta[normalizedSlug] ||
+    Object.values(examMeta).find((item) => item?.slug?.toLowerCase() === normalizedSlug);
+
+  useEffect(() => {
+    if (!exam && normalizedSlug) {
+      router.replace(`/${normalizedSlug}`);
+    }
+  }, [exam, normalizedSlug, router]);
 
   if (!exam) {
     return (
@@ -19,18 +35,17 @@ export default function ExamPage() {
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 text-center shadow-sm">
               <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900 mb-2">
-                Exam not found
+                Redirecting to practice page
               </h1>
               <p className="text-sm text-neutral-600 mb-4">
-                We could not find details for this exam slug. Please go back to the exams
-                list.
+                Guide is not available for this exam yet. Opening category practice page.
               </p>
               <Link
-                href="/exams"
+                href={normalizedSlug ? `/${normalizedSlug}` : "/exams"}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-neutral-300 text-neutral-800 text-sm font-medium hover:bg-neutral-50"
               >
                 <ArrowRight className="w-4 h-4" />
-                Back to exams
+                Open practice page
               </Link>
             </div>
           </div>
