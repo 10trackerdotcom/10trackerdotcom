@@ -10,8 +10,7 @@ import { ArrowLeft, Sparkles, CheckCircle } from "lucide-react";
 export default function SignUpPage() {
   const router = useRouter();
   const { isSignedIn, isLoaded } = useUser();
-  const mainAppUrl = process.env.NEXT_PUBLIC_MAIN_APP_URL || "/";
-  const mainAppUrlSignUp = process.env.NEXT_PUBLIC_MAIN_APP_URL_SIGN_UP || "/";
+  const defaultRedirect = "/";
   
   useEffect(() => {
     if (isLoaded && isSignedIn) {
@@ -99,7 +98,7 @@ export default function SignUpPage() {
               {/* Clerk SignUp Component with Custom Styling */}
               <div className="[&_.cl-rootBox]:!w-full [&_.cl-card]:!shadow-none [&_.cl-card]:!border-none [&_.cl-main]:!p-0 [&_.cl-formButtonPrimary]:!transition-all">
                 <SignUp
-                  forceRedirectUrl={mainAppUrlSignUp}
+                  forceRedirectUrl={defaultRedirect}
                   appearance={{
                     elements: {
                       rootBox: "w-full",
@@ -131,7 +130,7 @@ export default function SignUpPage() {
                   routing="path"
                   path="/sign-up"
                   signInUrl="/sign-in"
-                  afterSignUpUrl={mainAppUrl}
+                  afterSignUpUrl={defaultRedirect}
                 />
               </div>
             </div>

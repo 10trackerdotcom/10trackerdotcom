@@ -9,10 +9,6 @@ import { AuthProvider } from "./context/AuthContext";
 import AuthModalWrapper from "@/components/AuthModalWrapper";
 import ProfileModal from "@/components/ProfileModal";
 import AnalyticsInitializer from "@/components/AnalyticsInitializer";
-import FCMNotificationProvider from "@/components/FCMNotificationProvider";
-// import NotificationEnrollment from "@/components/NotificationEnrollment"; // Temporarily disabled
-// import { NotificationTestHelper } from "@/components/NotificationTestHelper"; // Temporarily disabled
-// import { FCMDiagnostics } from "@/components/FCMDiagnostics"; // Temporarily disabled
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -152,21 +148,16 @@ export default function RootLayout({ children }) {
           }}
         >
           <AuthProvider>
-            <FCMNotificationProvider>
-              <AnalyticsInitializer />
-              <AuthModalWrapper />
-              <Navbar/>
-              <ProfileModal />
-              <div className="pb-16 md:pb-0">
-                {children}
-              </div>
-              <Footer />
-              <MobileBottomMenu />
-              {/* <NotificationEnrollment /> Temporarily disabled */}
-              {/* <NotificationTestHelper /> Temporarily disabled */}
-              {/* <FCMDiagnostics /> Temporarily disabled */}
-              <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-            </FCMNotificationProvider>
+            <AnalyticsInitializer />
+            <AuthModalWrapper />
+            <Navbar/>
+            <ProfileModal />
+            <div className="pb-16 md:pb-0">
+              {children}
+            </div>
+            <Footer />
+            <MobileBottomMenu />
+            <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
           </AuthProvider>
         </ClerkProvider>
 

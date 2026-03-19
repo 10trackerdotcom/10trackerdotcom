@@ -6,7 +6,7 @@ import toast, { Toaster } from "react-hot-toast";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowRight, FileText } from "lucide-react";
+import { ArrowRight, FileText, BookOpen, ShieldClose } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import Navbar from "@/components/Navbar";
 import { getCachedData, invalidateCache } from "@/lib/utils/apiCache";
@@ -72,7 +72,7 @@ const Examtracker = () => {
   // Check if category is a GATE exam
   const isGateExam = useMemo(() => {
     const cat = category?.toLowerCase();
-    return cat === 'gate-cse' || cat === 'gate-me' || cat === 'gate-ex' || cat === 'upsc-prelims' || cat === 'gate-ec' || cat === 'gate-ee' || cat === 'gate-da' || cat === 'gate-me' || cat === 'general-aptitude' || cat === 'verbal-reasoning' || cat === 'non-verbal-reasoning' || cat === 'verbal-ability';
+    return cat === 'gate-cse' || cat === 'gate-me' || cat === 'gate-ex' || cat === 'gate-ec' || cat === 'gate-ee' || cat === 'gate-da' || cat === 'gate-me' || cat === 'general-aptitude' || cat === 'verbal-reasoning' || cat === 'non-verbal-reasoning' || cat === 'verbal-ability';
   }, [category]);
   
   // Properly decode and format subject from URL
@@ -591,60 +591,134 @@ const progress = useMemo(() => {
       <Suspense fallback={<div>Loading navbar...</div>}>
         <Navbar/>
       </Suspense>
-      <div className="min-h-screen bg-neutral-50 pt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-12 sm:pb-16">
-          <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-neutral-900">{category?.toUpperCase()} Practice Tracker</h1>
-              <p className="text-sm sm:text-base text-neutral-600 mt-1">
-                {isGateExam 
-                  ? `Track your progress across ${allSubtopics.length} topics and ${totalQuestions} questions`
-                  : `Browse ${chapters.length} chapters for ${formattedSubject || 'this subject'}`
-                }
-              </p>
+      <div className="min-h-screen bg-neutral-50 pt-20 pb-24 md:pb-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+          {/* Subject hero */}
+          <section className="mb-6 sm:mb-8 border-b border-neutral-200 pb-5 sm:pb-6 bg-white rounded-3xl shadow-sm">
+            <div className="relative overflow-hidden rounded-3xl">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(0,0,0,0.04),transparent_55%),radial-gradient(circle_at_80%_0%,rgba(0,0,0,0.03),transparent_55%)]" />
+              <div className="relative px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
+                <div className="flex flex-col gap-5 lg:grid lg:grid-cols-12 lg:items-start">
+                  {/* Left: title + actions */}
+                  <div className="lg:col-span-7 min-w-0">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200">
+                      <span className="text-[11px] font-semibold text-neutral-700">
+                        {category?.toUpperCase()} • {formattedSubject || "Subject"}
+                      </span>
+                    </div>
+                    <h1 className="mt-3 text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 tracking-tight">
+                      {formattedSubject || `${category?.toUpperCase()} practice`}
+                    </h1>
+                    <p className="mt-2 text-sm sm:text-base text-neutral-600 max-w-xl leading-relaxed">
+                      Stay on one clean dashboard for this subject: track progress, practice PYQs, run topic tests and attempt mocks without hopping between pages.
+                    </p>
+
+                    {/* Quick actions */}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const el = document.getElementById("practice-grid");
+                          el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold hover:bg-neutral-800 transition-colors"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        Start practice
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => (isGateExam ? fetchData(true) : fetchChapters(true))}
+                        disabled={isLoading}
+                        className="inline-flex items-center gap-2 rounded-xl bg-white border border-neutral-300 text-neutral-800 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold hover:bg-neutral-50 disabled:opacity-50 transition-colors"
+                        aria-label="Refresh data"
+                      >
+                        <svg
+                          className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
+                        </svg>
+                        {isLoading ? "Refreshing..." : "Refresh"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowMobileOptions(true)}
+                        className="inline-flex md:hidden items-center gap-2 rounded-xl bg-white border border-neutral-300 text-neutral-800 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold hover:bg-neutral-50 transition-colors"
+                        aria-label="Show options and progress"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+                          />
+                        </svg>
+                        Options & progress
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right: compact stats */}
+                  <div className="lg:col-span-5">
+                    <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-4 sm:p-5">
+                      <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">
+                        Snapshot
+                      </p>
+                      <div className="grid grid-cols-3 gap-2 sm:gap-3 text-xs sm:text-sm text-neutral-700">
+                        <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2">
+                          <p className="text-base sm:text-lg font-semibold text-neutral-900">
+                            {isGateExam ? allSubtopics.length : chapters.length}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-neutral-600">
+                            {isGateExam ? "Topics" : "Chapters"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2">
+                          <p className="text-base sm:text-lg font-semibold text-neutral-900">
+                            {totalQuestions}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-neutral-600">Questions</p>
+                        </div>
+                        <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2">
+                          <p className="text-base sm:text-lg font-semibold text-neutral-900">
+                            {progress.completionPercentage}%
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-neutral-600">Completed</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 sm:mt-0 flex items-center gap-2">
-              <button 
-                onClick={() => isGateExam ? fetchData(true) : fetchChapters(true)}
-                disabled={isLoading}
-                className="px-3 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 disabled:opacity-50 text-sm flex items-center gap-2 transition-colors"
-                aria-label="Refresh data"
-                title="Refresh data (clears cache)"
-              >
-                <svg className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {isLoading ? 'Refreshing...' : 'Refresh'}
-              </button>
-              <button 
-                onClick={() => setShowMobileOptions(true)} 
-                className="md:hidden px-4 py-2 bg-white border border-neutral-300 text-neutral-800 rounded-lg flex items-center justify-center"
-                aria-label="Show options and progress"
-              >
-                <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                Options & Progress
-              </button>
-            </div>
-          </div>
+          </section>
 
           <div className="flex flex-col md:flex-row md:space-x-8">
             <div className="hidden md:block w-64 flex-shrink-0">
-              <div className="sticky top-20 bg-white rounded-xl shadow-sm border border-neutral-200 p-4 sm:p-6">
+              <div className="sticky top-24 bg-white rounded-2xl shadow-sm border border-neutral-200 p-5">
                 <h3 className="text-lg font-medium text-neutral-900 mb-4">{category?.toUpperCase()} Tracker</h3>
                 {user ? (
-                  <div className="mb-6 bg-neutral-100 rounded-xl p-4">
-                    <h4 className="text-sm font-semibold text-neutral-800 mb-3">Your Progress</h4>
+                  <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
+                    <h4 className="text-sm font-semibold text-neutral-800 mb-3">Progress</h4>
                     <div className="space-y-4">
                       <div>
                         <div className="flex justify-between text-sm mb-1">
                           <span>{isGateExam ? "Topics" : "Chapters"}</span>
                           <span>{progress.completionPercentage}%</span>
                         </div>
-                        <div className="w-full bg-neutral-200 rounded-full h-2.5">
+                        <div className="w-full bg-neutral-200 rounded-full h-2">
                           <div 
-                            className="bg-neutral-800 h-2.5 rounded-full" 
+                            className="bg-neutral-900 h-2 rounded-full" 
                             style={{ width: `${progress.completionPercentage}%` }} 
                           />
                         </div>
@@ -673,33 +747,21 @@ const progress = useMemo(() => {
                     </div>
                   </div>
                 ) : (
-                  <div className="mb-6 bg-neutral-100 rounded-xl p-4">
+                  <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
                     <h4 className="text-sm font-medium text-neutral-800 mb-2">Track Your Progress</h4>
                     <button 
                       onClick={() => setShowAuthModal(true)} 
-                      className="w-full py-2 border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 transition duration-150"
+                      className="w-full py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 transition duration-150"
                     >
                       Sign In
                     </button>
                   </div>
                 )}
-                <div>
-                  <h4 className="text-sm font-medium text-neutral-500 uppercase mb-3">Sort Options</h4>
-                  <div className="space-y-1">
-                    {["default", "progress", "remaining"].map((option) => (
-                      <button 
-                        key={option} 
-                        className={`w-full text-left px-3 py-2 rounded-lg transition ${
-                          sortBy === option ? "bg-neutral-100 text-neutral-900" : "text-neutral-700 hover:bg-neutral-100"
-                        }`} 
-                        onClick={() => setSortBy(option)}
-                        aria-label={`Sort by ${option}`}
-                        aria-pressed={sortBy === option}
-                      >
-                        Sort by {option.charAt(0).toUpperCase() + option.slice(1)}
-                      </button>
-                    ))}
-                  </div>
+                <div className="mt-2 rounded-2xl bg-neutral-50 border border-neutral-200 p-4">
+                  <h4 className="text-sm font-semibold text-neutral-900 mb-2">Practice tools</h4>
+                  <p className="text-xs text-neutral-600 leading-relaxed">
+                    Use search + sorting above the grid to quickly find what to practice next.
+                  </p>
                 </div>
               </div>
             </div>
@@ -713,7 +775,7 @@ const progress = useMemo(() => {
                   exit={{ opacity: 0 }}
                 >
                   <motion.div 
-                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-xl p-4 pb-8 border-t border-neutral-200" 
+                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4 pb-8 border-t border-neutral-200" 
                     initial={{ y: "100%" }} 
                     animate={{ y: 0 }} 
                     exit={{ y: "100%" }} 
@@ -732,17 +794,17 @@ const progress = useMemo(() => {
                       </button>
                     </div>
                     {user ? (
-                      <div className="mb-6 bg-neutral-100 rounded-xl p-4">
-                        <h4 className="text-sm font-semibold text-neutral-800 mb-3">Your Progress</h4>
+                      <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
+                        <h4 className="text-sm font-semibold text-neutral-800 mb-3">Progress</h4>
                         <div className="space-y-4">
                           <div>
                             <div className="flex justify-between text-sm mb-1">
                               <span>{isGateExam ? "Topics" : "Chapters"}</span>
                               <span>{progress.completionPercentage}%</span>
                             </div>
-                            <div className="w-full bg-neutral-200 rounded-full h-2.5">
+                            <div className="w-full bg-neutral-200 rounded-full h-2">
                               <div 
-                                className="bg-neutral-800 h-2.5 rounded-full" 
+                                className="bg-neutral-900 h-2 rounded-full" 
                                 style={{ width: `${progress.completionPercentage}%` }} 
                               />
                             </div>
@@ -771,14 +833,14 @@ const progress = useMemo(() => {
                         </div>
                       </div>
                     ) : (
-                      <div className="mb-6 bg-neutral-100 rounded-xl p-4">
+                      <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
                         <h4 className="text-sm font-medium text-neutral-800 mb-2">Track Your Progress</h4>
                         <button 
                           onClick={() => { 
                             setShowAuthModal(true); 
                             setShowMobileOptions(false); 
                           }} 
-                          className="w-full py-2 border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 transition duration-150"
+                          className="w-full py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 transition duration-150"
                         >
                           Sign In
                         </button>
@@ -790,7 +852,7 @@ const progress = useMemo(() => {
                         {["default", "progress", "remaining"].map((option) => (
                           <button 
                             key={option} 
-                            className={`w-full text-left px-3 py-2 rounded-lg transition ${
+                            className={`w-full text-left px-3 py-2 rounded-xl transition ${
                               sortBy === option ? "bg-neutral-100 text-neutral-900" : "text-neutral-700 hover:bg-neutral-100"
                             }`} 
                             onClick={() => { 
@@ -811,40 +873,93 @@ const progress = useMemo(() => {
             </AnimatePresence>
 
             <div className="md:flex-1">
-              <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-4 sm:p-6 mb-4 sm:mb-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between">
-                  <div className="mb-4 sm:mb-0">
-                    <h2 className="text-lg sm:text-xl font-semibold text-neutral-900">{activeSubject || "All Subjects"}</h2>
-                    {/* <p className="text-xs sm:text-sm text-neutral-500 mt-1">
-                      {activeSubject 
-                        ? `${data.find((s) => s.subject === activeSubject)?.subtopics?.length || 0} topics` 
-                        : `${allSubtopics.length} topics across ${data.length} subjects`}
-                    </p> */}
+              <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 sm:p-6 mb-4 sm:mb-6">
+                <div className="flex flex-col gap-4">
+                  {/* Title + quick reset */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-lg sm:text-xl font-semibold text-neutral-900 tracking-tight truncate">
+                        {activeSubject || "All Subjects"}
+                      </h2>
+                      <p className="text-xs sm:text-sm text-neutral-500 mt-1">
+                        Showing <span className="font-semibold text-neutral-800">{isGateExam ? filteredAndSortedTopics.length : filteredAndSortedChapters.length}</span>{" "}
+                        {isGateExam ? "topics" : "chapters"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchTerm("");
+                        setSortBy("default");
+                      }}
+                      className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
+                      aria-label="Reset search and sort"
+                    >
+                      <ShieldClose className="w-4 h-4 text-neutral-500" />
+                      Reset
+                    </button>
                   </div>
-                  <div className="relative sm:max-w-xs w-full">
-                    <svg className="h-5 w-5 text-neutral-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder="Search topics (Ctrl + /)"
-                      className="pl-10 pr-10 sm:pr-4 py-2.5 sm:py-2 w-full border border-neutral-300 rounded-lg focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800 text-sm sm:text-base"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      ref={searchInputRef}
-                      aria-label="Search topics"
-                    />
-                    {searchTerm && (
-                      <button 
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2" 
-                        onClick={() => setSearchTerm("")}
-                        aria-label="Clear search"
-                      >
-                        <svg className="h-5 w-5 text-neutral-400 hover:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
+
+                  {/* Search + sort */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    <div className="relative sm:max-w-xs w-full">
+                      <svg className="h-5 w-5 text-neutral-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder={`Search ${isGateExam ? "topics" : "chapters"} (Ctrl + /)`}
+                        className="pl-10 pr-10 sm:pr-4 py-2.5 w-full border border-neutral-300 rounded-xl focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 text-sm sm:text-base bg-white"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        ref={searchInputRef}
+                        aria-label="Search topics or chapters"
+                      />
+                      {searchTerm && (
+                        <button
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                          onClick={() => setSearchTerm("")}
+                          aria-label="Clear search"
+                          type="button"
+                        >
+                          <svg className="h-5 w-5 text-neutral-400 hover:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs sm:text-sm font-semibold text-neutral-600 whitespace-nowrap">
+                          Sort
+                        </p>
+
+                        <div className="inline-flex bg-neutral-100 p-1 rounded-2xl">
+                          {["default", "progress", "remaining"].map((option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => setSortBy(option)}
+                              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors ${
+                                sortBy === option
+                                  ? "bg-neutral-900 text-white"
+                                  : "text-neutral-700 hover:bg-neutral-200"
+                              }`}
+                              aria-label={`Sort by ${option}`}
+                              aria-pressed={sortBy === option}
+                            >
+                              {option === "default"
+                                ? "Default"
+                                : option === "progress"
+                                  ? "Progress"
+                                  : "Remaining"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -862,7 +977,10 @@ const progress = useMemo(() => {
               {/* Render chapters for non-GATE exams, topics for GATE exams */}
               {!isGateExam ? (
                 // Chapters view for non-GATE exams - matching topic card style
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div
+                  id="practice-grid"
+                  className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
+                >
                   {filteredAndSortedChapters.map((chapter) => {
                     const chapterSlug = chapter.slug || chapter.title.toLowerCase().replace(/\s+/g, "-");
                     const chapterKey = chapter.slug || chapter.title;
@@ -889,28 +1007,47 @@ const progress = useMemo(() => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ duration: 0.2 }}
-                        className={`bg-white rounded-xl shadow-sm border ${
+                        className={`group bg-white rounded-2xl shadow-sm border ${
                           isCompleted ? "border-green-200" : completedCount > 0 ? "border-neutral-300" : "border-neutral-200"
-                        } hover:shadow-md transition-shadow duration-200`}
+                        } hover:shadow-lg hover:border-neutral-300 transition-all duration-200`}
                       >
                         <div className="p-4 sm:p-5">
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h3 className="text-base sm:text-lg font-medium text-neutral-900 line-clamp-2">
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="min-w-0">
+                              <h3 className="text-base sm:text-lg font-semibold text-neutral-900 line-clamp-2 leading-snug">
                                 {chapter.title}
                               </h3>
-                              <div className="text-xs sm:text-sm text-neutral-500">{chapter.subject || formattedSubject}</div>
+                              <div className="text-xs sm:text-sm text-neutral-500 mt-0.5 truncate">
+                                {chapter.subject || formattedSubject}
+                              </div>
                             </div>
-                            {isCompleted && (
-                              <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
-                                Completed
-                              </span>
-                            )}
+                            <div className="flex flex-col items-end gap-2">
+                              {isCompleted ? (
+                                <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
+                                  Completed
+                                </span>
+                              ) : completedCount > 0 ? (
+                                <span className="bg-neutral-100 text-neutral-800 text-xs px-2.5 py-0.5 rounded-full">
+                                  In progress
+                                </span>
+                              ) : (
+                                <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 text-xs px-2.5 py-0.5 rounded-full">
+                                  New
+                                </span>
+                              )}
+
+                              <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-center min-w-[64px]">
+                                <p className="text-sm font-semibold text-neutral-900 tabular-nums">
+                                  {progressPercentage}%
+                                </p>
+                                <p className="text-[10px] text-neutral-500">done</p>
+                              </div>
+                            </div>
                           </div>
                           <div className="space-y-3">
-                            <div className="flex justify-between text-sm">
-                              <span>{completedCount} of {totalQuestions} questions</span>
-                              <span>{progressPercentage}%</span>
+                            <div className="flex items-center justify-between text-sm text-neutral-700">
+                              <span className="truncate">{completedCount} of {totalQuestions} questions</span>
+                              <span className="tabular-nums text-neutral-600">Accuracy {accuracyPercentage}%</span>
                             </div>
                             <div className="w-full bg-neutral-200 rounded-full h-2">
                               <div
@@ -921,21 +1058,29 @@ const progress = useMemo(() => {
                               />
                             </div>
                             {completedCount > 0 && (
-                              <div className="flex justify-between text-xs text-neutral-500">
-                                <span>Accuracy: {accuracyPercentage}%</span>
-                                <span>Topics: {progress.completedTopics}/{progress.totalTopics}</span>
+                              <div className="flex items-center justify-between text-xs text-neutral-500">
+                                <span className="tabular-nums">Correct: {progress.correctAnswers || 0}</span>
+                                <span className="tabular-nums">Topics: {progress.completedTopics}/{progress.totalTopics}</span>
                               </div>
                             )}
-                            <Link
-                              href={`/${category}/${subject}/${chapterSlug}/practice`}
-                              className={`block text-center py-2 rounded-lg border ${
-                                isCompleted 
-                                  ? "border-green-300 text-green-800 hover:bg-green-50" 
-                                  : "border-neutral-300 text-neutral-800 hover:bg-neutral-50"
-                              } transition-colors duration-150`}
-                            >
-                              Start Practice
-                            </Link>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              <Link
+                                href={`/${category}/${subject}/${chapterSlug}`}
+                                className="block text-center py-2 rounded-xl border border-neutral-300 text-neutral-800 hover:bg-neutral-50 transition-colors duration-150 font-semibold"
+                              >
+                                Details
+                              </Link>
+                              <Link
+                                href={`/${category}/${subject}/${chapterSlug}/practice`}
+                                className={`block text-center py-2 rounded-xl border ${
+                                  isCompleted
+                                    ? "border-green-300 text-green-800 hover:bg-green-50"
+                                    : "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800 hover:border-neutral-800"
+                                } transition-colors duration-150 font-medium`}
+                              >
+                                {completedCount > 0 ? "Resume" : "Start"} practice
+                              </Link>
+                            </div>
                           </div>
                         </div>
                       </motion.div>
@@ -944,7 +1089,10 @@ const progress = useMemo(() => {
                 </div>
               ) : (
                 // Topics view for GATE exams (existing code)
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div
+                id="practice-grid"
+                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
+              >
               {/* // Updated topic card rendering with correct field names */}
 {filteredAndSortedTopics.map((topic) => {
   const topicProgress = userProgress[topic.title] || { 
@@ -964,26 +1112,45 @@ const progress = useMemo(() => {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.2 }}
-                      className={`bg-white rounded-xl shadow-sm border ${
+                      className={`group bg-white rounded-2xl shadow-sm border ${
                         isCompleted ? "border-green-200" : completedCount > 0 ? "border-neutral-300" : "border-neutral-200"
-                      } hover:shadow-md transition-shadow duration-200`}
+                      } hover:shadow-lg hover:border-neutral-300 transition-all duration-200`}
                     >
                       <div className="p-4 sm:p-5">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                        <h3 className="text-base sm:text-lg font-medium text-neutral-900 line-clamp-2">{topic.title.replace(/-/g, " ")}</h3>
-                        <div className="text-xs sm:text-sm text-neutral-500">{topic.parentSubject}</div>
+                        <h3 className="text-base sm:text-lg font-semibold text-neutral-900 line-clamp-2 leading-snug">
+                          {topic.title.replace(/-/g, " ")}
+                        </h3>
+                        <div className="text-xs sm:text-sm text-neutral-500 mt-0.5">{topic.parentSubject}</div>
                           </div>
-                          {isCompleted && (
-                            <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
-                              Completed
-                            </span>
-                          )}
+                          <div className="flex flex-col items-end gap-2">
+                            {isCompleted ? (
+                              <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
+                                Completed
+                              </span>
+                            ) : completedCount > 0 ? (
+                              <span className="bg-neutral-100 text-neutral-800 text-xs px-2.5 py-0.5 rounded-full">
+                                In progress
+                              </span>
+                            ) : (
+                              <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 text-xs px-2.5 py-0.5 rounded-full">
+                                New
+                              </span>
+                            )}
+
+                            <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-center min-w-[64px]">
+                              <p className="text-sm font-semibold text-neutral-900 tabular-nums">
+                                {progressPercentage}%
+                              </p>
+                              <p className="text-[10px] text-neutral-500">done</p>
+                            </div>
+                          </div>
                         </div>
                         <div className="space-y-3">
                           <div className="flex justify-between text-sm">
                             <span>{completedCount} of {topic.count} questions</span>
-                            <span>{progressPercentage}%</span>
+                            <span className="text-neutral-600 tabular-nums">Accuracy {accuracyPercentage}%</span>
                           </div>
                           <div className="w-full bg-neutral-200 rounded-full h-2">
                             <div
@@ -994,20 +1161,24 @@ const progress = useMemo(() => {
                             />
                           </div>
                           {completedCount > 0 && (
-                            <div className="flex justify-between text-xs text-neutral-500">
-                              <span>Accuracy: {accuracyPercentage}%</span>
-                              <span>Points: {topicProgress.points}</span>
+                            <div className="flex flex-wrap gap-2 text-xs text-neutral-600">
+                              <span className="inline-flex items-center rounded-full bg-neutral-50 border border-neutral-200 px-2.5 py-1">
+                                Points <span className="ml-1 font-semibold text-neutral-900 tabular-nums">{topicProgress.points}</span>
+                              </span>
+                              <span className="inline-flex items-center rounded-full bg-neutral-50 border border-neutral-200 px-2.5 py-1">
+                                Correct <span className="ml-1 font-semibold text-neutral-900 tabular-nums">{correctCount}</span>
+                              </span>
                             </div>
                           )}
                           <a
                             href={`/${category}/practice/${topic.title}`}
-                            className={`block text-center py-2 rounded-lg border ${
+                            className={`block text-center py-2 rounded-xl border ${
                               isCompleted 
                                 ? "border-green-300 text-green-800 hover:bg-green-50" 
-                                : "border-neutral-300 text-neutral-800 hover:bg-neutral-50"
-                            } transition-colors duration-150`}
+                                : "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800 hover:border-neutral-800"
+                            } transition-colors duration-150 font-medium`}
                           >
-                            {completedCount > 0 ? "Continue" : "Start"} Practice
+                            {completedCount > 0 ? "Resume" : "Start"} practice
                           </a>
                         </div>
                       </div>
@@ -1052,7 +1223,7 @@ const progress = useMemo(() => {
         <div className="md:hidden fixed bottom-6 right-6 z-30">
           <button 
             onClick={() => setShowMobileOptions(true)} 
-            className="h-14 w-14 rounded-full bg-white text-neutral-800 border border-neutral-300 shadow-sm flex items-center justify-center hover:bg-neutral-50" 
+            className="h-14 w-14 rounded-full bg-white text-neutral-800 border border-neutral-300 shadow-md flex items-center justify-center hover:bg-neutral-50" 
             aria-label="Show options"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

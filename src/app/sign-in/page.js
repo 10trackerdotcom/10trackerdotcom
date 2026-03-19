@@ -8,12 +8,25 @@ import Link from "next/link";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 
-// Same-origin redirect only (avoid open redirect)
-const getSafeRedirect = (path) => {
-  if (!path || typeof path !== "string") return null;
-  const p = path.trim();
-  if (!p.startsWith("/") || p.startsWith("//")) return null;
-  return p;
+// Same-origin redirect only (avoid open redirect).
+// Accepts either a relative path (preferred) or an absolute URL that matches `window.location.origin`.
+const getSafeRedirect = (raw) => {
+  if (!raw || typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (!value) return null;
+
+  if (value.startsWith("/") && !value.startsWith("//")) return value;
+
+  try {
+    // client-only: `window` is available because this is a client component
+    const url = new URL(value);
+    if (typeof window !== "undefined" && url.origin === window.location.origin) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 };
 
 // Lazy load Clerk components for better performance - only load when needed
@@ -33,12 +46,11 @@ export default function SignInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isSignedIn, isLoaded } = useUser();
-  const mainAppUrl = process.env.NEXT_PUBLIC_MAIN_APP_URL || "/";
-  const mainAppUrlSignIn = process.env.NEXT_PUBLIC_MAIN_APP_URL_SIGN_IN || "/";
+  const defaultRedirect = "/";
 
   const redirectUrl = useMemo(
-    () => getSafeRedirect(searchParams.get("redirect")) || mainAppUrlSignIn,
-    [searchParams, mainAppUrlSignIn]
+    () => getSafeRedirect(searchParams.get("redirect")) || defaultRedirect,
+    [searchParams]
   );
 
   useEffect(() => {

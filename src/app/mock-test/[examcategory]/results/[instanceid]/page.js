@@ -655,6 +655,7 @@ const QuestionSection = React.memo(function QuestionSection({ title, questions, 
       <div className="space-y-3 sm:space-y-4">
         {questions.map((q, index) => {
           const questionHtml = q.questionText || q.question || '';
+          const explanationHtml = q.solutionText || q.solutiontext || q.solution || '';
           return (
             <div key={q.question_order ?? index} className={`${bgColor} p-3 sm:p-4 rounded-lg border ${borderColor}`}>
               <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
@@ -684,14 +685,28 @@ const QuestionSection = React.memo(function QuestionSection({ title, questions, 
                 {type === 'incorrect' && (
                   <>
                     <span className="text-red-700 font-semibold">Your: {q.userAnswer}</span>
-                    <span className="text-green-700 font-semibold">Correct: {q.correctAnswer}</span>
+                    <span className="text-green-700 font-semibold">Correct: {q.correctAnswer || '—'}</span>
                   </>
                 )}
-                {type === 'correct' && <span className="text-green-700 font-semibold">Your answer: {q.userAnswer}</span>}
-                {type === 'unanswered' && <span className="text-green-700 font-semibold">Correct: {q.correctAnswer}</span>}
+                {type === 'correct' && (
+                  <>
+                    <span className="text-green-700 font-semibold">Your answer: {q.userAnswer || '—'}</span>
+                    <span className="text-neutral-700 font-semibold">Correct option: {q.correctAnswer || '—'}</span>
+                  </>
+                )}
+                {type === 'unanswered' && <span className="text-green-700 font-semibold">Correct: {q.correctAnswer || '—'}</span>}
               </div>
-              {q.solutiontext && (
-                <MathHtml html={q.solutiontext} className="mt-3 sm:mt-4 text-neutral-800 text-sm sm:text-base overflow-x-auto border-t border-neutral-200 pt-3" />
+
+              {explanationHtml && (
+                <div className="mt-3 sm:mt-4 border-t border-neutral-200 pt-3">
+                  <p className="text-xs sm:text-sm font-semibold text-neutral-700 mb-2">
+                    Solution / Explanation
+                  </p>
+                  <MathHtml
+                    html={explanationHtml}
+                    className="text-neutral-800 text-sm sm:text-base overflow-x-auto"
+                  />
+                </div>
               )}
             </div>
           );

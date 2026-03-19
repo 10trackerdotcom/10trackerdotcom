@@ -1,7 +1,7 @@
 'use client';
 
-import { Mail } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import { LogIn } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const AuthModal = ({ isOpen, onClose, onGoogleSignIn, categoryName = "exam" }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -13,7 +13,7 @@ const AuthModal = ({ isOpen, onClose, onGoogleSignIn, categoryName = "exam" }) =
     }
   }, [isOpen]);
 
-  const handleClose = (e) => {
+  const handleClose = useCallback((e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -26,7 +26,7 @@ const AuthModal = ({ isOpen, onClose, onGoogleSignIn, categoryName = "exam" }) =
     if (typeof onClose === 'function') {
       onClose();
     }
-  };
+  }, [isLoading, onClose]);
 
   // Fix: Close modal on successful sign-in (call onClose after Google sign-in)
   const handleGoogleSignIn = async (e) => {
@@ -67,7 +67,7 @@ const AuthModal = ({ isOpen, onClose, onGoogleSignIn, categoryName = "exam" }) =
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, [isOpen, handleClose]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -243,7 +243,7 @@ const AuthModal = ({ isOpen, onClose, onGoogleSignIn, categoryName = "exam" }) =
             {/* Sign In Section */}
             <div className="px-4 py-4 bg-white border-t border-slate-100">
               
-              {/* Email Sign In Button */}
+              {/* Sign in (Clerk modal handles email + Google etc) */}
               <button
                 onClick={handleGoogleSignIn}
                 className={`w-full py-4 px-6 rounded-xl sm:rounded-2xl flex items-center justify-center gap-3 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 ${
@@ -261,8 +261,8 @@ const AuthModal = ({ isOpen, onClose, onGoogleSignIn, categoryName = "exam" }) =
                   </>
                 ) : (
                   <>
-<Mail />
-                    <span className="font-semibold text-sm sm:text-base">Continue with Email</span>
+                    <LogIn />
+                    <span className="font-semibold text-sm sm:text-base">Continue to sign in</span>
                   </>
                 )}
               </button>

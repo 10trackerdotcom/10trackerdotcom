@@ -399,63 +399,31 @@ const PracticePathCards = React.memo(({ category, onOpenPracticeTopics }) => {
 });
 PracticePathCards.displayName = 'PracticePathCards';
 
-// Memoized Search Component
-const SearchBar = React.memo(({ searchTerm, setSearchTerm, viewMode, setViewMode }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.4, delay: 0.2 }}
-    className="mb-6 sm:mb-8 space-y-3 sm:space-y-4"
-  >
-    {/* Search Input */}
-    <div className="relative">
-      <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-neutral-400" />
+// Memoized Search + View Toggle (compact, app-like)
+const SearchBar = React.memo(({ searchTerm, setSearchTerm }) => (
+  <div className="flex items-center gap-3">
+    <div className="relative flex-1">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
       <input
         type="text"
-        placeholder="Search subjects or topics..."
+        placeholder="Search subjects…"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        className="w-full pl-10 sm:pl-12 pr-10 sm:pr-12 py-3 sm:py-4 bg-white border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-800 focus:border-neutral-800 transition-all duration-200 text-sm sm:text-base"
+        className="w-full pl-9 pr-9 py-2.5 bg-white border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 transition-colors text-sm"
+        aria-label="Search subjects"
       />
       {searchTerm && (
         <button
+          type="button"
           onClick={() => setSearchTerm('')}
-          className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-neutral-400 hover:text-neutral-600 active:text-neutral-700 touch-manipulation flex items-center justify-center"
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition-colors flex items-center justify-center"
           aria-label="Clear search"
         >
-          <X className="w-4 h-4 sm:w-5 sm:h-5" />
+          <X className="w-4 h-4" />
         </button>
       )}
     </div>
-
-    {/* View Toggle */}
-    <div className="flex items-center justify-center">
-      <div className="inline-flex bg-neutral-100 p-1 rounded-lg w-full sm:w-auto">
-        <button
-          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-2 rounded-md font-medium text-sm sm:text-base transition-all duration-200 touch-manipulation ${
-            viewMode === 'subjects' 
-              ? 'bg-white text-neutral-900 shadow-sm' 
-              : 'text-neutral-600 hover:text-neutral-900 active:text-neutral-700'
-          }`}
-          onClick={() => setViewMode('subjects')}
-        >
-          <Grid3X3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 inline" />
-          Subjects
-        </button>
-        <button
-          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-2 rounded-md font-medium text-sm sm:text-base transition-all duration-200 touch-manipulation ${
-            viewMode === 'topics' 
-              ? 'bg-white text-neutral-900 shadow-sm' 
-              : 'text-neutral-600 hover:text-neutral-900 active:text-neutral-700'
-          }`}
-          onClick={() => setViewMode('topics')}
-        >
-          <List className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 inline" />
-          Topics
-        </button>
-      </div>
-    </div>
-  </motion.div>
+  </div>
 ));
 
 SearchBar.displayName = 'SearchBar';
@@ -643,7 +611,7 @@ const ExamTracker = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('subjects');
+  const [viewMode, setViewMode] = useState('subjects'); // kept for backward compatibility; UI is subjects-only
   const [practiceFocusMode, setPracticeFocusMode] = useState(false);
   const { category } = useParams();
   
@@ -777,14 +745,23 @@ const ExamTracker = () => {
 
   // Memoize quick start link
   const quickStartLink = useMemo(() => {
-    if (viewMode === 'topics' && filteredTopics.length > 0) {
-      return `/${safeCategory}/practice/${filteredTopics[0]?.title || ''}`;
-    } else if (filteredSubjects.length > 0) {
+    if (filteredSubjects.length > 0) {
       const subjectSlug = filteredSubjects[0]?.subject?.replace(/\s+/g, '-')?.toLowerCase() || '';
       return `/${safeCategory}/${subjectSlug}`;
     }
     return '#';
-  }, [viewMode, filteredTopics, filteredSubjects, safeCategory]);
+  }, [filteredSubjects, safeCategory]);
+
+  // Hub links (for premium hero quick actions)
+  const hubLinks = useMemo(() => {
+    const examCategory = safeCategory || 'gate-cse';
+    return {
+      practiceAnchor: '#practice-content',
+      mockTests: `/mock-test/${examCategory}`,
+      topicTests: `/mock-test/${examCategory}?tab=tests`,
+      dailyPractice: `/${examCategory}/daily-practice`,
+    };
+  }, [safeCategory]);
 
   if (error && !data.length) {
     return (
@@ -839,75 +816,247 @@ const ExamTracker = () => {
       <div className="pt-24 min-h-screen">
         {/* Hero + metrics + options + news */}
         {!practiceFocusMode && (
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-6 sm:pb-8 space-y-6 sm:space-y-7">
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="text-center"
-            >
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 mb-2 sm:mb-3 tracking-tight px-2 scroll-mt-24">
-                {formattedCategory}
-              </h1>
-              <p className="text-sm sm:text-base md:text-lg text-neutral-600 max-w-2xl mx-auto px-4">
-                Stay on one clean dashboard for {formattedCategory}: metrics, practice paths, news and updates.
-              </p>
-            </motion.div>
+          <section className="relative border-b border-neutral-200 bg-white">
+            {/* subtle premium background */}
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_25%,rgba(0,0,0,0.06),transparent_55%),radial-gradient(circle_at_85%_30%,rgba(0,0,0,0.04),transparent_55%)]" />
 
-            {/* Metrics first */}
-            <QuickStats data={data} />
+            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-8 sm:pb-10">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* Left: title + quick actions */}
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45 }}
+                  className="lg:col-span-7"
+                >
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200">
+                    <Zap className="w-4 h-4 text-neutral-700" />
+                    <span className="text-xs sm:text-sm font-medium text-neutral-700">
+                      {formattedCategory} • practice hub
+                    </span>
+                  </div>
 
-            {/* Primary actions */}
-            <PracticePathCards
-              category={safeCategory}
-              onOpenPracticeTopics={() => {
-                setPracticeFocusMode(true);
-                setSearchTerm('');
-                setViewMode('subjects');
-              }}
-            />
+                  <h1 className="mt-4 text-3xl sm:text-4xl font-semibold text-neutral-900 tracking-tight">
+                    {formattedCategory} dashboard
+                  </h1>
+                  <p className="mt-3 text-base sm:text-lg text-neutral-600 max-w-2xl leading-relaxed">
+                    One clean place to practice PYQs, run topic tests, attempt mocks, and build consistency with daily practice.
+                  </p>
 
-            {/* News & updates */}
-            {/* <NewsSection category={safeCategory} /> */}
-          </div>
+                  {/* Quick action chips */}
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Link
+                      href={hubLinks.practiceAnchor}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setPracticeFocusMode(true);
+                        setSearchTerm('');
+                        setViewMode('subjects');
+                        // Scroll after state update
+                        setTimeout(() => {
+                          const el = document.getElementById('practice-content');
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 50);
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-900 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors"
+                    >
+                      <BookOpen className="w-4 h-4" />
+                      Start PYQs
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                    <Link
+                      href={hubLinks.mockTests}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
+                    >
+                      <ClipboardCheck className="w-4 h-4" />
+                      Mock tests
+                    </Link>
+                    <Link
+                      href={hubLinks.topicTests}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
+                    >
+                      <Grid3X3 className="w-4 h-4" />
+                      Topic tests
+                    </Link>
+                    <Link
+                      href={hubLinks.dailyPractice}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
+                    >
+                      <Target className="w-4 h-4" />
+                      Daily practice
+                    </Link>
+                  </div>
+
+                  <div className="mt-6">
+                    <QuickStats data={data} />
+                  </div>
+                </motion.div>
+
+                {/* Right: study plan / shortcuts */}
+                <motion.aside
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, delay: 0.05 }}
+                  className="lg:col-span-5"
+                >
+                  <div className="rounded-3xl border border-neutral-200 bg-white/80 backdrop-blur p-5 sm:p-6 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-neutral-900">Quick plan</p>
+                      <span className="text-[11px] font-medium text-neutral-500">Simple workflow</span>
+                    </div>
+
+                    <ol className="mt-4 space-y-3 text-sm text-neutral-700">
+                      <li className="flex items-start gap-3">
+                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 text-xs font-bold text-neutral-800">
+                          1
+                        </span>
+                        <span>Start PYQs topic-wise and mark your progress.</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 text-xs font-bold text-neutral-800">
+                          2
+                        </span>
+                        <span>Take topic tests to fix weak areas quickly.</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 text-xs font-bold text-neutral-800">
+                          3
+                        </span>
+                        <span>Attempt mocks weekly for exam temperament.</span>
+                      </li>
+                    </ol>
+
+                    <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+                      <p className="text-xs text-neutral-600">
+                        Tip: Use the search inside <span className="font-semibold text-neutral-900">Practice topic-wise</span> to jump directly to any topic.
+                      </p>
+                    </div>
+                  </div>
+                </motion.aside>
+              </div>
+
+              {/* Primary actions (cards) */}
+              <div className="mt-8">
+                <PracticePathCards
+                  category={safeCategory}
+                  onOpenPracticeTopics={() => {
+                    setPracticeFocusMode(true);
+                    setSearchTerm('');
+                    setViewMode('subjects');
+                    setTimeout(() => {
+                      const el = document.getElementById('practice-content');
+                      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 50);
+                  }}
+                />
+              </div>
+            </div>
+          </section>
         )}
 
         {/* Practice content: subjects & topics (shown only in focus mode) */}
         {practiceFocusMode && (
-          <div
+          <section
             id="practice-content"
-            className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 scroll-mt-24 pt-6 sm:pt-8"
+            className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 scroll-mt-24 pt-6 sm:pt-8"
           >
-            <div className="flex items-center justify-between mb-4">
-              <motion.h2
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+            {/* subtle workspace background */}
+            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_0%,rgba(0,0,0,0.04),transparent_55%),radial-gradient(circle_at_85%_10%,rgba(0,0,0,0.03),transparent_55%)]" />
+
+            {/* Header */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-4">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-                className="text-lg sm:text-xl font-semibold text-neutral-900 flex items-center"
+                className="min-w-0"
               >
-                <BookOpen className="w-5 h-5 mr-2 text-neutral-600" />
-                Practice topic-wise
-              </motion.h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setPracticeFocusMode(false);
-                  setSearchTerm('');
-                  setViewMode('subjects');
-                }}
-                className="inline-flex items-center rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-              >
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 rotate-180" />
-                Back to overview
-              </button>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-neutral-200">
+                  <BookOpen className="w-4 h-4 text-neutral-700" />
+                  <span className="text-[11px] sm:text-xs font-semibold text-neutral-700">
+                    {formattedCategory} • practice workspace
+                  </span>
+                </div>
+                <h2 className="mt-3 text-xl sm:text-2xl font-semibold text-neutral-900 tracking-tight">
+                  Practice topic-wise
+                </h2>
+                <p className="mt-1 text-xs sm:text-sm text-neutral-600">
+                  Search and pick what to practice next.
+                </p>
+              </motion.div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPracticeFocusMode(false);
+                    setSearchTerm('');
+                    setViewMode('subjects');
+                  }}
+                  className="inline-flex items-center rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
+                >
+                  <ArrowRight className="w-4 h-4 mr-1 rotate-180" />
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setViewMode('subjects');
+                  }}
+                  className="inline-flex items-center rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
+                  aria-label="Reset search and view"
+                >
+                  <X className="w-4 h-4 mr-1 text-neutral-500" />
+                  Reset
+                </button>
+              </div>
             </div>
 
-            <SearchBar 
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-            />
+            {/* Sticky tools */}
+            <div className="sticky top-20 z-10">
+              <div className="bg-white/90 backdrop-blur rounded-3xl border border-neutral-200 shadow-sm p-4 sm:p-5">
+                <SearchBar 
+                  searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                />
+
+                {/* Result summary chips */}
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-neutral-500 font-medium">Showing</span>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-neutral-50 border border-neutral-200 px-3 py-1 font-semibold text-neutral-800">
+                    {filteredSubjects.length} subjects
+                  </span>
+                  {searchTerm && (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-neutral-50 border border-neutral-200 px-3 py-1 font-semibold text-neutral-700">
+                      Search: “{searchTerm}”
+                      <button
+                        type="button"
+                        onClick={() => setSearchTerm('')}
+                        className="text-neutral-500 hover:text-neutral-900"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  )}
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchTerm('');
+                        setViewMode('subjects');
+                      }}
+                      className="ml-auto inline-flex items-center gap-2 rounded-full bg-neutral-900 text-white px-3 py-1 font-semibold hover:bg-neutral-800 transition-colors"
+                      aria-label="Reset filters"
+                    >
+                      Reset
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
             
             {/* Show error banner if error exists but data is available */}
             {error && data.length > 0 && (
@@ -923,53 +1072,76 @@ const ExamTracker = () => {
 
             {/* Results */}
             <AnimatePresence mode="wait">
-              {viewMode === 'subjects' ? (
-                filteredSubjects.length > 0 ? (
-                  <motion.div 
-                    key="subjects"
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    exit="hidden"
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
-                  >
-                    {filteredSubjects.map((subject, index) => (
-                      <SubjectCard
-                        key={subject?.subject || index}
-                        subject={subject}
-                        category={safeCategory}
-                        index={index}
-                      />
-                    ))}
-                  </motion.div>
-                ) : (
-                  <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="subjects" />
-                )
+              {filteredSubjects.length > 0 ? (
+                <motion.div 
+                  key="subjects"
+                  variants={containerVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="hidden"
+                  className="mt-5"
+                >
+                  <div className="bg-white rounded-3xl border border-neutral-200 shadow-sm overflow-hidden">
+                    <div className="max-h-[70vh] overflow-auto">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-neutral-50 border-b border-neutral-200 sticky top-0 z-10">
+                          <tr className="text-left text-neutral-600">
+                            <th className="py-3 px-4 font-semibold">Subject</th>
+                            <th className="py-3 px-4 font-semibold text-right w-[110px]">Topics</th>
+                            <th className="py-3 px-4 font-semibold text-right w-[120px]">Questions</th>
+                            <th className="py-3 px-4 font-semibold text-right w-[140px]">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-100">
+                          {filteredSubjects.map((subject, index) => {
+                            const subjectName = subject?.subject || `Subject ${index + 1}`;
+                            const topicsCount = subject?.subtopics?.length || 0;
+                            const questionsCount =
+                              subject?.subtopics?.reduce((sum, t) => sum + (t?.count || 0), 0) || 0;
+                            const subjectSlug = subjectName.replace(/\s+/g, "-").toLowerCase();
+
+                            return (
+                              <tr
+                                key={subjectName}
+                                className="odd:bg-white even:bg-neutral-50/40 hover:bg-neutral-100/60 transition-colors"
+                              >
+                                <td className="py-3 px-4">
+                                  <div className="font-semibold text-neutral-900">{subjectName}</div>
+                                  <div className="text-xs text-neutral-500 mt-0.5">
+                                    Topic-wise PYQs with tracker
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-right tabular-nums text-neutral-700">
+                                  <span className="inline-flex items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 px-2.5 py-1 font-semibold">
+                                    {topicsCount}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-right tabular-nums text-neutral-700">
+                                  <span className="inline-flex items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 px-2.5 py-1 font-semibold">
+                                    {questionsCount}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <Link
+                                    href={`/${safeCategory}/${subjectSlug}`}
+                                    className="inline-flex items-center justify-center rounded-xl bg-neutral-900 text-white px-3 py-2 text-xs font-semibold hover:bg-neutral-800 transition-colors shadow-sm hover:shadow"
+                                  >
+                                    Open
+                                  </Link>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </motion.div>
               ) : (
-                filteredTopics.length > 0 ? (
-                  <motion.div 
-                    key="topics"
-                    variants={containerVariants}
-                    initial="hidden"
-                    animate="visible"
-                    exit="hidden"
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
-                  >
-                    {filteredTopics.map((topic, index) => (
-                      <TopicCard
-                        key={topic.uniqueId}
-                        topic={topic}
-                        category={safeCategory}
-                        index={index}
-                      />
-                    ))}
-                  </motion.div>
-                ) : (
-                  <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="topics" />
-                )
+                <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="subjects" />
               )}
             </AnimatePresence>
-          </div>
+          </section>
         )}
 
         {/* Floating Action Button */}
@@ -981,7 +1153,7 @@ const ExamTracker = () => {
         >
           <a
             href={quickStartLink}
-            className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl active:shadow-2xl transition-all duration-200 touch-manipulation"
+            className="bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl active:shadow-2xl transition-all duration-200 touch-manipulation"
             aria-label="Quick start"
           >
             <Zap className="w-5 h-5 sm:w-6 sm:h-6" />

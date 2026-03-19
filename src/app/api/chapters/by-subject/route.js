@@ -47,14 +47,22 @@ const getCachedChaptersBySubject = async (category, subject) => {
   // Filter by subject and group by chapter
   const chapterMap = {};
   
-  // Normalize subject for matching
-  const normalizedQuerySubject = subject ? subject.replace(/-/g, " ").toLowerCase().trim() : "";
+  // Normalize subject for matching (treat hyphens/underscores as spaces)
+  const normalizeSubject = (value) => {
+    if (!value) return "";
+    return String(value)
+      .toLowerCase()
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+  const normalizedQuerySubject = normalizeSubject(subject);
   
   allData.forEach(row => {
     if (!row.chapter) return; // Skip rows without chapter field
     
     // Normalize subject for matching
-    const normalizedRowSubject = row.subject?.toLowerCase().replace(/\s+/g, " ").trim() || "";
+    const normalizedRowSubject = normalizeSubject(row.subject);
     
     // Check if subject matches
     const subjectMatches = !subject || 
@@ -71,9 +79,12 @@ const getCachedChaptersBySubject = async (category, subject) => {
         const topicsInChapter = allData.filter(r => 
           r.chapter && 
           r.chapter.toLowerCase().replace(/\s+/g, "-").trim() === chapterKey &&
-          (!subject || (r.subject?.toLowerCase().replace(/\s+/g, " ").trim() === normalizedQuerySubject ||
-                       r.subject?.toLowerCase().replace(/\s+/g, " ").trim().includes(normalizedQuerySubject) ||
-                       normalizedQuerySubject.includes(r.subject?.toLowerCase().replace(/\s+/g, " ").trim())))
+          (!subject || (() => {
+            const s = normalizeSubject(r.subject);
+            return s === normalizedQuerySubject ||
+              s.includes(normalizedQuerySubject) ||
+              normalizedQuerySubject.includes(s);
+          })())
         ).length;
         
         chapterMap[chapterKey] = {

@@ -1,307 +1,610 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Toaster } from "react-hot-toast";
-import { motion } from "framer-motion";
-import { 
+import {
   ArrowRight,
+  BadgeCheck,
+  BookOpen,
+  Briefcase,
+  Calendar,
+  ChevronRight,
   FileText,
-  Target
+  MapPin,
+  Newspaper,
+  Search,
 } from "lucide-react";
 import { mergeExamData } from "@/data/examData";
 
-// Enhanced Exam Card Component
-function ExamCard({ exam, index }) {
+// Dummy content (fast + stable). Replace with real feeds later.
+const DUMMY_NEWS = [
+  {
+    id: "1",
+    title: "GATE 2026: exam dates announced; registration opens soon",
+    excerpt:
+      "A quick overview of the official schedule, key deadlines, and what to prepare next.",
+    date: "Mar 2, 2026",
+    image:
+      "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=900&h=520&fit=crop",
+    category: "Exams",
+  },
+  {
+    id: "2",
+    title: "JEE Main: result update + counselling steps (simple checklist)",
+    excerpt:
+      "What to do after result day: documents, choice filling, and smart next steps.",
+    date: "Feb 28, 2026",
+    image:
+      "https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=900&h=520&fit=crop",
+    category: "Results",
+  },
+  {
+    id: "3",
+    title: "UPSC Prelims: high-yield topics to revise in the last 30 days",
+    excerpt:
+      "A clean, time-boxed revision plan you can follow without overthinking.",
+    date: "Feb 25, 2026",
+    image:
+      "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=900&h=520&fit=crop",
+    category: "Preparation",
+  },
+];
+
+const DUMMY_JOBS = [
+  {
+    id: "1",
+    title: "Junior Engineer (Civil) – Govt recruitment",
+    organization: "State PSC",
+    location: "Multiple districts",
+    type: "Full-time",
+    lastDate: "Apr 10, 2026",
+    image:
+      "https://images.unsplash.com/photo-1521791136064-7986c292021f?w=900&h=520&fit=crop",
+  },
+  {
+    id: "2",
+    title: "Assistant Professor – Computer Science",
+    organization: "State University",
+    location: "Multiple states",
+    type: "Permanent",
+    lastDate: "Apr 18, 2026",
+    image:
+      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=900&h=520&fit=crop",
+  },
+  {
+    id: "3",
+    title: "Data Analyst – Govt digital mission",
+    organization: "Central PSU",
+    location: "Across India",
+    type: "Contract",
+    lastDate: "Apr 05, 2026",
+    image:
+      "https://images.unsplash.com/photo-1497366216548-37526070297c?w=900&h=520&fit=crop",
+  },
+];
+
+function Pill({ children }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-700 shadow-sm">
+      <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />
+      {children}
+    </span>
+  );
+}
+
+function SectionHeader({ icon, title, subtitle, href, hrefLabel }) {
+  return (
+    <div className="flex items-end justify-between gap-4 mb-6">
+      <div className="flex items-start gap-3 min-w-0">
+        <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-semibold text-neutral-900 tracking-tight">
+            {title}
+          </h2>
+          {subtitle ? (
+            <p className="text-sm text-neutral-500 mt-0.5">{subtitle}</p>
+          ) : null}
+        </div>
+      </div>
+      {href ? (
+        <Link
+          href={href}
+          className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
+        >
+          {hrefLabel || "View all"}
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+function ExamCard({ exam }) {
   const [imageError, setImageError] = useState(false);
   const showImage = exam.image && !imageError;
   const isActive = exam.active !== false;
-  
-  // If inactive, render as disabled card
-  if (!isActive) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 0.6, y: 0 }}
-        transition={{ duration: 0.3, delay: index * 0.05 }}
-        className="relative overflow-hidden bg-neutral-50 border border-neutral-200 rounded-2xl flex flex-row items-center gap-4 p-5 h-28 cursor-not-allowed"
-      >
-        <div className={`relative w-20 h-20 flex-shrink-0 rounded-xl bg-gradient-to-br from-neutral-200 to-neutral-300 overflow-hidden ${exam.bg || ''}`}>
-          {showImage ? (
-            <Image
-              src={exam.image}
-              alt={exam.name}
-              fill
-              className="object-cover grayscale"
-              onError={() => setImageError(true)}
-              unoptimized
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-3xl opacity-50">
-              {exam.icon}
-            </div>
-          )}
-        </div>
-        
-        <div className="flex-1 flex flex-col justify-center min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-neutral-400 mb-1 truncate">
-                {exam.name}
-              </h3>
-              <p className="text-neutral-300 text-xs line-clamp-1">
-                Coming Soon
-              </p>
-            </div>
-            <ArrowRight className="w-5 h-5 text-neutral-300 flex-shrink-0" />
-          </div>
-          <div className="flex items-center gap-3 text-xs text-neutral-300 mt-2">
-            <span className="flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5" />
-              <span className="font-medium">{exam.count?.toLocaleString() || 0} Questions</span>
-            </span>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-  
-  // Active exam card with enhanced design
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
+    <Link
+      href={isActive ? `/exams/${exam.slug}` : "#"}
+      aria-disabled={!isActive}
+      className={`group block rounded-2xl border bg-white p-4 shadow-sm transition-all duration-200 ${
+        isActive
+          ? "border-neutral-200 hover:border-neutral-300 hover:shadow-md"
+          : "border-neutral-200 bg-neutral-50/70 cursor-not-allowed opacity-70"
+      }`}
+      onClick={(e) => {
+        if (!isActive) e.preventDefault();
+      }}
     >
-      <Link
-        href={`/${exam.slug}`}
-        className="group relative overflow-hidden bg-white border border-neutral-200 rounded-2xl hover:border-neutral-300 hover:shadow-xl transition-all duration-300 flex flex-row items-center gap-4 p-5 h-28"
-      >
-        {/* Gradient overlay on hover */}
-        <div className="absolute inset-0 bg-gradient-to-br from-neutral-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-        
-        {/* Logo */}
-        <div className={`relative w-20 h-20 flex-shrink-0 rounded-xl bg-gradient-to-br from-neutral-100 to-neutral-200 overflow-hidden shadow-sm ${exam.bg || ''}`}>
+      <div className="flex items-center gap-4">
+        <div className="w-14 h-14 rounded-xl bg-neutral-100 flex-shrink-0 overflow-hidden">
           {showImage ? (
             <Image
               src={exam.image}
-              alt={exam.name}
-              fill
-              className="object-cover group-hover:scale-110 transition-transform duration-500"
+              alt=""
+              width={56}
+              height={56}
+              className={`object-cover transition-transform duration-200 ${
+                isActive ? "group-hover:scale-105" : "grayscale"
+              }`}
               onError={() => setImageError(true)}
               unoptimized
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-3xl">
+            <div className="w-full h-full flex items-center justify-center text-xl">
               {exam.icon}
             </div>
           )}
         </div>
-        
-        {/* Content */}
-        <div className="flex-1 flex flex-col justify-center min-w-0 relative z-10">
+        <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg sm:text-base font-semibold text-neutral-900 mb-1 group-hover:text-neutral-700 transition-colors truncate"
-                style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}
-              >
-                {exam.name}
-              </h3>
-              <p className="text-neutral-600 text-xs line-clamp-1">
-                {exam.description || 'Topic-wise practice questions with detailed solutions'}
-              </p>
-            </div>
-            <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-1 transition-all flex-shrink-0" />
+            <h3
+              className={`text-sm font-semibold truncate ${
+                isActive ? "text-neutral-900" : "text-neutral-500"
+              }`}
+            >
+              {exam.name}
+            </h3>
+            <ChevronRight
+              className={`w-5 h-5 flex-shrink-0 transition-all ${
+                isActive
+                  ? "text-neutral-400 group-hover:text-neutral-700 group-hover:translate-x-0.5"
+                  : "text-neutral-300"
+              }`}
+            />
           </div>
-          <div className="flex items-center gap-3 text-xs font-medium text-neutral-500 mt-2">
-            <span className="flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5" />
-              <span>{exam.count?.toLocaleString() || 0} Questions</span>
-            </span>
+          <p className="text-xs text-neutral-500 line-clamp-1 mt-0.5">
+            {isActive
+              ? exam.description || "Topic-wise practice with solutions"
+              : "Coming soon"}
+          </p>
+          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-neutral-400">
+            <FileText className="w-3 h-3" />
+            <span>{exam.count?.toLocaleString() || 0} questions</span>
           </div>
         </div>
-      </Link>
-    </motion.div>
+      </div>
+    </Link>
+  );
+}
+
+function FeedCard({ href, item }) {
+  return (
+    <Link
+      href={href}
+      className="group block rounded-2xl border border-neutral-200 bg-white overflow-hidden shadow-sm hover:shadow-lg hover:border-neutral-300 transition-all duration-200"
+    >
+      <div className="relative aspect-[16/9] w-full bg-neutral-100 overflow-hidden">
+        <Image
+          src={item.image}
+          alt=""
+          fill
+          className="object-cover group-hover:scale-105 transition-transform duration-500"
+          sizes="(max-width: 768px) 100vw, 33vw"
+        />
+        <span className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-white/95 text-xs font-medium text-neutral-700 shadow-sm">
+          {item.category || item.organization}
+        </span>
+      </div>
+      <div className="p-4 sm:p-5">
+        <h3 className="font-semibold text-neutral-900 line-clamp-2 group-hover:text-neutral-700 leading-snug">
+          {item.title}
+        </h3>
+        {item.excerpt ? (
+          <p className="mt-2 text-sm text-neutral-500 line-clamp-2">
+            {item.excerpt}
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+          {item.date ? (
+            <span className="inline-flex items-center gap-1.5 text-neutral-400">
+              <Calendar className="w-3.5 h-3.5" />
+              {item.date}
+            </span>
+          ) : null}
+          {item.location ? (
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-neutral-400" />
+              {item.location}
+            </span>
+          ) : null}
+          {item.lastDate ? (
+            <span className="text-neutral-500">
+              <span className="text-neutral-400">Last date:</span> {item.lastDate}
+            </span>
+          ) : null}
+          {item.type ? <span className="text-neutral-400">·</span> : null}
+          {item.type ? <span>{item.type}</span> : null}
+        </div>
+      </div>
+    </Link>
   );
 }
 
 export default function HomePage() {
   const [examCategories, setExamCategories] = useState([]);
   const [loadingExams, setLoadingExams] = useState(true);
+  const [examQuery, setExamQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
-    // Use hardcoded exam data
     const hardcodedExams = mergeExamData([]);
     setExamCategories(hardcodedExams);
     setLoadingExams(false);
   }, []);
 
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
+  const categories = useMemo(() => {
+    const set = new Set();
+    examCategories.forEach((e) => {
+      if (e?.category) set.add(e.category);
+    });
+    return ["All", ...Array.from(set).sort()];
+  }, [examCategories]);
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.5
-      }
-    }
-  };
+  const visibleExams = useMemo(() => {
+    const q = examQuery.trim().toLowerCase();
+    return examCategories
+      .filter((e) => (activeCategory === "All" ? true : e.category === activeCategory))
+      .filter((e) => {
+        if (!q) return true;
+        const hay = `${e.name || ""} ${e.slug || ""} ${e.description || ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 9);
+  }, [examCategories, examQuery, activeCategory]);
 
   return (
     <>
-      <div className="min-h-screen bg-white">
-        {/* Hero Section - Minimal but Populated */}
-        <section className="relative overflow-hidden bg-white border-b border-neutral-200">
-          <div className="max-w-7xl mx-auto px-[5%] pt-28 pb-16 sm:py-20">
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-8 lg:gap-12">
-              {/* Left Side - Heading (70%) */}
-              <div className="flex-1 lg:w-[70%]">
-                <motion.h1
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6 }}
-                  className="text-4xl lg:text-5xl font-semibold text-neutral-900 mb-4 tracking-tight leading-tight"
-                  style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}
-                >
-                  10tracker
-                </motion.h1>
-                <motion.p
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.1 }}
-                  className="text-xl text-neutral-600 leading-relaxed mb-6"
-                  style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}
-                >
-                  Your one-stop destination for latest information, job updates, results, and comprehensive exam preparation
-                </motion.p>
-                
-                {/* Additional Info */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.2 }}
-                  className="flex flex-wrap gap-4 text-sm text-neutral-600"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-neutral-400"></div>
-                    <span>Latest Information</span>
+      <div className="min-h-screen bg-neutral-50 text-neutral-900">
+        {/* Hero */}
+        <section className="relative bg-white border-b border-neutral-100 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-white via-white to-neutral-50" />
+          <div className="absolute -top-24 -right-24 w-72 h-72 bg-emerald-200/40 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-amber-200/30 rounded-full blur-3xl" />
+
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-32 pb-12 md:pt-36 md:pb-16">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+              <div className="lg:col-span-7">
+                <Pill>Daily updated exam prep + jobs + news</Pill>
+                <h1 className="mt-4 text-4xl sm:text-5xl font-bold tracking-tight text-neutral-900">
+                  Practice smarter. Track progress. Stay updated.
+                </h1>
+                <p className="mt-4 text-lg text-neutral-600 leading-relaxed">
+                  10tracker brings exam practice, chapter-wise prep, latest updates,
+                  and government job alerts — in one clean dashboard.
+                </p>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link
+                    href="/exams"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-neutral-900 text-white font-medium text-sm hover:bg-neutral-800 transition-colors shadow-sm"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    Explore exams
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                  <Link
+                    href="/article/latest-jobs"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-neutral-300 bg-white text-neutral-800 font-medium text-sm hover:bg-neutral-50 transition-colors"
+                  >
+                    <Briefcase className="w-4 h-4 text-emerald-700" />
+                    Govt jobs
+                  </Link>
+                  <Link
+                    href="/article/news"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-neutral-300 bg-white text-neutral-800 font-medium text-sm hover:bg-neutral-50 transition-colors"
+                  >
+                    <Newspaper className="w-4 h-4 text-amber-700" />
+                    Updates
+                  </Link>
+                </div>
+
+                {/* Quick exam search */}
+                <div className="mt-7 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center">
+                      <Search className="w-5 h-5 text-neutral-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold text-neutral-900">
+                        Find your exam
+                      </div>
+                      <div className="text-xs text-neutral-500">
+                        Search and jump straight into practice.
+                      </div>
+                    </div>
+                    <Link
+                      href="/exams"
+                      className="text-sm font-medium text-neutral-700 hover:text-neutral-900"
+                    >
+                      View all
+                    </Link>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-neutral-400"></div>
-                    <span>Job Updates</span>
+                  <div className="mt-3 flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        value={examQuery}
+                        onChange={(e) => setExamQuery(e.target.value)}
+                        placeholder="Search e.g. GATE, UPSC, JEE..."
+                        className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900"
+                      />
+                    </div>
+                    <select
+                      value={activeCategory}
+                      onChange={(e) => setActiveCategory(e.target.value)}
+                      className="sm:w-56 w-full px-3 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900"
+                      aria-label="Filter by category"
+                    >
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-neutral-400"></div>
-                    <span>Results</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-neutral-400"></div>
-                    <span>Exam Preparation</span>
-                  </div>
-                </motion.div>
+                </div>
               </div>
-              
-              {/* Right Side - Metrics (30%) */}
-              <div className="w-full lg:w-[30%] flex flex-col gap-6">
-                {/* Exams Metric */}
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6, delay: 0.2 }}
-                  className="border border-neutral-200 rounded-lg p-6 bg-neutral-50/50"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <Target className="w-5 h-5 text-neutral-600" />
-                    <span className="text-sm font-medium text-neutral-600">Exams</span>
-                  </div>
-                  <div className="text-3xl sm:text-4xl text-neutral-900">
-                    {examCategories.length}+
-                  </div>
-                  <div className="text-xs font-medium text-neutral-500 mt-2">Available for practice</div>
-                </motion.div>
-                
-                {/* Total Questions Metric */}
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6, delay: 0.3 }}
-                  className="border border-neutral-200 rounded-lg p-6 bg-neutral-50/50"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <FileText className="w-5 h-5 text-neutral-600" />
-                    <span className="text-sm font-medium text-neutral-600">Total Questions</span>
-                  </div>
-                  <div className="text-3xl sm:text-4xl text-neutral-900">
-                    {examCategories.reduce((sum, exam) => sum + (exam.count || 0), 0).toLocaleString()}+
-                  </div>
-                  <div className="text-xs font-medium text-neutral-500 mt-2">Ready to practice</div>
-                </motion.div>
+
+              {/* Hero visual */}
+              <div className="hidden sm:block lg:col-span-5">
+                <div className="relative rounded-3xl border border-neutral-200 bg-neutral-100 overflow-hidden shadow-sm">
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-neutral-200/30" />
+                  <Image
+                    src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&h=900&fit=crop"
+                    alt=""
+                    width={1200}
+                    height={900}
+                    className="object-cover w-full h-full"
+                    priority
+                  />
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Exam Categories Section - Moved to Top */}
-        <section className="py-10 bg-white border-b border-neutral-200">
-          <div className="max-w-7xl mx-auto px-[5%]">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h2 className="text-2xl font-semibold text-neutral-900 mb-2 tracking-tight"
-                  style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif' }}
-                >
-                  Practice by Exam
-                </h2>
-                <p className="text-sm text-neutral-600">
-                  Choose your exam and start practicing
-                </p>
+        {/* Exams */}
+        <section className="py-12 md:py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <SectionHeader
+              icon={<BookOpen className="w-5 h-5 text-neutral-700" />}
+              title="Exams"
+              subtitle="Pick an exam and start practicing with detailed solutions"
+              href="/exams"
+              hrefLabel="All exams"
+            />
+
+            {loadingExams ? (
+              <div className="flex justify-center py-16">
+                <div className="w-8 h-8 border-2 border-neutral-200 border-t-neutral-700 rounded-full animate-spin" />
               </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {categories.slice(0, 8).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setActiveCategory(c)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        activeCategory === c
+                          ? "bg-neutral-900 text-white border-neutral-900"
+                          : "bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {visibleExams.map((exam) => (
+                    <ExamCard key={exam.slug} exam={exam} />
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="mt-4">
               <Link
                 href="/exams"
-                className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-colors"
+                className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 sm:hidden"
               >
-                View All
+                View all exams
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
-
-            {loadingExams ? (
-              <div className="text-center py-12">
-                <div className="w-8 h-8 border-4 border-neutral-800 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-neutral-600 text-sm">Loading exams...</p>
-              </div>
-            ) : examCategories.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-neutral-600">No exams available at the moment.</p>
-              </div>
-            ) : (
-              <motion.div
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                variants={containerVariants}
-                className="grid grid-cols-1 lg:grid-cols-2 gap-4"
-              >
-                {examCategories.map((exam, index) => (
-                  <ExamCard key={exam.slug} exam={exam} index={index} />
-                ))}
-              </motion.div>
-            )}
           </div>
         </section>
 
+        {/* Feeds */}
+        {/* <section className="py-12 md:py-16 bg-white border-y border-neutral-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-4 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center">
+                  <Newspaper className="w-5 h-5 text-neutral-700" />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-semibold text-neutral-900 tracking-tight">
+                    News, updates & jobs
+                  </h2>
+                  <p className="text-sm text-neutral-500">
+                    Compact Google News-style lists (dummy now, RSS later)
+                  </p>
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-2 text-sm">
+                <Link
+                  href="/article/news"
+                  className="font-medium text-neutral-700 hover:text-neutral-900"
+                >
+                  All updates
+                </Link>
+                <span className="text-neutral-300">•</span>
+                <Link
+                  href="/article/latest-jobs"
+                  className="font-medium text-neutral-700 hover:text-neutral-900"
+                >
+                  All jobs
+                </Link>
+              </div>
+            </div>
+
+            {(() => {
+              const sections = [
+                {
+                  key: "top",
+                  title: "Top stories",
+                  href: "/article/news",
+                  items: DUMMY_NEWS,
+                },
+                {
+                  key: "exam",
+                  title: "Exam updates",
+                  href: "/article/news",
+                  items: DUMMY_NEWS.filter((n) => n.category === "Exams"),
+                },
+                {
+                  key: "results",
+                  title: "Results",
+                  href: "/article/news",
+                  items: DUMMY_NEWS.filter((n) => n.category === "Results"),
+                },
+                {
+                  key: "jobs",
+                  title: "Latest govt jobs",
+                  href: "/article/latest-jobs",
+                  items: DUMMY_JOBS,
+                },
+              ];
+
+              const Row = ({ href, item, metaLeft, metaRight }) => (
+                <Link
+                  href={href}
+                  className="group flex items-start gap-3 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-neutral-900 group-hover:text-neutral-700 line-clamp-2">
+                      {item.title}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                      <span className="font-medium text-neutral-600">10tracker</span>
+                      <span className="text-neutral-300">•</span>
+                      <span>{metaLeft}</span>
+                      {metaRight ? (
+                        <>
+                          <span className="text-neutral-300">•</span>
+                          <span className="font-semibold text-neutral-800">
+                            {metaRight}
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="w-16 h-12 rounded-lg bg-neutral-100 overflow-hidden flex-shrink-0">
+                    <Image
+                      src={item.image}
+                      alt=""
+                      width={128}
+                      height={96}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </Link>
+              );
+
+              const Section = ({ title, href, items, kind }) => {
+                const list = (items || []).slice(0, 4);
+                return (
+                  <div className="rounded-2xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-neutral-900">
+                        {title}
+                      </div>
+                      <Link
+                        href={href}
+                        className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                      >
+                        View
+                      </Link>
+                    </div>
+                    <div className="px-4 divide-y divide-neutral-100">
+                      {list.map((item) =>
+                        kind === "jobs" ? (
+                          <Row
+                            key={`${title}-${item.id}`}
+                            href={href}
+                            item={item}
+                            metaLeft={`${item.organization} • ${item.location}`}
+                            metaRight={`Last date: ${item.lastDate}`}
+                          />
+                        ) : (
+                          <Row
+                            key={`${title}-${item.id}`}
+                            href={href}
+                            item={item}
+                            metaLeft={`${item.date} • ${item.category}`}
+                          />
+                        )
+                      )}
+                      {list.length === 0 ? (
+                        <div className="py-6 text-sm text-neutral-500">
+                          No items yet.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              };
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Section title="Top stories" href="/article/news" items={sections[0].items} />
+                  <Section title="Exam updates" href="/article/news" items={sections[1].items} />
+                  <Section title="Results" href="/article/news" items={sections[2].items} />
+                  <Section title="Latest govt jobs" href="/article/latest-jobs" items={sections[3].items} kind="jobs" />
+                </div>
+              );
+            })()}
+
+            <div className="mt-5 sm:hidden flex items-center justify-center gap-3 text-sm text-neutral-600">
+              <Link href="/article/news" className="font-medium hover:text-neutral-900">
+                All updates
+              </Link>
+              <span className="text-neutral-300">•</span>
+              <Link
+                href="/article/latest-jobs"
+                className="font-medium hover:text-neutral-900"
+              >
+                All jobs
+              </Link>
+            </div>
+          </div>
+        </section> */}
       </div>
-      <Toaster position="top-right" />
     </>
   );
 }
