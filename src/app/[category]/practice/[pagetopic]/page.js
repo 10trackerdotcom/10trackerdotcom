@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, memo, useRef } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
 import { useParams, useSearchParams, useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
@@ -23,6 +23,17 @@ const QUESTIONS_PER_PAGE = 5;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 50; // Maximum cache entries
 const POINTS_PER_CORRECT_ANSWER = 100;
+
+const DIFFICULTIES = ["easy", "medium", "hard"];
+const DIFFICULTY_STORAGE_KEY = "pyq-practice-difficulty";
+
+const parseDifficultyParam = (sp) => {
+  if (!sp) return null;
+  const raw = sp.get("difficulty");
+  if (!raw) return null;
+  const d = String(raw).toLowerCase();
+  return DIFFICULTIES.includes(d) ? d : null;
+};
 
 // Utility: Parse page number from URL
 const parsePageFromUrl = (searchParams) => {
@@ -101,7 +112,11 @@ const Pagetracker = memo(() => {
   // State
   const [questions, setQuestions] = useState([]);
   const [counts, setCounts] = useState({ easy: 0, medium: 0, hard: 0 });
-  const [activeDifficulty, setActiveDifficulty] = useState("easy");
+  // Single source of truth: difficulty comes from URL (?difficulty=) so pagination / navigation keeps the tab
+  const activeDifficulty = useMemo(
+    () => parseDifficultyParam(searchParams) || "easy",
+    [searchParams]
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [progress, setProgress] = useState({
@@ -463,16 +478,61 @@ const Pagetracker = memo(() => {
     saveProgressImmediate();
   }, [user, setShowAuthModal, saveProgressImmediate, progress]);
 
-  // Handle difficulty change (page resets to 1 via URL)
-  const handleDifficultyChange = useCallback((difficulty) => {
-    if (difficulty === activeDifficulty || isLoadingQuestions) return;
-    setActiveDifficulty(difficulty);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("page");
-    const query = params.toString();
-    const basePath = pathname || "";
-    router.push(query ? `${basePath}?${query}` : basePath, { scroll: false });
-  }, [activeDifficulty, isLoadingQuestions, router, searchParams, pathname]);
+  // Restore last difficulty when opening a new topic/chapter link that omits ?difficulty=
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!category || !pagetopic) return;
+    if (parseDifficultyParam(searchParams)) return;
+    try {
+      const saved = sessionStorage.getItem(DIFFICULTY_STORAGE_KEY);
+      if (saved && DIFFICULTIES.includes(saved) && saved !== "easy") {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("difficulty", saved);
+        params.delete("page");
+        const query = params.toString();
+        const basePath = pathname || "";
+        router.replace(query ? `${basePath}?${query}` : basePath, { scroll: false });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }, [category, pagetopic, pathname, router, searchParams]);
+
+  // Persist difficulty choice for cross-page navigation
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      sessionStorage.setItem(DIFFICULTY_STORAGE_KEY, activeDifficulty);
+    } catch (_) {
+      /* ignore */
+    }
+  }, [activeDifficulty]);
+
+  // Handle difficulty change (page resets to 1 via URL; difficulty always in query string)
+  const handleDifficultyChange = useCallback(
+    (difficulty) => {
+      if (difficulty === activeDifficulty || isLoadingQuestions) return;
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("difficulty", difficulty);
+      params.delete("page");
+      const query = params.toString();
+      const basePath = pathname || "";
+      router.push(query ? `${basePath}?${query}` : basePath, { scroll: false });
+    },
+    [activeDifficulty, isLoadingQuestions, router, searchParams, pathname]
+  );
+
+  const buildPageHref = useCallback(
+    (page) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (page <= 1) params.delete("page");
+      else params.set("page", String(page));
+      const query = params.toString();
+      const basePath = pathname || "";
+      return query ? `${basePath}?${query}` : basePath;
+    },
+    [searchParams, pathname]
+  );
 
   // Initial load: counts only when category/topic change (full-page loading)
   useEffect(() => {
@@ -749,7 +809,6 @@ const Pagetracker = memo(() => {
                     </div>
                   ) : questions.length > 0 ? (
                     <>
-                    {console.log(JSON.stringify(questions))}
                       {questions.map((question, index) => (
                         <QuestionCard
                           key={question._id}
@@ -770,9 +829,7 @@ const Pagetracker = memo(() => {
                             href={
                               currentPage === 1 || isLoadingQuestions
                                 ? "#"
-                                : currentPage - 1 === 1
-                                ? pathname || ""
-                                : `${pathname}?page=${currentPage - 1}`
+                                : buildPageHref(currentPage - 1)
                             }
                             aria-disabled={currentPage === 1 || isLoadingQuestions}
                             className={`px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors w-full sm:w-auto text-center ${
@@ -789,7 +846,7 @@ const Pagetracker = memo(() => {
                             href={
                               currentPage === totalPages || isLoadingQuestions
                                 ? "#"
-                                : `${pathname}?page=${currentPage + 1}`
+                                : buildPageHref(currentPage + 1)
                             }
                             aria-disabled={currentPage === totalPages || isLoadingQuestions}
                             className={`px-4 py-2 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors w-full sm:w-auto text-center ${

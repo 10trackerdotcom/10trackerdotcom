@@ -112,7 +112,7 @@ export default function AdminUsersPage() {
         seoTitle={title}
         seoDescription="Admin panel listing all registered users from Clerk."
       />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-16 md:pt-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 className="text-xl sm:text-2xl font-semibold text-neutral-900 flex items-center gap-2">

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, memo, useRef } from "react";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams, usePathname } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import debounce from "lodash/debounce";
 import dynamic from "next/dynamic";
@@ -29,6 +29,17 @@ const ADMIN_EMAIL = "jain10gunjan@gmail.com";
 const QUESTIONS_PER_PAGE = 10;
 const BATCH_DELAY = 3000;
 const CACHE_TTL = 5 * 60 * 1000;
+
+const DIFFICULTIES = ["easy", "medium", "hard"];
+const DIFFICULTY_STORAGE_KEY = "pyq-practice-difficulty";
+
+const parseDifficultyParam = (sp) => {
+  if (!sp) return null;
+  const raw = sp.get("difficulty");
+  if (!raw) return null;
+  const d = String(raw).toLowerCase();
+  return DIFFICULTIES.includes(d) ? d : null;
+};
 
 // Simple Skeleton
 const QuestionSkeleton = memo(() => (
@@ -80,13 +91,18 @@ const ChapterPracticePage = memo(() => {
 
   const { category, subject, chaptername } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const { user, setShowAuthModal } = useAuth();
 
   // Simplified state
   const [questions, setQuestions] = useState([]);
   const [counts, setCounts] = useState({ easy: 0, medium: 0, hard: 0 });
   const [totalQuestions, setTotalQuestions] = useState(0);
-  const [activeDifficulty, setActiveDifficulty] = useState("easy");
+  const activeDifficulty = useMemo(
+    () => parseDifficultyParam(searchParams) || "easy",
+    [searchParams]
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [progress, setProgress] = useState({
@@ -588,14 +604,48 @@ const ChapterPracticePage = memo(() => {
     saveProgressImmediate();
   }, [user, setShowAuthModal, saveProgressImmediate]);
 
-  // Handle difficulty change
-  const handleDifficultyChange = useCallback((difficulty) => {
-    if (difficulty === activeDifficulty || isLoadingQuestions) return;
-    setActiveDifficulty(difficulty);
-    setCurrentPage(1);
-    setHasMore(true);
-    fetchQuestions(difficulty, 1, false);
-  }, [activeDifficulty, isLoadingQuestions, fetchQuestions]);
+  // Restore last difficulty when URL has no ?difficulty= (e.g. inbound link from subject page)
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!category || !normalizedChapter) return;
+    if (parseDifficultyParam(searchParams)) return;
+    try {
+      const saved = sessionStorage.getItem(DIFFICULTY_STORAGE_KEY);
+      if (saved && DIFFICULTIES.includes(saved) && saved !== "easy") {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("difficulty", saved);
+        const query = params.toString();
+        const basePath = pathname || "";
+        router.replace(query ? `${basePath}?${query}` : basePath, { scroll: false });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }, [category, normalizedChapter, pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      sessionStorage.setItem(DIFFICULTY_STORAGE_KEY, activeDifficulty);
+    } catch (_) {
+      /* ignore */
+    }
+  }, [activeDifficulty]);
+
+  // Handle difficulty change — URL is source of truth; load effect refetches
+  const handleDifficultyChange = useCallback(
+    (difficulty) => {
+      if (difficulty === activeDifficulty || isLoadingQuestions) return;
+      setCurrentPage(1);
+      setHasMore(true);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("difficulty", difficulty);
+      const query = params.toString();
+      const basePath = pathname || "";
+      router.replace(query ? `${basePath}?${query}` : basePath, { scroll: false });
+    },
+    [activeDifficulty, isLoadingQuestions, router, searchParams, pathname]
+  );
 
   // Load more questions
   const loadMore = useCallback(() => {
@@ -605,15 +655,25 @@ const ChapterPracticePage = memo(() => {
     fetchQuestions(activeDifficulty, nextPage, true);
   }, [hasMore, isLoadingQuestions, currentPage, activeDifficulty, fetchQuestions]);
 
-  // Initial load
+  // Initial / route change load: chapter, category, or difficulty (from URL) changes
   useEffect(() => {
+    if (!category || !normalizedChapter) return;
+    let cancelled = false;
     const load = async () => {
       setIsLoading(true);
-      await Promise.all([fetchCounts(), fetchQuestions(activeDifficulty, 1)]);
-      setIsLoading(false);
+      setCurrentPage(1);
+      setHasMore(true);
+      try {
+        await Promise.all([fetchCounts(), fetchQuestions(activeDifficulty, 1, false)]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     };
     load();
-  }, [fetchCounts, fetchQuestions, activeDifficulty]);
+    return () => {
+      cancelled = true;
+    };
+  }, [category, normalizedChapter, activeDifficulty, fetchCounts, fetchQuestions]);
 
   // Load progress when user changes
   useEffect(() => {
