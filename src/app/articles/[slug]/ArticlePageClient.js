@@ -14,6 +14,7 @@ import {
   User
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { trackContentEvent, trackSocialShare } from '@/lib/analytics';
 import SocialMediaEmbed from '@/components/SocialMediaEmbed';
 import AdSense from '@/components/AdSense';
@@ -178,7 +179,6 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
       
       <style jsx global>{`
         .article-content {
-          line-height: 1.6;
           font-size: 1.125rem; /* 18px on mobile */
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
         }
@@ -188,9 +188,7 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           }
         }
         .article-content p {
-          margin: 1rem 0;
           color: #3c4043;
-          line-height: 1.6;
           font-size: 1.125rem; /* 18px on mobile */
         }
         @media (min-width: 768px) {
@@ -202,10 +200,7 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           font-size: 2.25rem; /* Larger on mobile */
           font-weight: 400;
           color: #202124;
-          margin: 2rem 0 1rem 0;
-          line-height: 1.25;
           border-bottom: 1px solid #dadce0;
-          padding-bottom: 0.5rem;
         }
         @media (min-width: 768px) {
           .article-content h1 {
@@ -216,8 +211,6 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           font-size: 1.75rem; /* Larger on mobile */
           font-weight: 400;
           color: #202124;
-          margin: 1.5rem 0 0.75rem 0;
-          line-height: 1.3;
         }
         @media (min-width: 768px) {
           .article-content h2 {
@@ -228,8 +221,6 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           font-size: 1.375rem; /* Larger on mobile */
           font-weight: 500;
           color: #202124;
-          margin: 1.25rem 0 0.5rem 0;
-          line-height: 1.4;
         }
         @media (min-width: 768px) {
           .article-content h3 {
@@ -240,8 +231,6 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           font-size: 1.25rem; /* Larger on mobile */
           font-weight: 500;
           color: #202124;
-          margin: 1rem 0 0.5rem 0;
-          line-height: 1.4;
         }
         @media (min-width: 768px) {
           .article-content h4 {
@@ -250,13 +239,10 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
         }
         .article-content ul, .article-content ol {
           padding-left: 1.5rem;
-          margin: 1rem 0;
           color: #3c4043;
         }
         .article-content ul li {
           list-style-type: disc;
-          margin: 0.5rem 0;
-          line-height: 1.6;
           font-size: 1.125rem; /* 18px on mobile */
         }
         @media (min-width: 768px) {
@@ -266,8 +252,6 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
         }
         .article-content ol li {
           list-style-type: decimal;
-          margin: 0.5rem 0;
-          line-height: 1.6;
           font-size: 1.125rem; /* 18px on mobile */
         }
         @media (min-width: 768px) {
@@ -500,14 +484,14 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                 >
                   {/* Featured Image */}
                   {article.featured_image_url && (
-                    <div className="aspect-video overflow-hidden rounded-2xl mb-8 border border-neutral-200 shadow-sm">
+                    <div className="relative aspect-video overflow-hidden rounded-2xl mb-8 border border-neutral-200 shadow-sm">
                       <img
                         src={article.featured_image_url}
                         alt={article.title}
-                        className="w-full h-full object-cover"
-                        loading="eager"
-                        decoding="async"
-                        fetchPriority="high"
+                        fill
+                        sizes="(max-width: 1024px) 100vw, 896px"
+                        priority
+                        className="object-cover"
                       />
                     </div>
                   )}
@@ -682,13 +666,13 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                           className="bg-white border border-neutral-200 rounded-xl overflow-hidden hover:border-neutral-300 hover:shadow-lg transition-all duration-300 group"
                         >
                           {relatedArticle.featured_image_url && (
-                            <div className="aspect-video overflow-hidden">
+                            <div className="relative w-full aspect-video overflow-hidden">
                               <img
                                 src={relatedArticle.featured_image_url}
                                 alt={relatedArticle.title}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                loading="lazy"
-                                decoding="async"
+                                fill
+                                sizes="(max-width: 1024px) 100vw, 33vw"
+                                className="object-cover group-hover:scale-110 transition-transform duration-500"
                               />
                             </div>
                           )}
