@@ -11,6 +11,7 @@
   "dependencies": {
     "@auth/supabase-adapter": "^1.11.1",
     "@clerk/nextjs": "^6.33.0",
+    "@resvg/resvg-wasm": "^2.6.2",
     "@supabase/supabase-js": "^2.49.3",
     "@tiptap/extension-bullet-list": "^3.7.2",
     "@tiptap/extension-color": "^3.7.2",
@@ -65,6 +66,7 @@
     "react-twitter-embed": "^4.0.4",
     "recharts": "^2.15.2",
     "sanitize-html": "^2.15.0",
+    "sharp": "^0.34.5",
     "twitter-api-v2": "^1.29.0",
     "uuid": "^11.1.0"
   },
