@@ -505,6 +505,9 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                         src={article.featured_image_url}
                         alt={article.title}
                         className="w-full h-full object-cover"
+                        loading="eager"
+                        decoding="async"
+                        fetchPriority="high"
                       />
                     </div>
                   )}
@@ -684,6 +687,8 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
                                 src={relatedArticle.featured_image_url}
                                 alt={relatedArticle.title}
                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                loading="lazy"
+                                decoding="async"
                               />
                             </div>
                           )}

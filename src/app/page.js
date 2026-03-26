@@ -2,6 +2,7 @@
 import ComingSoon from "@/components/ComingSoon";
 import HomePage from "@/components/HomePage";
 import LmsPlatform from "@/components/LmsPlatform";
+import { createClient } from "@supabase/supabase-js";
 // import ReactPlayerComponent from "@/components/ReactPlayer";
 // import Image from "next/image";
 
@@ -42,6 +43,87 @@ export const metadata = {
   },
 };
 
-export default function Home() {
-  return <HomePage />;
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function formatShortDate(dateString) {
+  try {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
+export default async function Home() {
+  let categorySections = [];
+
+  try {
+    const [{ data: categories }] = await Promise.all([
+      supabase
+        .from("article_categories")
+        .select("name, slug, color")
+        .order("name"),
+    ]);
+
+    const normalizedCategories = (categories || []).filter((c) => c?.slug);
+    const slugs = normalizedCategories.map((c) => c.slug);
+    const byCategory = new Map(slugs.map((slug) => [slug, []]));
+
+    // Fetch enough rows to fill up to 4 per category without N+1 queries.
+    // This keeps it fast while ensuring "quiet" categories still get results.
+    const desired = Math.max(1, slugs.length) * 4;
+    const fetchLimit = Math.min(2000, Math.max(200, desired * 6));
+
+    const { data: articles } = await supabase
+      .from("published_articles")
+      .select(
+        "id, slug, title, excerpt, category, created_at, view_count, is_featured, featured_image_url"
+      )
+      .in("category", slugs)
+      .order("is_featured", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(fetchLimit);
+
+    for (const a of articles || []) {
+      const cat = a?.category;
+      if (!cat) continue;
+      if (!byCategory.has(cat)) continue;
+      if (byCategory.get(cat).length >= 4) continue;
+      byCategory.get(cat).push({
+        id: a.id,
+        slug: a.slug,
+        title: a.title,
+        excerpt: a.excerpt,
+        category: cat,
+        createdAt: a.created_at,
+        dateLabel: formatShortDate(a.created_at),
+        viewCount: a.view_count || 0,
+        isFeatured: !!a.is_featured,
+        featuredImageUrl: a.featured_image_url || "",
+      });
+    }
+
+    categorySections = normalizedCategories.map((c) => ({
+      slug: c.slug,
+      name: c.name || c.slug,
+      color: c.color || "#3B82F6",
+      items: byCategory.get(c.slug) || [],
+    }));
+
+    // Only show categories that actually have articles.
+    categorySections = categorySections.filter((s) => (s.items || []).length > 0);
+  } catch {
+    // home still renders without news section
+  }
+
+  return <HomePage categorySections={categorySections} />;
 }

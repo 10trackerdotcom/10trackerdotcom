@@ -220,11 +220,41 @@ export default async function ArticlePage({ params }) {
       .then(() => {}) // Fire and forget
       .catch(() => {}); // Ignore errors
 
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://10tracker.com';
+    const fullUrl = `${siteUrl}/articles/${article.slug}`;
+    const ogImage = article.featured_image_url
+      ? article.featured_image_url.startsWith('http')
+        ? article.featured_image_url
+        : `${siteUrl}${article.featured_image_url}`
+      : `${siteUrl}/10tracker.png`;
+    const jsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: article.title,
+      description:
+        article.excerpt || (article.content ? article.content.substring(0, 160) : ''),
+      image: ogImage,
+      url: fullUrl,
+      datePublished: article.created_at,
+      dateModified: article.updated_at || article.created_at,
+      author: { '@type': 'Organization', name: '10tracker' },
+      publisher: {
+        '@type': 'Organization',
+        name: '10tracker',
+        logo: { '@type': 'ImageObject', url: `${siteUrl}/10tracker.png` },
+      },
+      mainEntityOfPage: { '@type': 'WebPage', '@id': fullUrl },
+      keywords: Array.isArray(article.tags) ? article.tags.join(', ') : undefined,
+    };
+
     return (
-      <ArticlePageClient 
-        article={article} 
-        relatedArticles={finalRelatedArticles}
-      />
+      <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        <ArticlePageClient article={article} relatedArticles={finalRelatedArticles} />
+      </>
     );
   } catch (error) {
     console.error('Error fetching article data:', error);
