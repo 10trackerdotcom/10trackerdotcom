@@ -101,7 +101,7 @@ export function parseListingPage(html, pageUrl = "") {
       };
     }
 
-    articles.push({ title, url: articleUrl, date: dateText, snippet, thumbnail });
+    articles.push({ title, url: articleUrl, slug: articleUrl.replace(/\/+$/, '').split('/').pop(), date: dateText, snippet, thumbnail });
   });
 
   return {
