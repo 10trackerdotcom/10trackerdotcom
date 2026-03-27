@@ -17,73 +17,6 @@ import {
 } from "lucide-react";
 import { mergeExamData } from "@/data/examData";
 
-// Dummy content (fast + stable). Replace with real feeds later.
-const DUMMY_NEWS = [
-  {
-    id: "1",
-    title: "GATE 2026: exam dates announced; registration opens soon",
-    excerpt:
-      "A quick overview of the official schedule, key deadlines, and what to prepare next.",
-    date: "Mar 2, 2026",
-    image:
-      "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=900&h=520&fit=crop",
-    category: "Exams",
-  },
-  {
-    id: "2",
-    title: "JEE Main: result update + counselling steps (simple checklist)",
-    excerpt:
-      "What to do after result day: documents, choice filling, and smart next steps.",
-    date: "Feb 28, 2026",
-    image:
-      "https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=900&h=520&fit=crop",
-    category: "Results",
-  },
-  {
-    id: "3",
-    title: "UPSC Prelims: high-yield topics to revise in the last 30 days",
-    excerpt:
-      "A clean, time-boxed revision plan you can follow without overthinking.",
-    date: "Feb 25, 2026",
-    image:
-      "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=900&h=520&fit=crop",
-    category: "Preparation",
-  },
-];
-
-const DUMMY_JOBS = [
-  {
-    id: "1",
-    title: "Junior Engineer (Civil) – Govt recruitment",
-    organization: "State PSC",
-    location: "Multiple districts",
-    type: "Full-time",
-    lastDate: "Apr 10, 2026",
-    image:
-      "https://images.unsplash.com/photo-1521791136064-7986c292021f?w=900&h=520&fit=crop",
-  },
-  {
-    id: "2",
-    title: "Assistant Professor – Computer Science",
-    organization: "State University",
-    location: "Multiple states",
-    type: "Permanent",
-    lastDate: "Apr 18, 2026",
-    image:
-      "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=900&h=520&fit=crop",
-  },
-  {
-    id: "3",
-    title: "Data Analyst – Govt digital mission",
-    organization: "Central PSU",
-    location: "Across India",
-    type: "Contract",
-    lastDate: "Apr 05, 2026",
-    image:
-      "https://images.unsplash.com/photo-1497366216548-37526070297c?w=900&h=520&fit=crop",
-  },
-];
-
 function Pill({ children }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-700 shadow-sm">
@@ -186,59 +119,6 @@ function ExamCard({ exam }) {
             <FileText className="w-3 h-3" />
             <span>{exam.count?.toLocaleString() || 0} questions</span>
           </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function FeedCard({ href, item }) {
-  return (
-    <Link
-      href={href}
-      className="group block rounded-2xl border border-neutral-200 bg-white overflow-hidden shadow-sm hover:shadow-lg hover:border-neutral-300 transition-all duration-200"
-    >
-      <div className="relative aspect-[16/9] w-full bg-neutral-100 overflow-hidden">
-        <Image
-          src={item.image}
-          alt=""
-          fill
-          className="object-cover group-hover:scale-105 transition-transform duration-500"
-          sizes="(max-width: 768px) 100vw, 33vw"
-        />
-        <span className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-white/95 text-xs font-medium text-neutral-700 shadow-sm">
-          {item.category || item.organization}
-        </span>
-      </div>
-      <div className="p-4 sm:p-5">
-        <h3 className="font-semibold text-neutral-900 line-clamp-2 group-hover:text-neutral-700 leading-snug">
-          {item.title}
-        </h3>
-        {item.excerpt ? (
-          <p className="mt-2 text-sm text-neutral-500 line-clamp-2">
-            {item.excerpt}
-          </p>
-        ) : null}
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
-          {item.date ? (
-            <span className="inline-flex items-center gap-1.5 text-neutral-400">
-              <Calendar className="w-3.5 h-3.5" />
-              {item.date}
-            </span>
-          ) : null}
-          {item.location ? (
-            <span className="inline-flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-neutral-400" />
-              {item.location}
-            </span>
-          ) : null}
-          {item.lastDate ? (
-            <span className="text-neutral-500">
-              <span className="text-neutral-400">Last date:</span> {item.lastDate}
-            </span>
-          ) : null}
-          {item.type ? <span className="text-neutral-400">·</span> : null}
-          {item.type ? <span>{item.type}</span> : null}
         </div>
       </div>
     </Link>
@@ -481,54 +361,60 @@ export default function HomePage({ categorySections = [] }) {
                     </div>
 
                     <div className="px-4 divide-y divide-neutral-100">
-                      {section.items.slice(0, 4).map((item) => (
-                        <Link
-                          key={item.id}
-                          href={`/articles/${item.slug}`}
-                          className="group flex items-start gap-3 py-3"
-                        >
-                          <div className="w-16 h-12 rounded-lg bg-neutral-100 overflow-hidden flex-shrink-0 border border-neutral-200">
-                            <img
-                              src={item.featuredImageUrl || "/10tracker.png"}
-                              alt=""
-                              loading="lazy"
-                              decoding="async"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                if (e?.currentTarget?.src?.includes("/10tracker.png")) return;
-                                e.currentTarget.src = "/10tracker.png";
-                              }}
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-neutral-900 group-hover:text-neutral-700 line-clamp-2">
-                              {item.title}
-                              {item.isFeatured ? (
-                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
-                                  Featured
-                                </span>
-                              ) : null}
-                            </p>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-                              <span className="inline-flex items-center gap-1.5 text-neutral-400">
-                                <Calendar className="w-3.5 h-3.5" />
-                                {item.dateLabel || ""}
-                              </span>
-                              <span className="text-neutral-300">•</span>
-                              <span className="inline-flex items-center gap-1.5 text-neutral-400">
-                                <Newspaper className="w-3.5 h-3.5" />
-                                {section.name}
-                              </span>
+                      {section.items.length > 0 ? (
+                        section.items.slice(0, 4).map((item) => (
+                          <Link
+                            key={item.id}
+                            href={`/articles/${item.slug}`}
+                            className="group flex items-start gap-3 py-3"
+                          >
+                            <div className="w-16 h-12 rounded-lg bg-neutral-100 overflow-hidden flex-shrink-0 border border-neutral-200">
+                              <img
+                                src={item.featuredImageUrl || "/10tracker.png"}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  if (e?.currentTarget?.src?.includes("/10tracker.png")) return;
+                                  e.currentTarget.src = "/10tracker.png";
+                                }}
+                              />
                             </div>
-                            {item.excerpt ? (
-                              <p className="mt-1 text-xs text-neutral-500 line-clamp-2">
-                                {item.excerpt}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-neutral-900 group-hover:text-neutral-700 line-clamp-2">
+                                {item.title}
+                                {item.isFeatured ? (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
+                                    Featured
+                                  </span>
+                                ) : null}
                               </p>
-                            ) : null}
-                          </div>
-                          <ChevronRight className="w-5 h-5 flex-shrink-0 text-neutral-300 group-hover:text-neutral-500 group-hover:translate-x-0.5 transition-all" />
-                        </Link>
-                      ))}
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                                <span className="inline-flex items-center gap-1.5 text-neutral-400">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  {item.dateLabel || ""}
+                                </span>
+                                <span className="text-neutral-300">•</span>
+                                <span className="inline-flex items-center gap-1.5 text-neutral-400">
+                                  <Newspaper className="w-3.5 h-3.5" />
+                                  {section.name}
+                                </span>
+                              </div>
+                              {item.excerpt ? (
+                                <p className="mt-1 text-xs text-neutral-500 line-clamp-2">
+                                  {item.excerpt}
+                                </p>
+                              ) : null}
+                            </div>
+                            <ChevronRight className="w-5 h-5 flex-shrink-0 text-neutral-300 group-hover:text-neutral-500 group-hover:translate-x-0.5 transition-all" />
+                          </Link>
+                        ))
+                      ) : (
+                        <div className="py-6 text-sm text-neutral-500">
+                          No articles yet in this category.
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

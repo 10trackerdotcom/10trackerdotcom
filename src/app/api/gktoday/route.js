@@ -1,281 +1,286 @@
-import axios from 'axios';
-import * as cheerio from 'cheerio';
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import * as cheerio from "cheerio";
+import axios from "axios";
+import { NextResponse } from "next/server";
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+/**
+ * Parses the .content-wrap div into structured sections.
+ *
+ * Output schema:
+ * {
+ *   url: string,
+ *   scrapedAt: string (ISO),
+ *   title: string | null,
+ *   intro: string | null,         // leading <p> text before any heading
+ *   sections: [
+ *     {
+ *       level: "h2" | "h3" | "h4",
+ *       heading: string,
+ *       content: string[],        // array of paragraph / list-item strings
+ *       links: { text, href }[],  // all <a> tags inside this section
+ *       type: "section" | "callout"  // callout when inside <blockquote>
+ *     }
+ *   ],
+ *   importantFacts: string[] | null  // special extraction for blockquote list
+ * }
+ */
+export function parseArticle(html, url = "") {
+  const $ = cheerio.load(html);
 
-// Default category for gktoday links (using 'latest_jobs' as it's one of the allowed categories)
-const GKTODAY_CATEGORY = 'news';
+  // Remove social share box — we don't want it
+  $(".gktoday-share-box").remove();
 
-export async function GET(request) {
-  try {
-    // Check if Supabase is configured
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Supabase configuration is missing',
-        },
-        { status: 500 }
-      );
-    }
+  const wrap = $(".content-wrap");
+  if (!wrap.length) {
+    return { error: "No .content-wrap found", url };
+  }
 
-    const gktodayUrl = 'https://www.gktoday.in/';
-    
-    // Fetch the HTML content
-    let html;
-    try {
-      const response = await axios.get(gktodayUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Referer": "https://www.gktoday.in/",
-        },
-        timeout: 15000, // 15 second timeout
-      });
-      html = response.data;
-    } catch (fetchError) {
-      console.error('Error fetching gktoday page:', fetchError);
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Failed to fetch gktoday page',
-          details: fetchError.message,
-        },
-        { status: 500 }
-      );
-    }
+  const result = {
+    url,
+    scrapedAt: new Date().toISOString(),
+    title: null,
+    intro: null,
+    coverImage: null,
+    sections: [],
+    importantFacts: null,
+  };
 
-    const $ = cheerio.load(html);
+  // Try to grab page <title> or first <h1>
+  result.title =
+    $("h1.entry-title").first().text().trim() ||
+    $("h1").first().text().trim() ||
+    $("title").text().trim() ||
+    null;
 
-    // Get only the first (latest) post item
-    const $firstPost = $('.home-post-item').first();
-    
-    if ($firstPost.length === 0) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'No posts found on the page',
-          message: 'No new links found'
-        },
-        { status: 404 }
-      );
-    }
-    
-    // Extract image URL
-    const imageUrl = $firstPost.find('.featured-image img').attr('src') || 
-                    $firstPost.find('.featured-image img').attr('data-src') || 
-                    null;
-    
-    // Extract title from the anchor tag
-    const title = $firstPost.find('.post-data h3 a').text().trim() || null;
-    
-    // Extract link from the anchor tag
-    let link = $firstPost.find('.post-data h3 a').attr('href') || null;
-    
-    // Validate that we have essential data
-    if (!title || !link) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Missing required data (title or link)',
-          message: 'No new links found'
-        },
-        { status: 404 }
-      );
-    }
-
-    // Normalize link - ensure it's a full URL
-    if (link && !link.startsWith('http')) {
-      link = link.startsWith('/') 
-        ? `https://www.gktoday.in${link}` 
-        : `https://www.gktoday.in/${link}`;
-    }
-    
-    // Extract description - text after the title link and before the meta paragraph
-    const $postData = $firstPost.find('.post-data');
-    
-    // Clone post-data to work with it
-    const $clone = $postData.clone();
-    
-    // Remove the h3 title and meta paragraph
-    $clone.find('h3').remove();
-    $clone.find('.home-post-data-meta').remove();
-    
-    // Get the remaining text as description
-    let description = $clone.text().trim();
-    
-    // Clean up description - remove extra whitespace and newlines
-    description = description.replace(/\s+/g, ' ').trim();
-
-    // Check if link already exists in database
-    try {
-      const { data: existingLink, error: checkError } = await supabase
-        .from('sarkari_result_links')
-        .select('id, url, title, created_at')
-        .eq('url', link)
-        .maybeSingle(); // Use maybeSingle() to return null if not found instead of error
-
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found" which is fine
-        console.error('Error checking existing link:', checkError);
-        // Continue to try saving even if check fails
+// ── Cover / featured image ────────────────────────────────────────────────
+  // GKToday uses a standard WordPress featured image rendered as:
+  //   <img class="wp-post-image" ...>  (outside .content-wrap, near the h1)
+  // Fall back to the first meaningful <img> inside .content-wrap if not found.
+  const coverEl =
+    $("img.wp-post-image").first() ||
+    $(".entry-content img, .post-thumbnail img").first() ||
+    wrap.find("img").first();
+ 
+  if (coverEl && coverEl.length) {
+    // WordPress Jetpack/imgcdn URLs contain the original src in the URL itself.
+    // We prefer the raw wp-content URL over the resized proxy URL.
+    const rawSrc = coverEl.attr("src") || "";
+    // Strip Jetpack image CDN resize params (?fit=...&ssl=1) → get original
+    const cleanSrc = (() => {
+      try {
+        const u = new URL(rawSrc);
+        // i0.wp.com/www.gktoday.in/wp-content/... → extract the real path
+        if (u.hostname.endsWith(".wp.com")) {
+          // pathname = /www.gktoday.in/wp-content/...
+          return "https:/" + u.pathname; // reconstruct direct URL
+        }
+        return rawSrc;
+      } catch {
+        return rawSrc;
       }
+    })();
+ 
+    result.coverImage = {
+      src: cleanSrc,
+      srcProxy: rawSrc !== cleanSrc ? rawSrc : null, // keep proxy URL too
+      srcset: coverEl.attr("srcset") || coverEl.attr("data-srcset") || null,
+      alt: coverEl.attr("alt") || null,
+      width: coverEl.attr("width") ? Number(coverEl.attr("width")) : null,
+      height: coverEl.attr("height") ? Number(coverEl.attr("height")) : null,
+    };
+  }
 
-      // If link already exists, return "no new links found"
-      if (existingLink) {
-        return NextResponse.json({
-          success: true,
-          message: 'No new links found',
-          data: {
-            title: existingLink.title,
-            link: existingLink.url,
-            description: description || null,
-            imageUrl: imageUrl || null,
-            exists: true,
-            createdAt: existingLink.created_at,
-          },
+  const HEADING_TAGS = new Set(["h2", "h3", "h4"]);
+
+  let currentSection = null;
+  let introParagraphs = [];
+  let headingSeen = false;
+
+  /**
+   * Flush the current open section into result.sections.
+   */
+  function flushSection() {
+    if (currentSection) {
+      result.sections.push(currentSection);
+      currentSection = null;
+    }
+  }
+
+  /**
+   * Collect all text content from an element,
+   * removing excessive whitespace.
+   */
+  function getText(el) {
+    return $(el).text().replace(/\s+/g, " ").trim();
+  }
+
+  /**
+   * Collect all <a> links from an element.
+   */
+  function getLinks(el) {
+    const links = [];
+    $(el)
+      .find("a[href]")
+      .each((_, a) => {
+        links.push({
+          text: $(a).text().trim(),
+          href: $(a).attr("href"),
         });
-      }
-    } catch (dbCheckError) {
-      console.error('Error during database check:', dbCheckError);
-      // Continue to try saving even if check fails
+      });
+    return links;
+  }
+
+  // Walk top-level children of .content-wrap
+  wrap.children().each((_, node) => {
+    const tag = node.tagName?.toLowerCase();
+
+    if (!tag) return; // text node
+
+    // ── Heading ──────────────────────────────────────────────────────
+    if (HEADING_TAGS.has(tag)) {
+      flushSection();
+      headingSeen = true;
+      currentSection = {
+        level: tag,
+        heading: getText(node),
+        content: [],
+        links: getLinks(node),
+        type: "section",
+      };
+      return;
     }
 
-    // Link doesn't exist, save it to database
-    try {
-      const { data: savedLink, error: saveError } = await supabase
-        .from('sarkari_result_links')
-        .insert({
-          category: GKTODAY_CATEGORY,
-          title: title,
-          url: link,
-        })
-        .select()
-        .single();
+    // ── Blockquote  ───────────────────────────────────────────────────
+    if (tag === "blockquote") {
+      flushSection();
 
-      if (saveError) {
-        console.error('Error saving link to database:', saveError);
-        
-        // Check if it's a unique constraint violation (link was added between check and insert)
-        if (saveError.code === '23505' || saveError.message?.includes('unique')) {
-          return NextResponse.json({
-            success: true,
-            message: 'No new links found',
-            data: {
-              title,
-              link,
-              description: description || null,
-              imageUrl: imageUrl || null,
-              exists: true,
-            },
-          });
-        }
+      // Look for a heading inside the blockquote
+      const bqHeading = $(node).find("h2, h3, h4").first();
+      const bqHeadingText = bqHeading.length ? getText(bqHeading) : null;
 
-        // For other errors, return error but still return the scraped data
-        return NextResponse.json({
-          success: false,
-          error: 'Failed to save link to database',
-          details: saveError.message,
-          data: {
-            title,
-            link,
-            description: description || null,
-            imageUrl: imageUrl || null,
-          },
-        }, { status: 500 });
-      }
+      // Collect list items
+      const items = [];
+      $(node)
+        .find("li")
+        .each((_, li) => {
+          items.push(getText(li));
+        });
 
-      // Successfully saved - now call twitterpost API
-      let twitterPostResult = null;
-      let twitterPostError = null;
-      let twitterPostCalled = false;
+      // Collect stray paragraphs
+      const paragraphs = [];
+      $(node)
+        .find("p")
+        .each((_, p) => {
+          paragraphs.push(getText(p));
+        });
 
-      // Only call Twitter API if we have a title (required parameter)
-      if (title) {
-        twitterPostCalled = true;
-        try {
-          const twitterPostResponse = await axios.post('https://www.10tracker.com/api/twitterpost', {
-            title: title,
-            imageUrl: imageUrl || '', // Send empty string if imageUrl is null
-          }, {
-            timeout: 30000, // 30 second timeout for Twitter API
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
-
-          twitterPostResult = {
-            success: twitterPostResponse.data?.success || false,
-            message: twitterPostResponse.data?.message || 'Tweet posted',
-            tweetId: twitterPostResponse.data?.data?.tweetId || null,
-          };
-        } catch (twitterError) {
-          console.error('Error posting to Twitter:', twitterError.response?.data || twitterError.message);
-          twitterPostError = {
-            message: twitterError.response?.data?.error || twitterError.message || 'Failed to post to Twitter',
-            status: twitterError.response?.status || null,
-          };
-          // Don't fail the whole request if Twitter posting fails
-        }
-      }
-
-      // Build response object
-      const response = {
-        success: true,
-        message: 'New link found and saved',
-        data: {
-          title: savedLink.title,
-          link: savedLink.url,
-          description: description || null,
-          imageUrl: imageUrl || null,
-          id: savedLink.id,
-          createdAt: savedLink.created_at,
-        },
-        twitterPostCalled: twitterPostCalled,
+      const bqSection = {
+        level: bqHeading.length ? bqHeading[0].tagName.toLowerCase() : null,
+        heading: bqHeadingText,
+        content: [...paragraphs, ...items],
+        links: getLinks(node),
+        type: "callout",
       };
 
-      // Only include Twitter post fields if API was called
-      if (twitterPostCalled) {
-        if (twitterPostResult) {
-          response.twitterPost = twitterPostResult;
-        }
-        if (twitterPostError) {
-          response.twitterPostError = twitterPostError;
-        }
+      result.sections.push(bqSection);
+
+      // Also surface as importantFacts if it looks like a facts list
+      if (
+        bqHeadingText &&
+        /important|facts|exam/i.test(bqHeadingText) &&
+        items.length
+      ) {
+        result.importantFacts = items;
       }
-
-      return NextResponse.json(response);
-
-    } catch (dbSaveError) {
-      console.error('Unexpected error saving to database:', dbSaveError);
-      // Return scraped data even if save fails
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to save link to database',
-        details: dbSaveError.message,
-        data: {
-          title,
-          link,
-          description: description || null,
-          imageUrl: imageUrl || null,
-        },
-      }, { status: 500 });
+      return;
     }
 
+    // ── Paragraph / other block ───────────────────────────────────────
+    if (tag === "p" || tag === "ul" || tag === "ol") {
+      const text =
+        tag === "p"
+          ? getText(node)
+          : (() => {
+              const lines = [];
+              $(node)
+                .find("li")
+                .each((_, li) => lines.push(getText(li)));
+              return lines.join(" | ");
+            })();
+
+      if (!text) return;
+
+      if (!headingSeen) {
+        // Before any heading → intro
+        introParagraphs.push(text);
+      } else if (currentSection) {
+        currentSection.content.push(text);
+        // Merge any additional links from this paragraph into section
+        currentSection.links.push(...getLinks(node));
+      }
+    }
+  });
+
+  // Flush last open section
+  flushSection();
+
+  result.intro = introParagraphs.length ? introParagraphs.join("\n\n") : null;
+
+  // De-duplicate links within each section
+  for (const s of result.sections) {
+    const seen = new Set();
+    s.links = s.links.filter((l) => {
+      const key = l.href;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  return result;
+}
+
+/**
+ * GET /api/gktoday?url=<article-url>
+ * Scrapes and parses a GKToday article into structured JSON.
+ */
+export async function GET(request) {
+  try {
+    const inputUrl = request.nextUrl.searchParams.get("url");
+    const url = inputUrl?.trim() || "https://www.gktoday.in/";
+
+    if (!/^https?:\/\//i.test(url)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid url. Use a full http/https URL." },
+        { status: 400 }
+      );
+    }
+
+    const response = await axios.get(url, {
+      timeout: 20000,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+
+    const parsed = parseArticle(response.data, url);
+    if (parsed?.error) {
+      return NextResponse.json(
+        { success: false, error: parsed.error, url },
+        { status: 422 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: parsed,
+    });
   } catch (error) {
-    console.error('Error fetching gktoday data:', error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch gktoday data',
-        message: 'No new links found',
+        error: error?.message || "Failed to fetch/parse article",
       },
       { status: 500 }
     );

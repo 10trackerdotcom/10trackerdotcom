@@ -51,6 +51,24 @@ const supabase = createClient(
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const HOMEPAGE_NEWS_CATEGORIES = [
+  "current-affairs",
+  "board-exams",
+  "sarkari-exams",
+  "admissions",
+  "general",
+  "college-news",
+  "entrance-exams",
+];
+
+function titleFromSlug(slug) {
+  return String(slug || "")
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function formatShortDate(dateString) {
   try {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -67,15 +85,17 @@ export default async function Home() {
   let categorySections = [];
 
   try {
-    const [{ data: categories }] = await Promise.all([
-      supabase
-        .from("article_categories")
-        .select("name, slug, color")
-        .order("name"),
-    ]);
+    const { data: categories } = await supabase
+      .from("article_categories")
+      .select("name, slug, color")
+      .in("slug", HOMEPAGE_NEWS_CATEGORIES);
 
-    const normalizedCategories = (categories || []).filter((c) => c?.slug);
-    const slugs = normalizedCategories.map((c) => c.slug);
+    const categoriesBySlug = new Map(
+      (categories || [])
+        .filter((c) => c?.slug)
+        .map((c) => [c.slug, c])
+    );
+    const slugs = HOMEPAGE_NEWS_CATEGORIES;
     const byCategory = new Map(slugs.map((slug) => [slug, []]));
 
     // Fetch enough rows to fill up to 4 per category without N+1 queries.
@@ -112,15 +132,15 @@ export default async function Home() {
       });
     }
 
-    categorySections = normalizedCategories.map((c) => ({
-      slug: c.slug,
-      name: c.name || c.slug,
-      color: c.color || "#3B82F6",
-      items: byCategory.get(c.slug) || [],
-    }));
-
-    // Only show categories that actually have articles.
-    categorySections = categorySections.filter((s) => (s.items || []).length > 0);
+    categorySections = HOMEPAGE_NEWS_CATEGORIES.map((slug) => {
+      const cat = categoriesBySlug.get(slug);
+      return {
+        slug,
+        name: cat?.name || titleFromSlug(slug),
+        color: cat?.color || "#3B82F6",
+        items: byCategory.get(slug) || [],
+      };
+    });
   } catch {
     // home still renders without news section
   }

@@ -125,7 +125,7 @@ code {
 }
 
 div {
-  white-space: break-spaces;
+  white-space: inherit;
 }
 
 .sti {

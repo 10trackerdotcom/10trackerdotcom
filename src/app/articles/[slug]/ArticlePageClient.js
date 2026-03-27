@@ -189,51 +189,66 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
         }
         .article-content p {
           color: #3c4043;
+          margin-top: 20px;
           font-size: 1.125rem; /* 18px on mobile */
         }
         @media (min-width: 768px) {
           .article-content p {
             font-size: 1rem; /* 16px on larger screens */
+            margin-top: 15px;
           }
         }
         .article-content h1 {
           font-size: 2.25rem; /* Larger on mobile */
+          margin-top: 15px;
           font-weight: 400;
           color: #202124;
           border-bottom: 1px solid #dadce0;
         }
         @media (min-width: 768px) {
           .article-content h1 {
+            margin-top: 15px;
             font-size: 2rem; /* 32px on larger screens */
           }
         }
         .article-content h2 {
+        margin-top: 15px;
           font-size: 1.75rem; /* Larger on mobile */
           font-weight: 400;
           color: #202124;
         }
         @media (min-width: 768px) {
           .article-content h2 {
+        margin-top: 15px;
+
             font-size: 1.5rem; /* 24px on larger screens */
           }
         }
         .article-content h3 {
+        margin-top: 15px;
+
           font-size: 1.375rem; /* Larger on mobile */
           font-weight: 500;
           color: #202124;
         }
         @media (min-width: 768px) {
           .article-content h3 {
+        margin-top: 15px;
+
             font-size: 1.25rem; /* 20px on larger screens */
           }
         }
         .article-content h4 {
+        margin-top: 15px;
+
           font-size: 1.25rem; /* Larger on mobile */
           font-weight: 500;
           color: #202124;
         }
         @media (min-width: 768px) {
           .article-content h4 {
+        margin-top: 15px;
+
             font-size: 1.125rem; /* 18px on larger screens */
           }
         }
@@ -263,7 +278,7 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
           color: #5f6368;
         }
         .article-content ul ul, .article-content ol ol, .article-content ul ol, .article-content ol ul {
-          margin: 0.25rem 0;
+          margin: 0, 0;
         }
         .article-content table {
           border-collapse: collapse;
@@ -302,7 +317,7 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
         .article-content ul[data-type="taskList"] li {
           display: flex;
           align-items: flex-start;
-          margin: 0.5rem 0;
+          margin: 0.0, 0;
         }
         .article-content ul[data-type="taskList"] li > label {
           flex: 0 0 auto;
@@ -313,7 +328,6 @@ const ArticlePageClient = ({ article, relatedArticles }) => {
         .article-content ul[data-type="taskList"] li > div {
           flex: 1 1 auto;
           color: #3c4043;
-          line-height: 1.6;
         }
         .article-content blockquote {
           border-left: 3px solid #1a73e8;
