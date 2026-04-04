@@ -8,6 +8,7 @@ import debounce from "lodash/debounce";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/app/context/AuthContext";
+import { upsertUserProgress } from "@/lib/userProgressUpsert";
 import toast, { Toaster } from "react-hot-toast";
 import { 
   ChevronLeft, 
@@ -736,7 +737,7 @@ const PremiumTestInterface = () => {
     debounce(async (updatedProgress) => {
       if (!user) return;
       try {
-        await supabase.from("user_progress").upsert({
+        const { error } = await upsertUserProgress(supabase, {
           user_id: user.id,
           email: user?.emailAddresses[0]?.emailAddress,
           topic: pagetopic,
@@ -744,7 +745,8 @@ const PremiumTestInterface = () => {
           correctanswers: updatedProgress.correctanswers,
           points: updatedProgress.points,
           area: category,
-        }, { onConflict: ["user_id", "topic"] });
+        });
+        if (error) throw error;
       } catch (error) {
         console.error("Progress update error:", error);
       }

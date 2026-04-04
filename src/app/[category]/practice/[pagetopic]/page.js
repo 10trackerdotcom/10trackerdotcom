@@ -6,6 +6,7 @@ import { useParams, useSearchParams, useRouter, usePathname } from "next/navigat
 import { supabase } from "@/app/lib/supabase";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
+import { upsertUserProgress } from "@/lib/userProgressUpsert";
 import toast, { Toaster } from "react-hot-toast";
 import { Clock } from "lucide-react";
 
@@ -348,12 +349,7 @@ const Pagetracker = memo(() => {
 
   // Helper: Save progress to database
   const saveProgressToDatabase = useCallback(async (progressData) => {
-    // Try upsert first
-    let { error: saveError } = await supabase
-      .from("user_progress")
-      .upsert(progressData, { 
-        onConflict: "user_id,topic,area"
-      });
+    let { error: saveError } = await upsertUserProgress(supabase, progressData);
 
     // If upsert fails, try insert then update
     if (saveError) {

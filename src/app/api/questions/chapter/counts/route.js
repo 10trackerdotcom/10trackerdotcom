@@ -30,65 +30,89 @@ const chapterNamesMatch = (name1, name2) => {
 
 // Function to fetch counts
 const fetchCounts = async (category, chapter) => {
+  const categoryUpper = category.toUpperCase();
+  const normalizedInput = normalizeChapterName(chapter);
 
-  // Normalize the input chapter name
-  const normalizedInputChapter = normalizeChapterName(chapter);
+  const candidates = Array.from(
+    new Set(
+      [
+        chapter,
+        String(chapter).trim(),
+        String(chapter).replace(/-/g, ' '),
+        normalizeChapterName(chapter),
+        normalizeChapterName(chapter).replace(/\s+/g, '-'),
+      ].filter(Boolean)
+    )
+  );
 
-  // Fetch all questions for this category (only difficulty and chapter fields for efficiency)
-  // We'll aggregate in memory for accurate matching
-  let allData = [];
-  let from = 0;
-  const pageSize = 1000;
-  let fetchMore = true;
-
-  while (fetchMore) {
-    const { data, error } = await supabase
+  const headCount = async (chapterValue, difficulty) => {
+    let q = supabase
       .from('examtracker')
-      .select('difficulty, chapter')
-      .eq('category', category.toUpperCase())
-      .range(from, from + pageSize - 1);
+      .select('_id', { count: 'exact', head: true })
+      .eq('category', categoryUpper)
+      .eq('chapter', chapterValue);
 
-    if (error) {
-      console.error('Error fetching data:', error);
-      throw error;
-    }
+    if (difficulty) q = q.eq('difficulty', difficulty);
+    const res = await q;
+    if (res.error) throw res.error;
+    return res.count || 0;
+  };
 
-    if (data && data.length > 0) {
-      allData.push(...data);
-      from += pageSize;
-      fetchMore = data.length === pageSize;
-    } else {
-      fetchMore = false;
+  // Fast path: exact chapter match using a few candidates.
+  let matchedChapter = candidates[0] ?? chapter;
+  let total = 0;
+
+  for (const candidate of candidates) {
+    total = await headCount(candidate, null);
+    if (total > 0) {
+      matchedChapter = candidate;
+      break;
     }
   }
 
-  // Filter by chapter name with proper normalization
-  const matchingQuestions = allData.filter(row => {
-    if (!row.chapter) return false;
-    return chapterNamesMatch(row.chapter, normalizedInputChapter);
-  });
+  // Fallback: resolve chapter by normalization via a limited chapter list.
+  if (total === 0) {
+    const { data: chaptersData, error: chaptersError } = await supabase
+      .from('examtracker')
+      .select('chapter')
+      .eq('category', categoryUpper)
+      .limit(5000);
+    if (chaptersError) throw chaptersError;
 
-  // Aggregate counts by difficulty
-  const counts = {
-    easy: 0,
-    medium: 0,
-    hard: 0
-  };
+    const resolved = (chaptersData ?? [])
+      .map((r) => r?.chapter)
+      .filter(Boolean)
+      .find((ch) => chapterNamesMatch(ch, normalizedInput));
 
-  matchingQuestions.forEach(q => {
-    if (q.difficulty && counts.hasOwnProperty(q.difficulty)) {
-      counts[q.difficulty]++;
+    if (!resolved) {
+      return {
+        matchedChapter: null,
+        counts: { easy: 0, medium: 0, hard: 0 },
+        total: 0,
+        easy: 0,
+        medium: 0,
+        hard: 0,
+      };
     }
-  });
 
-  const totalCount = matchingQuestions.length;
+    matchedChapter = resolved;
+    total = await headCount(matchedChapter, null);
+  }
 
+  const [easy, medium, hard] = await Promise.all([
+    headCount(matchedChapter, 'easy'),
+    headCount(matchedChapter, 'medium'),
+    headCount(matchedChapter, 'hard'),
+  ]);
+
+  const counts = { easy, medium, hard };
   return {
+    matchedChapter,
     counts,
-    total: totalCount,
-    easy: counts.easy || 0,
-    medium: counts.medium || 0,
-    hard: counts.hard || 0
+    total,
+    easy,
+    medium,
+    hard,
   };
 };
 

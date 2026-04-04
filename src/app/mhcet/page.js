@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { createClient } from "@supabase/supabase-js";
+import { upsertUserProgress } from "@/lib/userProgressUpsert";
 import toast, { Toaster } from "react-hot-toast";
 import debounce from "lodash/debounce";
 import AuthModal from "@/components/AuthModal";
@@ -165,7 +166,8 @@ const Mhcettracker = () => {
         const { data, error } = await supabase
           .from("user_progress")
           .select("topic, completedquestions, correctanswers, points")
-          .eq("user_id", uid);
+          .eq("user_id", uid)
+          .eq("area", "mhcet");
 
         if (error) throw error;
 
@@ -195,21 +197,18 @@ const Mhcettracker = () => {
       if (!user) return;
 
       try {
-        const { data, error } = await supabase
-          .from("user_progress")
-          .upsert(
-            {
-              user_id: user.uid,
-              topic: topic,
-              completedquestions: updatedProgress.completedQuestions,
-              correctanswers: updatedProgress.correctAnswers,
-              points: updatedProgress.points,
-            },
-            {
-              onConflict: ["user_id", "topic"],
-            }
-          )
-          .select();
+        const { data, error } = await upsertUserProgress(
+          supabase,
+          {
+            user_id: user.uid,
+            topic: topic,
+            completedquestions: updatedProgress.completedQuestions,
+            correctanswers: updatedProgress.correctAnswers,
+            points: updatedProgress.points,
+            area: "mhcet",
+          },
+          { select: "*" }
+        );
 
         if (error) throw error;
         console.log("Progress updated for topic", topic, ":", data);

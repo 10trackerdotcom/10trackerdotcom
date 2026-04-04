@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/app/lib/supabase';
+import { upsertUserProgress } from '@/lib/userProgressUpsert';
 
 // Helper: Merge progress updates
 const mergeProgressUpdates = (existing, updates) => {
@@ -87,12 +88,7 @@ export async function POST(request) {
       area: area,
     };
 
-    // Try upsert first
-    let { error: saveError } = await supabase
-      .from("user_progress")
-      .upsert(progressData, { 
-        onConflict: "user_id,topic,area"
-      });
+    let { error: saveError } = await upsertUserProgress(supabase, progressData);
 
     // If upsert fails, try insert then update
     if (saveError) {

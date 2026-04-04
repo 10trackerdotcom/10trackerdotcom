@@ -245,7 +245,7 @@ const renderHtmlWithCodeBlocks = (html, isUpscPrelims) => {
 };
 
 // Memoized QuestionCard component
-const QuestionCard = memo(({ question, category, index, onAnswer, questionId: questionIdProp, isCompleted, isCorrect, onReport, onEdit, isEditing, onStartEditing, isAdmin }) => {
+const QuestionCard = memo(({ question, category, index, onAnswer, questionId: questionIdProp, isCompleted, isCorrect, onReport, onEdit, isEditing, onStartEditing, isAdmin, quizLayout = false }) => {
   const { user } = useAuth();
   const questionId = questionIdProp ?? question._id ?? question.id;
   // When questionId prop is passed, call onAnswer(questionId, isCorrect); otherwise onAnswer(isCorrect) for backward compat
@@ -474,18 +474,22 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
   // Reusable question card renderer
   const renderQuestionCard = useCallback((questionData, questionIndex) => (
       <motion.div
-      initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
+      initial={quizLayout ? false : { opacity: 0, y: 10 }}
+        animate={quizLayout ? false : { opacity: 1, y: 0 }}
+      whileHover={quizLayout ? undefined : { y: -2 }}
         transition={{ duration: 0.2 }}
-      className={`bg-white rounded-xl shadow-md border border-gray-100/50 overflow-hidden ${isCompleted ? "ring-2 ring-emerald-500/20" : "hover:shadow-lg"}`}
+      className={`bg-white overflow-hidden ${
+        quizLayout
+          ? `rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.06),0_12px_40px_-12px_rgba(15,23,42,0.18)] border border-slate-200/80 ${isCompleted ? "ring-2 ring-emerald-500/25" : ""}`
+          : `rounded-xl shadow-md border border-gray-100/50 ${isCompleted ? "ring-2 ring-emerald-500/20" : "hover:shadow-lg"}`
+      }`}
     >
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <MathJaxContext config={config}>
-        <div className="bg-gray-50 p-4 border-b border-gray-100/60">
+        <div className={`${quizLayout ? "bg-gradient-to-b from-slate-50 to-white p-4 sm:p-5 border-b border-slate-200/70" : "bg-gray-50 p-4 border-b border-gray-100/60"}`}>
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 text-white flex items-center justify-center font-bold text-sm">{questionIndex + 1}</div>
+              <div className={`rounded-xl text-white flex items-center justify-center font-bold ${quizLayout ? "w-9 h-9 sm:w-10 sm:h-10 text-sm sm:text-base bg-slate-900 shadow-inner" : "w-8 h-8 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 text-sm"}`}>{questionIndex + 1}</div>
               <div className="flex flex-col space-y-1">
                 <span className="text-xs font-medium text-gray-500 uppercase">Difficulty</span>
                 <div className="flex space-x-1">
@@ -545,7 +549,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
             </div>
           </div>
         </div>
-        <div className="p-4 overflow-x-auto">
+        <div className={`overflow-x-auto ${quizLayout ? "p-4 sm:p-6 md:p-8" : "p-4"}`}>
           {isEditing && isAdmin ? (
             <textarea
               value={state.editData.question}
@@ -555,7 +559,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
             />
           ) : (
             <MathJax hideUntilTypeset={"first"} inline dynamic>
-              <div className="text-gray-800 text-sm leading-relaxed break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto">
+              <div className={`text-gray-800 break-words overflow-x-auto [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto ${quizLayout ? "text-base sm:text-[1.05rem] leading-[1.65] font-medium text-slate-900" : "text-sm leading-relaxed"}`}>
                 {questionData.directionHTML && questionData.directionHTML !== null && (
                   <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded-r break-words [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(questionData.directionHTML)), isUpscPrelims) }} />
                 )}
@@ -602,13 +606,23 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
             if (!hasOptions) return null;
             
             return (
-              <div className="mt-4 space-y-2">
+              <div className={`mt-4 ${quizLayout ? "space-y-3 sm:space-y-3.5" : "space-y-2"}`}>
                 {["A", "B", "C", "D"].map((opt, optIndex) => {
                   const optionText = questionData[`options_${opt}`];
                   if (!optionText || String(optionText).trim().length === 0) return null;
                 const isSelected = state.selectedOption === opt;
                 const isCorrectOption = opt === questionData.correct_option;
-                const optionClass = state.isAnswered && state.showFeedback
+                const optionClass = quizLayout
+                  ? state.isAnswered && state.showFeedback
+                    ? isCorrectOption
+                      ? "border-2 border-emerald-500/90 bg-emerald-50/80 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]"
+                      : isSelected && !isCorrectOption
+                      ? "border-2 border-rose-500/90 bg-rose-50/70 shadow-[inset_0_0_0_1px_rgba(244,63,94,0.12)]"
+                      : "border border-slate-200/90 bg-slate-50/40 opacity-80"
+                    : isSelected
+                    ? "border-2 border-slate-900 bg-slate-100 shadow-md ring-2 ring-slate-900/10"
+                    : "border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/90 active:scale-[0.998]"
+                  : state.isAnswered && state.showFeedback
                   ? isCorrectOption
                     ? "border-emerald-500 bg-emerald-50/50"
                     : isSelected && !isCorrectOption
@@ -628,19 +642,20 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
                       />
                     ) : (
                       <motion.button
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: optIndex * 0.05 }}
+                        initial={quizLayout ? { opacity: 0, y: 6 } : { opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0, y: 0 }}
+                        transition={{ delay: optIndex * 0.04, duration: 0.2 }}
                         onClick={() => handleOptionClick(opt)}
                         disabled={state.isAnswered}
-                        className={`w-full text-left p-3 rounded-lg ${optionClass} ${state.isAnswered ? "cursor-default" : "cursor-pointer"} overflow-x-auto`}
+                        type="button"
+                        className={`w-full text-left rounded-xl transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out ${quizLayout ? "p-3.5 sm:p-4 min-h-[3rem] sm:min-h-[3.25rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/25 focus-visible:ring-offset-2" : "p-3 rounded-lg"} ${optionClass} ${state.isAnswered ? "cursor-default" : "cursor-pointer"} overflow-x-auto`}
                       >
-                        <div className="flex items-start space-x-2 min-w-0">
-                          <div className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-xs flex-shrink-0 ${isSelected ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600"}`}>
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className={`rounded-lg flex items-center justify-center font-bold flex-shrink-0 ${quizLayout ? `w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm ${isSelected && !state.isAnswered ? "bg-slate-900 text-white" : state.isAnswered && state.showFeedback && isCorrectOption ? "bg-emerald-600 text-white" : state.isAnswered && state.showFeedback && isSelected && !isCorrectOption ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-700 border border-slate-200"}` : `w-6 h-6 rounded-md text-xs ${isSelected ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600"}`}`}>
                             {opt}
                           </div>
                           <MathJax hideUntilTypeset={"first"} inline dynamic>
-                            <div className="flex-grow text-xs break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto" dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(optionText)), isUpscPrelims) }} />
+                            <div className={`flex-grow break-words min-w-0 [&_*]:max-w-full [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto ${quizLayout ? "text-sm sm:text-[0.9375rem] leading-snug text-slate-800" : "text-xs"}`} dangerouslySetInnerHTML={{ __html: convertNewlinesToBreaks(convertLatexTags(convertRelativeImageUrls(optionText)), isUpscPrelims) }} />
                           </MathJax>
                           <div className="flex-shrink-0">
                             {state.isAnswered && state.showFeedback && isCorrectOption && <Check size={14} className="text-green-500" />}
@@ -719,29 +734,47 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
                   </div>
           )}
           {!isEditing && (
-            <div className="mt-4 flex gap-2">
+            <div className={`mt-4 flex flex-col sm:flex-row gap-2 sm:gap-3 ${quizLayout ? "sm:mt-6" : ""}`}>
               {!state.isAnswered && questionData.options_A && (
                 <button
                   onClick={handleSubmit}
                   disabled={!state.selectedOption}
-                  className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-colors ${
+                  type="button"
+                  className={`flex-1 font-semibold transition-all duration-200 ${
+                    quizLayout
+                      ? `py-3.5 sm:py-3 rounded-xl text-sm sm:text-base ${
+                          state.selectedOption
+                            ? "bg-slate-900 text-white hover:bg-slate-800 shadow-lg shadow-slate-900/15"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        }`
+                      : `py-2.5 rounded-lg text-sm ${
                     state.selectedOption 
                       ? "bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-gray-700 hover:to-gray-800" 
                       : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  }`
                   }`}
                 >
                   Submit Answer
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => setState((prev) => ({ ...prev, showSolution: !prev.showSolution }))}
-                className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center space-x-2 ${
+                className={`flex-1 font-semibold transition-colors flex items-center justify-center gap-2 ${
+                  quizLayout
+                    ? `py-3.5 sm:py-3 rounded-xl text-sm sm:text-base ${
+                        state.showSolution
+                          ? "bg-slate-100 text-slate-800 border-2 border-slate-300"
+                          : "bg-white text-slate-800 border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                      }`
+                    : `py-2.5 rounded-lg text-sm ${
                   state.showSolution 
                     ? "bg-gray-100 text-gray-800 border-2 border-gray-300" 
                     : "bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-gray-700 hover:to-gray-800"
+                }`
                 }`}
               >
-                <BookOpen size={16} />
+                <BookOpen size={quizLayout ? 18 : 16} />
                 <span>{state.showSolution ? "Hide Solution" : "Show Solution"}</span>
               </button>
             </div>
@@ -816,10 +849,10 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
         </div>
       </MathJaxContext>
     </motion.div>
-  ), [state, question, isEditing, isAdmin, onStartEditing, handleOptionClick, handleSubmit, handleSkip, handleSaveEdit, getDifficultyColor, jsonLd, config, isCompleted]);
+  ), [state, question, isEditing, isAdmin, onStartEditing, handleOptionClick, handleSubmit, handleSkip, handleSaveEdit, getDifficultyColor, jsonLd, config, isCompleted, quizLayout]);
 
   return (
-    <div className="space-y-4 mb-8">
+    <div className={quizLayout ? "space-y-4" : "space-y-4 mb-8"}>
       {renderQuestionCard(question, index)}
       <AnimatePresence>
         {state.showReportForm && (

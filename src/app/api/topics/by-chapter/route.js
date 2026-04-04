@@ -2,222 +2,191 @@ import { createClient } from "@supabase/supabase-js";
 import { unstable_cache } from "next/cache";
 import { NextResponse } from "next/server";
 
-// Supabase configuration
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
-// Cached function to fetch topics by chapter
-// chapterName comes from URL param [chaptername] - e.g., "laws-of-motion"
-const getCachedTopicsByChapter = async (category, subject, chapterName) => {
-    const isDev = process.env.NODE_ENV === 'development';
-    if (isDev) {
-      console.log("🔄 [Cache] Fetching topics for chapter:", { 
-        category, 
-        subject, 
-        chapterName,
-        note: "chapterName comes from URL param [chaptername]"
-      });
+const isDev = process.env.NODE_ENV === "development";
+
+const normalize = (v) =>
+  String(v ?? "")
+    .toLowerCase()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * Fetch topics for a given category + subject + chapter.
+ * All filtering pushed to Supabase — no full table scans.
+ *
+ * Index recommendation: (category, chapter) composite index on `examtracker`
+ */
+const fetchTopicsByChapter = async (category, subject, chapterName) => {
+  if (isDev) console.log("🔄 fetchTopicsByChapter", { category, subject, chapterName });
+
+  // chapterName arrives as a slug: "laws-of-motion"
+  // DB may store it as "Laws of Motion" or "laws-of-motion" — build variants
+  const chapterVariants = Array.from(
+    new Set([
+      chapterName,                                              // "laws-of-motion"
+      chapterName.replace(/-/g, " "),                          // "laws of motion"
+      chapterName.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()), // "Laws Of Motion"
+      normalize(chapterName),                                   // "laws of motion"
+    ])
+  );
+
+  let query = supabase
+    .from("examtracker")
+    .select("topic, subject, category, chapter")
+    .eq("category", category.toUpperCase())
+    .in("chapter", chapterVariants)
+    .not("topic", "is", null);
+
+  // Narrow by subject if provided
+  if (subject) {
+    const subjectVariants = Array.from(
+      new Set([
+        subject,
+        subject.replace(/-/g, " "),
+        subject.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+        normalize(subject),
+      ])
+    );
+    query = query.in("subject", subjectVariants);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    if (isDev) console.error("❌ Supabase error:", error);
+    throw error;
+  }
+
+  let rows = data || [];
+
+  // ── Fallback: ilike on chapter if exact match returned nothing ─────────────
+  if (rows.length === 0) {
+    if (isDev) console.log("⚠️  No exact chapter match — trying ilike fallback");
+    const normalizedChapter = normalize(chapterName);
+
+    let fallbackQuery = supabase
+      .from("examtracker")
+      .select("topic, subject, category, chapter")
+      .eq("category", category.toUpperCase())
+      .ilike("chapter", `%${normalizedChapter}%`)
+      .not("topic", "is", null);
+
+    if (subject) {
+      const subjectVariants = Array.from(
+        new Set([
+          subject,
+          subject.replace(/-/g, " "),
+          subject.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+          normalize(subject),
+        ])
+      );
+      fallbackQuery = fallbackQuery.in("subject", subjectVariants);
     }
-    
-    const allData = [];
-    let from = 0;
-    const pageSize = 1000;
-    let fetchMore = true;
 
-    while (fetchMore) {
-      // Try to select chapter field if it exists, otherwise use available fields
-      let query = supabase
-        .from("examtracker")
-        .select("topic, category, subject, chapter", { count: "exact" });
+    const { data: fd, error: fe } = await fallbackQuery;
+    if (fe) throw fe;
+    rows = fd || [];
+  }
 
-      if (category) {
-        query = query.eq("category", category.toUpperCase());
-      }
+  if (isDev) console.log(`📊 Rows returned from DB: ${rows.length}`);
 
-      // Note: We'll filter by chapter in JavaScript to handle cases where chapter field might not exist
-      // This makes the query more flexible
+  // ── Group by topic ─────────────────────────────────────────────────────────
+  const topicMap = {};
 
-      const { data, error } = await query.range(from, from + pageSize - 1);
+  rows.forEach((row) => {
+    if (!row.topic) return;
+    const key = row.topic.toLowerCase();
 
-      if (error) {
-        if (isDev) console.error("❌ [Cache] Supabase error:", error);
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        allData.push(...data);
-        from += pageSize;
-        fetchMore = data.length === pageSize;
-      } else {
-        fetchMore = false;
-      }
+    if (!topicMap[key]) {
+      topicMap[key] = {
+        title:   row.topic,
+        count:   0,
+        category: row.category,
+        subject:  row.subject,
+        chapter:  row.chapter ?? null,
+      };
     }
+    topicMap[key].count += 1;
+  });
 
-    // Filter by chapter name and group topics
-    // chapterName comes from URL param [chaptername] - e.g., "laws-of-motion"
-    // We need to find all rows where chapter field matches this chapter name
-    const topicMap = {};
-    
-    // Normalize chapter name for matching (handle hyphens and spaces)
-    const normalizedChapterName = chapterName.replace(/-/g, " ").toLowerCase().trim();
-    
-    if (isDev) {
-      console.log(`🔍 [Cache] Filtering by chapter: "${chapterName}" (normalized: "${normalizedChapterName}")`);
-      console.log(`📊 [Cache] Total rows fetched: ${allData.length}`);
-    }
-    
-    allData.forEach(row => {
-      if (!row.topic) return;
-      
-      // Check if this row belongs to the requested chapter
-      let chapterMatches = false;
-      
-      // Priority 1: Check if row has a chapter field that matches
-      if (row.chapter) {
-        const normalizedRowChapter = row.chapter.replace(/-/g, " ").toLowerCase().trim();
-        // Try exact match first (handles both "laws-of-motion" and "laws of motion")
-        chapterMatches = normalizedRowChapter === normalizedChapterName;
-        
-        // If no exact match, try partial match
-        if (!chapterMatches) {
-          chapterMatches = 
-            normalizedRowChapter.includes(normalizedChapterName) ||
-            normalizedChapterName.includes(normalizedRowChapter);
-        }
-        
-        if (isDev && chapterMatches) {
-          console.log(`✅ [Cache] Match found - Row chapter: "${row.chapter}" matches "${chapterName}"`);
-        }
-      } else {
-        // Priority 2: If no chapter field exists, check if topic matches (fallback for backward compatibility)
-        const normalizedTopic = row.topic?.toLowerCase() || "";
-        chapterMatches = 
-          normalizedTopic.includes(normalizedChapterName) ||
-          normalizedChapterName.includes(normalizedTopic);
-        
-        if (isDev && chapterMatches) {
-          console.log(`⚠️ [Cache] Fallback match - No chapter field, using topic: "${row.topic}"`);
-        }
-      }
-      
-      if (chapterMatches) {
-        const topicKey = row.topic.toLowerCase();
-        if (!topicMap[topicKey]) {
-          topicMap[topicKey] = {
-            title: row.topic,
-            count: 0,
-            category: row.category,
-            subject: row.subject,
-            chapter: row.chapter || null
-          };
-        }
-        topicMap[topicKey].count += 1;
-      }
-    });
-    
-    const topics = Object.values(topicMap);
+  const topics = Object.values(topicMap).sort((a, b) =>
+    a.title.localeCompare(b.title)
+  );
 
-    if (isDev) {
-      console.log(`✅ [Cache] Found ${topics.length} topics for chapter: ${chapterName || subject}`);
-    }
-    
-    return {
-      chapterName: chapterName || subject,
-      subject: subject,
-      category: category,
-      topics: topics.sort((a, b) => a.title.localeCompare(b.title)),
-      totalTopics: topics.length,
-      totalQuestions: topics.reduce((sum, t) => sum + t.count, 0)
-    };
+  if (isDev) console.log(`✅ ${topics.length} topics found`);
+
+  return {
+    chapterName,
+    subject,
+    category,
+    topics,
+    totalTopics:    topics.length,
+    totalQuestions: topics.reduce((s, t) => s + t.count, 0),
   };
-
-// Create cached version - cache key will include parameters automatically
-const getCachedTopics = (category, subject, chapterName) => {
-  return unstable_cache(
-    async () => {
-      return await getCachedTopicsByChapter(category, subject, chapterName);
-    },
-    [`topics-by-chapter-${category}-${subject}-${chapterName}`],
-    {
-      tags: ["examtracker"],
-      revalidate: 300, // 5 minutes cache
-    }
-  )();
 };
 
+const getTopicsCached = (category, subject, chapterName) =>
+  unstable_cache(
+    () => fetchTopicsByChapter(category, subject, chapterName),
+    [`topics-by-chapter-${category}-${subject}-${chapterName}`],
+    { tags: ["examtracker"], revalidate: 300 }
+  )();
+
+// ── Route handler ─────────────────────────────────────────────────────────────
 export async function GET(req) {
-  const isDev = process.env.NODE_ENV === 'development';
-  
   try {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get("category");
-    const subject = searchParams.get("subject");
-    const chapter = searchParams.get("chapter");
+    const subject  = searchParams.get("subject");
+    const chapter  = searchParams.get("chapter");
 
     if (!category) {
       return NextResponse.json(
-        { error: "Category parameter is required" },
+        { success: false, error: "category parameter is required" },
         { status: 400 }
       );
     }
-
-    // Chapter parameter is required (comes from URL param [chaptername])
     if (!chapter) {
       return NextResponse.json(
-        { error: "Chapter parameter is required (from URL [chaptername])" },
+        { success: false, error: "chapter parameter is required" },
         { status: 400 }
       );
     }
 
-    // Decode URL parameters
     const decodedCategory = decodeURIComponent(category);
-    const decodedSubject = subject ? decodeURIComponent(subject) : null;
-    const decodedChapter = decodeURIComponent(chapter); // chapter is required
+    const decodedSubject  = subject ? decodeURIComponent(subject) : null;
+    const decodedChapter  = decodeURIComponent(chapter);
 
-    if (isDev) {
-      console.log("📖 [API] Fetching topics for chapter:", {
-        category: decodedCategory,
-        subject: decodedSubject,
-        chapter: decodedChapter
-      });
-    }
-
-    const result = await getCachedTopics(
+    const result = await getTopicsCached(
       decodedCategory,
       decodedSubject,
       decodedChapter
     );
 
-    if (isDev && result) {
-      console.log(`✅ [API] Fetched ${result.topics.length} topics`);
-    }
-
     return NextResponse.json(
-      {
-        success: true,
-        data: result
-      },
+      { success: true, data: result },
       {
         status: 200,
         headers: {
-          "Content-Type": "application/json",
           "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
         },
       }
     );
   } catch (error) {
-    if (isDev) {
-      console.error("❌ [API] Error:", error);
-    }
+    if (isDev) console.error("❌ [by-chapter] route error:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
-        details: isDev ? error.stack : undefined
+        error:   "Internal server error",
+        details: isDev ? error.message : undefined,
       },
       { status: 500 }
     );
   }
 }
-

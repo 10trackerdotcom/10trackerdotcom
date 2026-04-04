@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { createClient } from "@supabase/supabase-js";
+import { upsertUserProgress } from "@/lib/userProgressUpsert";
 import toast, { Toaster } from "react-hot-toast";
 import debounce from "lodash/debounce";
 import ProgressBar from "../../../../../components/ProgressBar";
@@ -100,11 +101,12 @@ const Pagetracker = () => {
           .select("completedquestions, correctanswers, points")
           .eq("user_id", uid)
           .eq("topic", pagetopic)
-          .single();
+          .eq("area", "upsc")
+          .maybeSingle();
 
         if (error && error.code !== "PGRST116") throw error;
         setProgress(
-          data || { completedquestions: [], correctanswers: [], points: 0 }
+          data ?? { completedquestions: [], correctanswers: [], points: 0 }
         );
       } catch (error) {
         console.error("Progress fetch error:", error);
@@ -196,22 +198,18 @@ const Pagetracker = () => {
       if (!user) return;
 
       try {
-        const { data, error } = await supabase
-          .from("user_progress")
-          .upsert(
-            {
-              user_id: user.uid,
-              topic: pagetopic,
-              completedquestions: updatedProgress.completedquestions,
-              correctanswers: updatedProgress.correctanswers,
-              points: updatedProgress.points,
-              area: "upsc",
-            },
-            {
-              onConflict: ["user_id", "topic"],
-            }
-          )
-          .select();
+        const { data, error } = await upsertUserProgress(
+          supabase,
+          {
+            user_id: user.uid,
+            topic: pagetopic,
+            completedquestions: updatedProgress.completedquestions,
+            correctanswers: updatedProgress.correctanswers,
+            points: updatedProgress.points,
+            area: "upsc",
+          },
+          { select: "*" }
+        );
 
         if (error) throw error;
         console.log("Progress updated:", data);

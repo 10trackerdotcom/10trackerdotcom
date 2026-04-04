@@ -1,50 +1,63 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  Suspense,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@supabase/supabase-js";
 import toast, { Toaster } from "react-hot-toast";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowRight, FileText, BookOpen, ShieldClose } from "lucide-react";
+import { ArrowRight, BookOpen, ShieldClose } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import Navbar from "@/components/Navbar";
 import { getCachedData, invalidateCache } from "@/lib/utils/apiCache";
-// Lazy-loaded components
-const AuthModal = dynamic(() => import("@/components/AuthModal"), { ssr: false });
-const Alert = dynamic(() => import("@/components/Alert"), { ssr: false });
-const MetaDataJobs = dynamic(() => import("@/components/Seo"), { ssr: false });
 
-// Supabase configuration
+// ─── Lazy-loaded components ───────────────────────────────────────────────────
+const AuthModal = dynamic(() => import("@/components/AuthModal"), { ssr: false });
+const Alert    = dynamic(() => import("@/components/Alert"),    { ssr: false });
+const MetaDataJobs = dynamic(() => import("@/components/Seo"),  { ssr: false });
+
+// ─── Supabase (singleton) ─────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   { fetch: (...args) => fetch(...args) }
 );
 
-// Error Boundary Component
+// ─── API token (constant – must NOT be in any dependency array) ───────────────
+const API_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsInVzZXJuYW1lIjoiZXhhbXBsZVVzZXIiLCJpYXQiOjE3MzYyMzM2NDZ9.YMTSQxYuzjd3nD3GlZXO6zjjt1kqfUmXw7qdy-C2RD8";
+
+// ─── TTLs ─────────────────────────────────────────────────────────────────────
+const TTL_CONTENT  = 10 * 60 * 1000; // 10 min – questions / chapters don't change often
+const TTL_PROGRESS =  2 * 60 * 1000; //  2 min – user progress
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error("Rendering error:", error, errorInfo);
-  }
-
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error, info) { console.error("Rendering error:", error, info); }
   render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-neutral-50 flex justify-center items-center">
           <div className="text-center p-8 bg-white rounded-xl shadow-sm border border-neutral-200 max-w-md">
             <svg className="h-16 w-16 text-red-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <h1 className="text-2xl font-semibold text-neutral-900 mb-3">Something went wrong</h1>
             <p className="text-neutral-600 mb-4">Please try refreshing the page.</p>
-            <button onClick={() => window.location.reload()} className="px-4 py-2 border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 transition duration-150">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 border border-neutral-300 text-neutral-800 rounded-lg hover:bg-neutral-50 transition duration-150"
+            >
               Refresh Page
             </button>
           </div>
@@ -55,524 +68,531 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// ─── GATE category set (stable reference – lives outside the component) ────────
+const GATE_CATEGORIES = new Set([
+  "gate-cse", "gate-me", "gate-ec", "gate-ee", "gate-ex", "gate-da",
+  "general-aptitude", "verbal-reasoning", "non-verbal-reasoning", "verbal-ability",
+]);
+
+// =============================================================================
+// Component
+// =============================================================================
 const Examtracker = () => {
-  const [data, setData] = useState([]);
-  const [chapters, setChapters] = useState([]);
-  const [chapterTopics, setChapterTopics] = useState({}); // Store topics for each chapter for progress calculation
-  const [userProgress, setUserProgress] = useState({});
-  const { user, signInWithGoogle, setShowAuthModal } = useAuth();
-  
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("default");
-  const [isLoading, setIsLoading] = useState(true);
-  const [showMobileOptions, setShowMobileOptions] = useState(false);
-  const searchInputRef = useRef(null);
   const { category, subject } = useParams();
-  
-  // Check if category is a GATE exam
-  const isGateExam = useMemo(() => {
-    const cat = category?.toLowerCase();
-    return cat === 'gate-cse' || cat === 'gate-me' || cat === 'gate-ex' || cat === 'gate-ec' || cat === 'gate-ee' || cat === 'gate-da' || cat === 'gate-me' || cat === 'general-aptitude' || cat === 'verbal-reasoning' || cat === 'non-verbal-reasoning' || cat === 'verbal-ability';
-  }, [category]);
-  
-  // Properly decode and format subject from URL
-  const decodedSubject = subject ? decodeURIComponent(subject) : null;
-  const formattedSubject = decodedSubject 
+  const { user, setShowAuthModal } = useAuth();
+
+  // ── Derived constants (never change after first render) ─────────────────────
+  const isGateExam = useMemo(
+    () => GATE_CATEGORIES.has(category?.toLowerCase()),
+    [category]
+  );
+
+  const decodedSubject  = subject ? decodeURIComponent(subject) : null;
+  const formattedSubject = decodedSubject
     ? decodedSubject.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : null;
-  
+
+  const encodedCategory = category ? encodeURIComponent(category.toUpperCase()) : "";
+  const encodedSubject  = subject  ? encodeURIComponent(subject)               : "";
+
+  // ── State ────────────────────────────────────────────────────────────────────
+  const [data,          setData]          = useState([]); // GATE: subjectsData
+  const [chapters,      setChapters]      = useState([]); // non-GATE
+  const [chapterTopics, setChapterTopics] = useState({}); // { chapterKey → Topic[] }
+  const [userProgress,  setUserProgress]  = useState({});
+  const [searchTerm,    setSearchTerm]    = useState("");
+  const [sortBy,        setSortBy]        = useState("default");
+  const [isLoading,     setIsLoading]     = useState(true);
+  const [showMobileOptions, setShowMobileOptions] = useState(false);
   const [activeSubject, setActiveSubject] = useState(formattedSubject || "");
 
-  // Properly encode category to handle hyphens and special characters
-  const encodedCategory = category ? encodeURIComponent(category.toUpperCase()) : '';
-  const apiEndpoint = `/api/allsubtopics?category=${encodedCategory}`;
-  const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsInVzZXJuYW1lIjoiZXhhbXBsZVVzZXIiLCJpYXQiOjE3MzYyMzM2NDZ9.YMTSQxYuzjd3nD3GlZXO6zjjt1kqfUmXw7qdy-C2RD8";
-  
-  // Cache refresh interval (every 5 minutes - reduced frequency)
-  const cacheRefreshInterval = useRef(null);
-  
-  // Client-side cache key
-  const cacheKey = useMemo(() => `subjects-${category}`, [category]);
-  const chaptersCacheKey = useMemo(() => `chapters-${category}-${subject}`, [category, subject]);
+  const searchInputRef    = useRef(null);
+  const fetchInFlightRef  = useRef(false); // prevent duplicate concurrent fetches
 
-  // Update activeSubject when URL parameter changes
+  // ── Cache keys (stable) ──────────────────────────────────────────────────────
+  const cacheKeyContent  = `content-${category}-${subject}`;          // chapters+topics OR gate subjects
+  const cacheKeyProgress = `progress-${user?.id}-${category}`;
+
+  // ── Sync activeSubject when URL changes ──────────────────────────────────────
   useEffect(() => {
-    const newSubject = formattedSubject || "";
-    setActiveSubject(newSubject);
-  }, [subject, formattedSubject, decodedSubject]);
+    setActiveSubject(formattedSubject || "");
+  }, [formattedSubject]);
 
-// Updated fetchUserProgress function with caching
-const fetchUserProgress = useCallback(
-  async (userId) => {
-    if (!userId || !category) {
-      return;
-    }
-    
-    const progressCacheKey = `user-progress-${userId}-${category}`;
-    
-    try {
-      // Use cached data if available (2 minute TTL for user progress)
-      const cachedProgress = await getCachedData(
-        progressCacheKey,
-        async () => {
-          const { data: progressData, error } = await supabase
-            .from("user_progress")
-            .select("topic, completedquestions, correctanswers, points")
-            .eq("user_id", userId)
-            .eq("area", category?.toLowerCase())
-            .limit(100);
+  // ============================================================================
+  // DATA FETCHING
+  // ============================================================================
 
-          if (error) throw error;
-
-          // Convert to map with camelCase field names for UI consistency
-          const progressMap = {};
-          progressData?.forEach((item) => {
-            progressMap[item.topic] = {
-              completedQuestions: item.completedquestions || [],
-              correctAnswers: item.correctanswers || [],
-              points: item.points || 0,
-            };
-          });
-          return progressMap;
-        },
-        2 * 60 * 1000 // 2 minutes TTL
-      );
-      
-      setUserProgress(cachedProgress || {});
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error("Error fetching user progress:", error);
-      }
-      setUserProgress({});
-    }
-  },
-  [category]
-);
-
-
-
-  // Fetch chapters for non-GATE exams
-  const fetchChapters = useCallback(
+  /**
+   * GATE exams — single API call returns all subtopics.
+   */
+  const fetchGateData = useCallback(
     async (forceRefresh = false) => {
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
       setIsLoading(true);
-      
-      try {
-        if (forceRefresh) {
-          invalidateCache(chaptersCacheKey);
-        }
 
-        const encodedCategory = encodeURIComponent(category?.toUpperCase() || '');
-        const encodedSubject = subject ? encodeURIComponent(subject) : '';
-        const apiUrl = `/api/chapters/by-subject?category=${encodedCategory}&subject=${encodedSubject}`;
-        
-        const chaptersData = await getCachedData(
-          chaptersCacheKey,
-          async () => {
-            const response = await fetch(apiUrl);
-            if (!response.ok) {
-              throw new Error(`Failed to fetch chapters: ${response.status}`);
-            }
-            const result = await response.json();
-            return result.success ? (result.data?.chapters || []) : [];
-          },
-          5 * 60 * 1000 // 5 minutes TTL
-        );
-        
-        setChapters(chaptersData || []);
-        
-        // Fetch topics for each chapter to calculate progress (async, non-blocking)
-        if (chaptersData && chaptersData.length > 0) {
-          const topicsMap = {};
-          // Fetch topics for all chapters in parallel
-          const topicPromises = chaptersData.map(async (chapter) => {
-            try {
-              const chapterSlug = chapter.slug || chapter.title.toLowerCase().replace(/\s+/g, "-");
-              const topicsUrl = `/api/topics/by-chapter?category=${encodedCategory}&subject=${encodedSubject}&chapter=${encodeURIComponent(chapterSlug)}`;
-              const topicsResponse = await fetch(topicsUrl);
-              if (topicsResponse.ok) {
-                const topicsResult = await topicsResponse.json();
-                if (topicsResult.success) {
-                  return { chapterKey: chapter.slug || chapter.title, topics: topicsResult.data?.topics || [] };
-                }
-              }
-            } catch (err) {
-              // Silently fail for individual chapters
-            }
-            return { chapterKey: chapter.slug || chapter.title, topics: [] };
-          });
-          
-          const topicsResults = await Promise.all(topicPromises);
-          topicsResults.forEach(({ chapterKey, topics }) => {
-            topicsMap[chapterKey] = topics;
-          });
-          setChapterTopics(topicsMap);
-        }
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error("Error fetching chapters:", error);
-        }
-        setChapters([]);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [category, subject, chaptersCacheKey]
-  );
-
-  // Fetch subjects/topics data for GATE exams (old version)
-  const fetchData = useCallback(
-    async (forceRefresh = false) => {
-      setIsLoading(true);
-      
       try {
-        // Invalidate cache if force refresh
-        if (forceRefresh) {
-          invalidateCache(cacheKey);
-        }
-        
-        // Use cached data or fetch fresh
+        if (forceRefresh) invalidateCache(cacheKeyContent);
+
         const subjectsData = await getCachedData(
-          cacheKey,
+          cacheKeyContent,
           async () => {
-            const response = await fetch(apiEndpoint, {
-              method: "GET",
-              headers: { 
-                Authorization: `Bearer ${token}`,
-                'Cache-Control': 'max-age=300' // 5 minutes browser cache
-              },
-            });
-            
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new Error(`Failed to fetch data: ${response.status} ${errorText}`);
-            }
-            
-            const responseData = await response.json();
-            return responseData.subjectsData || [];
+            const res = await fetch(
+              `/api/allsubtopics?category=${encodedCategory}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${API_TOKEN}`,
+                  "Cache-Control": "max-age=600",
+                },
+              }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const json = await res.json();
+            return json.subjectsData || [];
           },
-          5 * 60 * 1000 // 5 minutes TTL
+          TTL_CONTENT
         );
-        
+
         setData(subjectsData || []);
-      } catch (error) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error("Error fetching data:", error);
-        }
-        // Set fallback data only in development
-        if (process.env.NODE_ENV === 'development') {
-          const fallbackData = [
-            { subject: "Compiler Design", subtopics: [{ title: "lexical-analysis", count: 19 }, { title: "parsing", count: 82 }] },
-            { subject: "Theory of Computation", subtopics: [{ title: "finite-automata", count: 73 }, { title: "turing-machine", count: 13 }] },
-          ];
-          setData(fallbackData);
-        }
+      } catch (err) {
+        if (process.env.NODE_ENV === "development") console.error("fetchGateData:", err);
       } finally {
         setIsLoading(false);
+        fetchInFlightRef.current = false;
       }
     },
-    [apiEndpoint, token, cacheKey]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cacheKeyContent, encodedCategory]
   );
 
-  // Google Sign-In with Supabase
-  // const handleGoogleSignIn = useCallback(async () => {
-  //   try {
-  //     const { data, error } = await supabase.auth.signInWithOAuth({
-  //       provider: "google",
-  //       options: { redirectTo: window.location.origin },
-  //     });
-  //     if (error) throw error;
-  //     setShowAuthModal(false);
-  //     toast.success("Successfully signed in!");
-  //   } catch (error) {
-  //     toast.error("Authentication failed");
-  //     console.error(error);
-  //   }
-  // }, []);
+  /**
+   * Non-GATE exams — single call to /api/chapters/with-topics
+   * which returns chapters + embedded topics from ONE Supabase query.
+   */
+  const fetchChaptersWithTopics = useCallback(
+    async (forceRefresh = false) => {
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
+      setIsLoading(true);
 
-  // Memoized calculations
-  const totalQuestions = useMemo(() => 
-    data.reduce((acc, subject) => 
-      acc + (subject.subtopics || []).reduce((sum, topic) => 
-        sum + (topic.count || 0), 0), 0), 
-    [data]
-  );
-  
-  const allSubtopics = useMemo(() => 
-    data.flatMap((subject) => 
-      (subject.subtopics || []).map((topic) => ({ 
-        ...topic, 
-        parentSubject: subject.subject, 
-        uniqueId: `${subject.subject}-${topic.title}` 
-      }))), 
-    [data]
-  );
-  
-  const filteredAndSortedTopics = useMemo(() => {
-    let topics = [];
-    
-    if (activeSubject) {
-      // Try exact match first
-      let foundSubject = data.find((s) => s.subject === activeSubject);
-      
-      // If not found, try case-insensitive match
-      if (!foundSubject) {
-        foundSubject = data.find((s) => 
-          s.subject.toLowerCase() === activeSubject.toLowerCase()
+      try {
+        if (forceRefresh) invalidateCache(cacheKeyContent);
+
+        const cached = await getCachedData(
+          cacheKeyContent,
+          async () => {
+            const url = `/api/chapters/with-topics?category=${encodedCategory}&subject=${encodedSubject}`;
+            const res = await fetch(url);
+
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(`HTTP ${res.status}: ${text}`);
+            }
+
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || "API error");
+
+            const chapters = json.data?.chapters || [];
+
+            // Build topicsMap from the embedded topics array on each chapter
+            const topicsMap = Object.fromEntries(
+              chapters.map((ch) => [ch.slug || ch.title, ch.topics || []])
+            );
+
+            return { chapters, topicsMap };
+          },
+          TTL_CONTENT
         );
+
+        setChapters(cached.chapters || []);
+        setChapterTopics(cached.topicsMap || {});
+      } catch (err) {
+        if (process.env.NODE_ENV === "development")
+          console.error("fetchChaptersWithTopics:", err);
+        setChapters([]);
+        setChapterTopics({});
+      } finally {
+        setIsLoading(false);
+        fetchInFlightRef.current = false;
       }
-      
-      // If still not found, try matching with normalized formatting (handle hyphens, spaces, etc.)
-      if (!foundSubject) {
-        const normalize = (str) => str.toLowerCase().replace(/[-\s]/g, '');
-        foundSubject = data.find((s) => 
-          normalize(s.subject) === normalize(activeSubject)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cacheKeyContent, encodedCategory, encodedSubject]
+  );
+
+  /**
+   * User progress — single Supabase query, cached.
+   */
+  const fetchUserProgress = useCallback(
+    async (userId) => {
+      if (!userId || !category) return;
+
+      try {
+        const progressMap = await getCachedData(
+          cacheKeyProgress,
+          async () => {
+            const { data: rows, error } = await supabase
+              .from("user_progress")
+              .select("topic, completedquestions, correctanswers, points")
+              .eq("user_id", userId)
+              .eq("area", category.toLowerCase())
+              .limit(500); // reasonable upper bound
+
+            if (error) throw error;
+
+            const map = {};
+            rows?.forEach((row) => {
+              map[row.topic] = {
+                completedQuestions: row.completedquestions || [],
+                correctAnswers:     row.correctanswers    || [],
+                points:             row.points            || 0,
+              };
+            });
+            return map;
+          },
+          TTL_PROGRESS
         );
+
+        setUserProgress(progressMap || {});
+      } catch (err) {
+        if (process.env.NODE_ENV === "development") console.error("fetchUserProgress:", err);
+        setUserProgress({});
       }
-      
-      if (foundSubject && foundSubject.subtopics) {
-        topics = foundSubject.subtopics.map((t) => ({ 
-          ...t, 
-          parentSubject: foundSubject.subject, 
-          uniqueId: `${foundSubject.subject}-${t.title}` 
-        }));
-      } else {
-        // Fallback to all topics if subject not found
-        topics = allSubtopics;
-      }
-    } else {
-      topics = allSubtopics;
-    }
-
-    if (searchTerm) {
-      topics = topics.filter((t) => 
-        t.title.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    const sorted = topics.sort((a, b) => {
-      const aCompleted = userProgress[a.title]?.completedQuestions?.length || 0;
-      const bCompleted = userProgress[b.title]?.completedQuestions?.length || 0;
-      const aTotal = a.count || 1;
-      const bTotal = b.count || 1;
-      
-      switch (sortBy) {
-        case "progress": 
-          return (bCompleted / bTotal) - (aCompleted / aTotal);
-        case "remaining": 
-          return (bTotal - bCompleted) - (aTotal - aCompleted);
-        default: 
-          return activeSubject 
-            ? a.title.localeCompare(b.title) 
-            : a.parentSubject.localeCompare(b.parentSubject) || a.title.localeCompare(b.title);
-      }
-    });
-    
-    return sorted;
-  }, [activeSubject, allSubtopics, searchTerm, sortBy, userProgress, data]);
-
-// Calculate chapter progress for non-GATE exams
-const chapterProgress = useMemo(() => {
-  if (isGateExam) return {};
-  
-  const progressMap = {};
-  chapters.forEach(chapter => {
-    const chapterKey = chapter.slug || chapter.title;
-    const topics = chapterTopics[chapterKey] || [];
-    
-    // Calculate progress from topics in this chapter
-    const totalQuestions = topics.reduce((sum, topic) => sum + (topic.count || 0), 0);
-    const completedQuestions = topics.reduce((sum, topic) => {
-      const topicProgress = userProgress[topic.title];
-      return sum + (topicProgress?.completedQuestions?.length || 0);
-    }, 0);
-    const correctAnswers = topics.reduce((sum, topic) => {
-      const topicProgress = userProgress[topic.title];
-      return sum + (topicProgress?.correctAnswers?.length || 0);
-    }, 0);
-    
-    const completedTopics = topics.filter(topic => {
-      const topicProgress = userProgress[topic.title];
-      return topicProgress && (topicProgress.completedQuestions?.length || 0) > 0;
-    }).length;
-    
-    progressMap[chapterKey] = {
-      totalQuestions: totalQuestions || chapter.count || 0,
-      completedQuestions,
-      correctAnswers,
-      completedTopics,
-      totalTopics: topics.length,
-      progressPercentage: (totalQuestions || chapter.count || 0) ? Math.round((completedQuestions / (totalQuestions || chapter.count || 0)) * 100) : 0,
-      accuracy: completedQuestions > 0 ? Math.round((correctAnswers / completedQuestions) * 100) : 0,
-      isCompleted: topics.length > 0 && completedTopics === topics.length && topics.length > 0
-    };
-  });
-  
-  return progressMap;
-}, [chapters, chapterTopics, userProgress, isGateExam]);
-
-// Updated progress calculation with correct field names
-const progress = useMemo(() => {
-  if (isGateExam) {
-    // GATE exam progress (topics-based)
-  const totalTopics = allSubtopics.length;
-  const completedTopics = Object.keys(userProgress).filter(
-    (t) => (userProgress[t].completedQuestions?.length || 0) > 0
-  );
-  
-  const totalCompletedQuestions = Object.values(userProgress).reduce(
-    (acc, t) => acc + (t.completedQuestions?.length || 0), 0
-  );
-  
-  const totalCorrectAnswers = Object.values(userProgress).reduce(
-    (acc, t) => acc + (t.correctAnswers?.length || 0), 0
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cacheKeyProgress, category]
   );
 
-  return {
-    completedCount: completedTopics.length,
-    completionPercentage: totalTopics ? Math.round((completedTopics.length / totalTopics) * 100) : 0,
-    totalCompletedQuestions,
-    totalCorrectAnswers,
-    questionCompletionPercentage: totalQuestions ? Math.round((totalCompletedQuestions / totalQuestions) * 100) : 0,
-    accuracy: totalCompletedQuestions > 0 ? Math.round((totalCorrectAnswers / totalCompletedQuestions) * 100) : 0
-  };
-  } else {
-    // Non-GATE exam progress (chapters-based)
-    const totalChapters = chapters.length;
-    const completedChapters = chapters.filter(chapter => {
-      const chapterKey = chapter.slug || chapter.title;
-      const progress = chapterProgress[chapterKey];
-      return progress && progress.isCompleted;
-    }).length;
-    
-    const totalQuestions = chapters.reduce((sum, chapter) => {
-      const chapterKey = chapter.slug || chapter.title;
-      const progress = chapterProgress[chapterKey];
-      return sum + (progress?.totalQuestions || chapter.count || 0);
-    }, 0);
-    
-    const totalCompletedQuestions = chapters.reduce((sum, chapter) => {
-      const chapterKey = chapter.slug || chapter.title;
-      const progress = chapterProgress[chapterKey];
-      return sum + (progress?.completedQuestions || 0);
-    }, 0);
-    
-    const totalCorrectAnswers = chapters.reduce((sum, chapter) => {
-      const chapterKey = chapter.slug || chapter.title;
-      const progress = chapterProgress[chapterKey];
-      return sum + (progress?.correctAnswers || 0);
-    }, 0);
-
-    return {
-      completedCount: completedChapters,
-      completionPercentage: totalChapters ? Math.round((completedChapters / totalChapters) * 100) : 0,
-      totalCompletedQuestions,
-      totalCorrectAnswers,
-      questionCompletionPercentage: totalQuestions ? Math.round((totalCompletedQuestions / totalQuestions) * 100) : 0,
-      accuracy: totalCompletedQuestions > 0 ? Math.round((totalCorrectAnswers / totalCompletedQuestions) * 100) : 0
-    };
-  }
-}, [allSubtopics, userProgress, totalQuestions, isGateExam, chapters, chapterProgress]);
-
-  // Filtered chapters for non-GATE exams
-  const filteredAndSortedChapters = useMemo(() => {
-    if (isGateExam) return [];
-    
-    let filtered = chapters;
-    
-    if (searchTerm) {
-      filtered = filtered.filter((chapter) =>
-        chapter.title.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    const sorted = filtered.sort((a, b) => {
-      const aProgress = chapterProgress[a.slug || a.title] || {};
-      const bProgress = chapterProgress[b.slug || b.title] || {};
-      
-      switch (sortBy) {
-        case "progress": 
-          return (bProgress.progressPercentage || 0) - (aProgress.progressPercentage || 0);
-        case "remaining": 
-          return ((aProgress.totalQuestions || 0) - (aProgress.completedQuestions || 0)) - ((bProgress.totalQuestions || 0) - (bProgress.completedQuestions || 0));
-        default: 
-          return a.title.localeCompare(b.title);
-      }
-    });
-    
-    return sorted;
-  }, [chapters, searchTerm, sortBy, chapterProgress, isGateExam]);
-
-  // Effect to fetch data when component mounts or category/subject changes
+  // ── Mount / category+subject change ─────────────────────────────────────────
   useEffect(() => {
     if (isGateExam) {
-      // For GATE exams, fetch topics (old behavior)
-    fetchData(false);
-    cacheRefreshInterval.current = setInterval(() => {
-      fetchData(true);
-      }, 5 * 60 * 1000);
+      fetchGateData(false);
     } else {
-      // For non-GATE exams, fetch chapters
-      fetchChapters(false);
-      cacheRefreshInterval.current = setInterval(() => {
-        fetchChapters(true);
-      }, 5 * 60 * 1000);
+      fetchChaptersWithTopics(false);
     }
-    
-    // Cleanup interval on unmount
-    return () => {
-      if (cacheRefreshInterval.current) {
-        clearInterval(cacheRefreshInterval.current);
-      }
-    };
-  }, [fetchData, fetchChapters, isGateExam]);
+    // No polling interval — rely on stale cache + manual refresh button
+  }, [isGateExam, fetchGateData, fetchChaptersWithTopics]);
 
-  // Effect to fetch user progress when user changes
+  // ── User change ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (user?.id) {
-  // {console.log(user)}
-
       fetchUserProgress(user.id);
     } else {
-      // Clear progress when user logs out
       setUserProgress({});
     }
-  }, [user, fetchUserProgress]);
+  }, [user?.id, fetchUserProgress]);
 
-  // Keyboard shortcuts
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────────
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "/") {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
       if (e.key === "Escape" && searchTerm) setSearchTerm("");
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [searchTerm]);
 
+  // ── Manual refresh ───────────────────────────────────────────────────────────
+  const handleRefresh = useCallback(() => {
+    if (isGateExam) fetchGateData(true);
+    else fetchChaptersWithTopics(true);
+  }, [isGateExam, fetchGateData, fetchChaptersWithTopics]);
 
+  // ============================================================================
+  // DERIVED DATA (memos)
+  // ============================================================================
+
+  const totalQuestionCount = useMemo(
+    () =>
+      data.reduce(
+        (acc, s) =>
+          acc + (s.subtopics || []).reduce((sum, t) => sum + (t.count || 0), 0),
+        0
+      ),
+    [data]
+  );
+
+  const allSubtopics = useMemo(
+    () =>
+      data.flatMap((s) =>
+        (s.subtopics || []).map((t) => ({
+          ...t,
+          parentSubject: s.subject,
+          uniqueId: `${s.subject}-${t.title}`,
+        }))
+      ),
+    [data]
+  );
+
+  // ── GATE: filtered + sorted topics ──────────────────────────────────────────
+  const filteredAndSortedTopics = useMemo(() => {
+    if (!isGateExam) return [];
+
+    let topics = [];
+
+    if (activeSubject) {
+      const normalize = (str) => str.toLowerCase().replace(/[-\s]/g, "");
+      const found = data.find(
+        (s) =>
+          s.subject === activeSubject ||
+          s.subject.toLowerCase() === activeSubject.toLowerCase() ||
+          normalize(s.subject) === normalize(activeSubject)
+      );
+      topics = found
+        ? (found.subtopics || []).map((t) => ({
+            ...t,
+            parentSubject: found.subject,
+            uniqueId: `${found.subject}-${t.title}`,
+          }))
+        : allSubtopics;
+    } else {
+      topics = allSubtopics;
+    }
+
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      topics = topics.filter((t) => t.title.toLowerCase().includes(lower));
+    }
+
+    // Immutable sort — never mutate source array
+    return [...topics].sort((a, b) => {
+      const aComp = userProgress[a.title]?.completedQuestions?.length || 0;
+      const bComp = userProgress[b.title]?.completedQuestions?.length || 0;
+      const aTotal = a.count || 1;
+      const bTotal = b.count || 1;
+
+      switch (sortBy) {
+        case "progress":
+          return bComp / bTotal - aComp / aTotal;
+        case "remaining":
+          return (bTotal - bComp) - (aTotal - aComp);
+        default:
+          return activeSubject
+            ? a.title.localeCompare(b.title)
+            : a.parentSubject.localeCompare(b.parentSubject) ||
+                a.title.localeCompare(b.title);
+      }
+    });
+  }, [isGateExam, activeSubject, allSubtopics, searchTerm, sortBy, userProgress, data]);
+
+  // ── Non-GATE: chapter progress map ──────────────────────────────────────────
+  const chapterProgressMap = useMemo(() => {
+    if (isGateExam) return {};
+
+    const map = {};
+    chapters.forEach((chapter) => {
+      const key    = chapter.slug || chapter.title;
+      const topics = chapterTopics[key] || [];
+
+      const totalQ     = topics.reduce((s, t) => s + (t.count || 0), 0);
+      const completedQ = topics.reduce((s, t) => {
+        return s + (userProgress[t.title]?.completedQuestions?.length || 0);
+      }, 0);
+      const correctA   = topics.reduce((s, t) => {
+        return s + (userProgress[t.title]?.correctAnswers?.length || 0);
+      }, 0);
+      const completedTopicsCount = topics.filter(
+        (t) => (userProgress[t.title]?.completedQuestions?.length || 0) > 0
+      ).length;
+
+      const effectiveTotal = totalQ || chapter.count || 0;
+
+      map[key] = {
+        totalQuestions:      effectiveTotal,
+        completedQuestions:  completedQ,
+        correctAnswers:      correctA,
+        completedTopics:     completedTopicsCount,
+        totalTopics:         topics.length,
+        progressPercentage:  effectiveTotal ? Math.round((completedQ / effectiveTotal) * 100) : 0,
+        accuracy:            completedQ > 0 ? Math.round((correctA / completedQ) * 100) : 0,
+        isCompleted:
+          topics.length > 0 &&
+          completedTopicsCount === topics.length,
+      };
+    });
+    return map;
+  }, [chapters, chapterTopics, userProgress, isGateExam]);
+
+  // ── Non-GATE: filtered + sorted chapters ────────────────────────────────────
+  const filteredAndSortedChapters = useMemo(() => {
+    if (isGateExam) return [];
+
+    let filtered = searchTerm
+      ? chapters.filter((ch) =>
+          ch.title.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : chapters;
+
+    return [...filtered].sort((a, b) => {
+      const ap = chapterProgressMap[a.slug || a.title] || {};
+      const bp = chapterProgressMap[b.slug || b.title] || {};
+
+      switch (sortBy) {
+        case "progress":
+          return (bp.progressPercentage || 0) - (ap.progressPercentage || 0);
+        case "remaining":
+          return (
+            (ap.totalQuestions || 0) - (ap.completedQuestions || 0) -
+            ((bp.totalQuestions || 0) - (bp.completedQuestions || 0))
+          );
+        default:
+          return a.title.localeCompare(b.title);
+      }
+    });
+  }, [isGateExam, chapters, searchTerm, sortBy, chapterProgressMap]);
+
+  // ── Aggregate progress for sidebar / snapshot ────────────────────────────────
+  const aggregateProgress = useMemo(() => {
+    if (isGateExam) {
+      const totalTopics    = allSubtopics.length;
+      const completedTopics = Object.keys(userProgress).filter(
+        (k) => (userProgress[k].completedQuestions?.length || 0) > 0
+      ).length;
+      const totalDone    = Object.values(userProgress).reduce(
+        (s, t) => s + (t.completedQuestions?.length || 0), 0
+      );
+      const totalCorrect = Object.values(userProgress).reduce(
+        (s, t) => s + (t.correctAnswers?.length || 0), 0
+      );
+
+      return {
+        completedCount:              completedTopics,
+        completionPercentage:        totalTopics ? Math.round((completedTopics / totalTopics) * 100) : 0,
+        totalCompletedQuestions:     totalDone,
+        totalCorrectAnswers:         totalCorrect,
+        questionCompletionPercentage: totalQuestionCount
+          ? Math.round((totalDone / totalQuestionCount) * 100)
+          : 0,
+        accuracy: totalDone > 0 ? Math.round((totalCorrect / totalDone) * 100) : 0,
+      };
+    }
+
+    // Non-GATE
+    const totalChapters     = chapters.length;
+    const completedChapters = chapters.filter((ch) => {
+      const p = chapterProgressMap[ch.slug || ch.title];
+      return p?.isCompleted;
+    }).length;
+
+    const totalQ     = chapters.reduce((s, ch) => s + (chapterProgressMap[ch.slug || ch.title]?.totalQuestions || ch.count || 0), 0);
+    const completedQ = chapters.reduce((s, ch) => s + (chapterProgressMap[ch.slug || ch.title]?.completedQuestions || 0), 0);
+    const correctA   = chapters.reduce((s, ch) => s + (chapterProgressMap[ch.slug || ch.title]?.correctAnswers || 0), 0);
+
+    return {
+      completedCount:              completedChapters,
+      completionPercentage:        totalChapters ? Math.round((completedChapters / totalChapters) * 100) : 0,
+      totalCompletedQuestions:     completedQ,
+      totalCorrectAnswers:         correctA,
+      questionCompletionPercentage: totalQ ? Math.round((completedQ / totalQ) * 100) : 0,
+      accuracy: completedQ > 0 ? Math.round((correctA / completedQ) * 100) : 0,
+    };
+  }, [
+    isGateExam,
+    allSubtopics.length,
+    userProgress,
+    totalQuestionCount,
+    chapters,
+    chapterProgressMap,
+  ]);
+
+  // Total questions shown in snapshot
+  const snapshotTotalQuestions = useMemo(() => {
+    if (isGateExam) return totalQuestionCount;
+    return chapters.reduce(
+      (s, ch) => s + (chapterProgressMap[ch.slug || ch.title]?.totalQuestions || ch.count || 0),
+      0
+    );
+  }, [isGateExam, totalQuestionCount, chapters, chapterProgressMap]);
+
+  // ── SEO strings ──────────────────────────────────────────────────────────────
+  const categoryLabel = category
+    ?.replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // ============================================================================
+  // RENDER HELPERS
+  // ============================================================================
+
+  const ProgressSidebar = (
+    <div className="sticky top-24 bg-white rounded-2xl shadow-sm border border-neutral-200 p-5">
+      <h3 className="text-lg font-medium text-neutral-900 mb-4">
+        {category?.toUpperCase()} Tracker
+      </h3>
+      {user ? (
+        <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
+          <h4 className="text-sm font-semibold text-neutral-800 mb-3">Progress</h4>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span>{isGateExam ? "Topics" : "Chapters"}</span>
+                <span>{aggregateProgress.completionPercentage}%</span>
+              </div>
+              <div className="w-full bg-neutral-200 rounded-full h-2">
+                <div
+                  className="bg-neutral-900 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${aggregateProgress.completionPercentage}%` }}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                {isGateExam ? "Topics" : "Chapters"}:{" "}
+                {aggregateProgress.completedCount}/
+                {isGateExam ? allSubtopics.length : chapters.length}
+              </div>
+              <div>Questions: {aggregateProgress.totalCompletedQuestions}/{snapshotTotalQuestions}</div>
+              <div>Correct: {aggregateProgress.totalCorrectAnswers}</div>
+              <div>Accuracy: {aggregateProgress.accuracy}%</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
+          <h4 className="text-sm font-medium text-neutral-800 mb-2">Track Your Progress</h4>
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="w-full py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 transition duration-150"
+          >
+            Sign In
+          </button>
+        </div>
+      )}
+      <div className="mt-2 rounded-2xl bg-neutral-50 border border-neutral-200 p-4">
+        <h4 className="text-sm font-semibold text-neutral-900 mb-2">Practice tools</h4>
+        <p className="text-xs text-neutral-600 leading-relaxed">
+          Use search + sorting above the grid to quickly find what to practice next.
+        </p>
+      </div>
+    </div>
+  );
+
+  // ── Loading screen ───────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="min-h-screen bg-neutral-50">
-        <Suspense fallback={<div>Loading metadata...</div>}>
+        <Suspense fallback={null}>
           <MetaDataJobs
-            seoTitle={`${category?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} Practice Tracker`}
-            seoDescription={`Practice ${category?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} PYQs Topic-Wise Chapter-Wise Date-Wise questions with detailed solutions.`}
+            seoTitle={`${categoryLabel} Practice Tracker`}
+            seoDescription={`Practice ${categoryLabel} PYQs Topic-Wise Chapter-Wise.`}
           />
         </Suspense>
         <Navbar />
         <div className="flex justify-center items-center min-h-[60vh] pt-20 px-4">
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }} 
-            animate={{ scale: 1, opacity: 1 }} 
-            transition={{ duration: 0.5 }} 
-            className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-neutral-200 flex items-center space-x-3 sm:space-x-6 max-w-md w-full"
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.4 }}
+            className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-neutral-200 flex items-center space-x-4 max-w-md w-full"
           >
-            <div className="w-6 h-6 sm:w-12 sm:h-12 rounded-full border-4 border-t-indigo-600 border-indigo-100 animate-spin flex-shrink-0"></div>
-            <div className="min-w-0">
-              <h3 className="text-base sm:text-xl font-medium text-neutral-900 mb-1">Loading your dashboard</h3>
-              <p className="text-xs sm:text-sm text-neutral-600">Please wait a moment...</p>
+            <div className="w-10 h-10 rounded-full border-4 border-t-indigo-600 border-indigo-100 animate-spin flex-shrink-0" />
+            <div>
+              <h3 className="text-base sm:text-xl font-medium text-neutral-900 mb-1">
+                Loading your dashboard
+              </h3>
+              <p className="text-xs sm:text-sm text-neutral-600">Please wait a moment…</p>
             </div>
           </motion.div>
         </div>
@@ -580,26 +600,30 @@ const progress = useMemo(() => {
     );
   }
 
+  // ── Main render ──────────────────────────────────────────────────────────────
   return (
     <ErrorBoundary>
-      <Suspense fallback={<div>Loading metadata...</div>}>
+      <Suspense fallback={null}>
         <MetaDataJobs
-          seoTitle={`${category?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} Practice Tracker`}
-          seoDescription={`Practice ${category?.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())} PYQs Topic-Wise Chapter-Wise Date-Wise questions with detailed solutions.`}
+          seoTitle={`${categoryLabel} Practice Tracker`}
+          seoDescription={`Practice ${categoryLabel} PYQs Topic-Wise Chapter-Wise Date-Wise questions with detailed solutions.`}
         />
       </Suspense>
-      <Suspense fallback={<div>Loading navbar...</div>}>
-        <Navbar/>
+      <Suspense fallback={null}>
+        <Navbar />
       </Suspense>
+
       <div className="min-h-screen bg-neutral-50 pt-20 pb-24 md:pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
-          {/* Subject hero */}
+
+          {/* ── Hero ─────────────────────────────────────────────────────────── */}
           <section className="mb-6 sm:mb-8 border-b border-neutral-200 pb-5 sm:pb-6 bg-white rounded-3xl shadow-sm">
             <div className="relative overflow-hidden rounded-3xl">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(0,0,0,0.04),transparent_55%),radial-gradient(circle_at_80%_0%,rgba(0,0,0,0.03),transparent_55%)]" />
               <div className="relative px-4 sm:px-6 lg:px-8 py-5 sm:py-6">
                 <div className="flex flex-col gap-5 lg:grid lg:grid-cols-12 lg:items-start">
-                  {/* Left: title + actions */}
+
+                  {/* Left */}
                   <div className="lg:col-span-7 min-w-0">
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200">
                       <span className="text-[11px] font-semibold text-neutral-700">
@@ -610,45 +634,42 @@ const progress = useMemo(() => {
                       {formattedSubject || `${category?.toUpperCase()} practice`}
                     </h1>
                     <p className="mt-2 text-sm sm:text-base text-neutral-600 max-w-xl leading-relaxed">
-                      Stay on one clean dashboard for this subject: track progress, practice PYQs, run topic tests and attempt mocks without hopping between pages.
+                      Stay on one clean dashboard for this subject: track progress, practice
+                      PYQs, run topic tests and attempt mocks without hopping between pages.
                     </p>
 
-                    {/* Quick actions */}
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          const el = document.getElementById("practice-grid");
-                          el?.scrollIntoView({ behavior: "smooth", block: "start" });
-                        }}
+                        onClick={() =>
+                          document
+                            .getElementById("practice-grid")
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                        }
                         className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 text-white px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold hover:bg-neutral-800 transition-colors"
                       >
                         <BookOpen className="w-4 h-4" />
                         Start practice
                         <ArrowRight className="w-4 h-4" />
                       </button>
+
                       <button
                         type="button"
-                        onClick={() => (isGateExam ? fetchData(true) : fetchChapters(true))}
+                        onClick={handleRefresh}
                         disabled={isLoading}
                         className="inline-flex items-center gap-2 rounded-xl bg-white border border-neutral-300 text-neutral-800 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold hover:bg-neutral-50 disabled:opacity-50 transition-colors"
                         aria-label="Refresh data"
                       >
                         <svg
                           className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                          />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
-                        {isLoading ? "Refreshing..." : "Refresh"}
+                        Refresh
                       </button>
+
                       <button
                         type="button"
                         onClick={() => setShowMobileOptions(true)}
@@ -656,45 +677,34 @@ const progress = useMemo(() => {
                         aria-label="Show options and progress"
                       >
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-                          />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                         </svg>
-                        Options & progress
+                        Options &amp; progress
                       </button>
                     </div>
                   </div>
 
-                  {/* Right: compact stats */}
+                  {/* Right: snapshot */}
                   <div className="lg:col-span-5">
                     <div className="rounded-2xl border border-neutral-200 bg-white/80 backdrop-blur p-4 sm:p-5">
                       <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">
                         Snapshot
                       </p>
                       <div className="grid grid-cols-3 gap-2 sm:gap-3 text-xs sm:text-sm text-neutral-700">
-                        <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2">
-                          <p className="text-base sm:text-lg font-semibold text-neutral-900">
-                            {isGateExam ? allSubtopics.length : chapters.length}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-neutral-600">
-                            {isGateExam ? "Topics" : "Chapters"}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2">
-                          <p className="text-base sm:text-lg font-semibold text-neutral-900">
-                            {totalQuestions}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-neutral-600">Questions</p>
-                        </div>
-                        <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2">
-                          <p className="text-base sm:text-lg font-semibold text-neutral-900">
-                            {progress.completionPercentage}%
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-neutral-600">Completed</p>
-                        </div>
+                        {[
+                          {
+                            value: isGateExam ? allSubtopics.length : chapters.length,
+                            label: isGateExam ? "Topics" : "Chapters",
+                          },
+                          { value: snapshotTotalQuestions, label: "Questions" },
+                          { value: `${aggregateProgress.completionPercentage}%`, label: "Completed" },
+                        ].map(({ value, label }) => (
+                          <div key={label} className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2">
+                            <p className="text-base sm:text-lg font-semibold text-neutral-900">{value}</p>
+                            <p className="mt-0.5 text-[11px] text-neutral-600">{label}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -703,88 +713,36 @@ const progress = useMemo(() => {
             </div>
           </section>
 
+          {/* ── Body ─────────────────────────────────────────────────────────── */}
           <div className="flex flex-col md:flex-row md:space-x-8">
+
+            {/* Sidebar (desktop) */}
             <div className="hidden md:block w-64 flex-shrink-0">
-              <div className="sticky top-24 bg-white rounded-2xl shadow-sm border border-neutral-200 p-5">
-                <h3 className="text-lg font-medium text-neutral-900 mb-4">{category?.toUpperCase()} Tracker</h3>
-                {user ? (
-                  <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
-                    <h4 className="text-sm font-semibold text-neutral-800 mb-3">Progress</h4>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span>{isGateExam ? "Topics" : "Chapters"}</span>
-                          <span>{progress.completionPercentage}%</span>
-                        </div>
-                        <div className="w-full bg-neutral-200 rounded-full h-2">
-                          <div 
-                            className="bg-neutral-900 h-2 rounded-full" 
-                            style={{ width: `${progress.completionPercentage}%` }} 
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        {isGateExam ? (
-                          <>
-                        <div>Topics: {progress.completedCount}/{allSubtopics.length}</div>
-                        <div>Questions: {progress.totalCompletedQuestions}/{totalQuestions}</div>
-                        <div>Correct: {progress.totalCorrectAnswers}</div>
-                        <div>Accuracy: {progress.accuracy}%</div>
-                          </>
-                        ) : (
-                          <>
-                            <div>Chapters: {progress.completedCount}/{chapters.length}</div>
-                            <div>Questions: {progress.totalCompletedQuestions}/{chapters.reduce((sum, c) => {
-                              const chapterKey = c.slug || c.title;
-                              const chapterProg = chapterProgress[chapterKey];
-                              return sum + (chapterProg?.totalQuestions || c.count || 0);
-                            }, 0)}</div>
-                            <div>Correct: {progress.totalCorrectAnswers}</div>
-                            <div>Accuracy: {progress.accuracy}%</div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
-                    <h4 className="text-sm font-medium text-neutral-800 mb-2">Track Your Progress</h4>
-                    <button 
-                      onClick={() => setShowAuthModal(true)} 
-                      className="w-full py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 transition duration-150"
-                    >
-                      Sign In
-                    </button>
-                  </div>
-                )}
-                <div className="mt-2 rounded-2xl bg-neutral-50 border border-neutral-200 p-4">
-                  <h4 className="text-sm font-semibold text-neutral-900 mb-2">Practice tools</h4>
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Use search + sorting above the grid to quickly find what to practice next.
-                  </p>
-                </div>
-              </div>
+              {ProgressSidebar}
             </div>
 
+            {/* Mobile options drawer */}
             <AnimatePresence>
               {showMobileOptions && (
-                <motion.div 
-                  className="fixed inset-0 bg-black bg-opacity-50 z-50 md:hidden" 
-                  initial={{ opacity: 0 }} 
-                  animate={{ opacity: 1 }} 
+                <motion.div
+                  className="fixed inset-0 bg-black bg-opacity-50 z-50 md:hidden"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
+                  onClick={() => setShowMobileOptions(false)}
                 >
-                  <motion.div 
-                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4 pb-8 border-t border-neutral-200" 
-                    initial={{ y: "100%" }} 
-                    animate={{ y: 0 }} 
-                    exit={{ y: "100%" }} 
+                  <motion.div
+                    className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4 pb-8 border-t border-neutral-200"
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
                     transition={{ type: "spring", damping: 25 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-lg font-medium text-neutral-900">Options</h3>
-                      <button 
-                        onClick={() => setShowMobileOptions(false)} 
+                      <button
+                        onClick={() => setShowMobileOptions(false)}
                         className="text-neutral-500"
                         aria-label="Close options"
                       >
@@ -793,6 +751,8 @@ const progress = useMemo(() => {
                         </svg>
                       </button>
                     </div>
+
+                    {/* Reuse same sidebar content */}
                     {user ? (
                       <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
                         <h4 className="text-sm font-semibold text-neutral-800 mb-3">Progress</h4>
@@ -800,66 +760,50 @@ const progress = useMemo(() => {
                           <div>
                             <div className="flex justify-between text-sm mb-1">
                               <span>{isGateExam ? "Topics" : "Chapters"}</span>
-                              <span>{progress.completionPercentage}%</span>
+                              <span>{aggregateProgress.completionPercentage}%</span>
                             </div>
                             <div className="w-full bg-neutral-200 rounded-full h-2">
-                              <div 
-                                className="bg-neutral-900 h-2 rounded-full" 
-                                style={{ width: `${progress.completionPercentage}%` }} 
+                              <div
+                                className="bg-neutral-900 h-2 rounded-full"
+                                style={{ width: `${aggregateProgress.completionPercentage}%` }}
                               />
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-2 text-sm">
-                            {isGateExam ? (
-                              <>
-                            <div>Topics: {progress.completedCount}/{allSubtopics.length}</div>
-                            <div>Questions: {progress.totalCompletedQuestions}/{totalQuestions}</div>
-                            <div>Correct: {progress.totalCorrectAnswers}</div>
-                            <div>Accuracy: {progress.accuracy}%</div>
-                              </>
-                            ) : (
-                              <>
-                                <div>Chapters: {progress.completedCount}/{chapters.length}</div>
-                                <div>Questions: {progress.totalCompletedQuestions}/{chapters.reduce((sum, c) => {
-                                  const chapterKey = c.slug || c.title;
-                                  const chapterProg = chapterProgress[chapterKey];
-                                  return sum + (chapterProg?.totalQuestions || c.count || 0);
-                                }, 0)}</div>
-                                <div>Correct: {progress.totalCorrectAnswers}</div>
-                                <div>Accuracy: {progress.accuracy}%</div>
-                              </>
-                            )}
+                            <div>
+                              {isGateExam ? "Topics" : "Chapters"}: {aggregateProgress.completedCount}/
+                              {isGateExam ? allSubtopics.length : chapters.length}
+                            </div>
+                            <div>Questions: {aggregateProgress.totalCompletedQuestions}/{snapshotTotalQuestions}</div>
+                            <div>Correct: {aggregateProgress.totalCorrectAnswers}</div>
+                            <div>Accuracy: {aggregateProgress.accuracy}%</div>
                           </div>
                         </div>
                       </div>
                     ) : (
                       <div className="mb-6 bg-neutral-50 rounded-2xl p-4 border border-neutral-200">
                         <h4 className="text-sm font-medium text-neutral-800 mb-2">Track Your Progress</h4>
-                        <button 
-                          onClick={() => { 
-                            setShowAuthModal(true); 
-                            setShowMobileOptions(false); 
-                          }} 
+                        <button
+                          onClick={() => { setShowAuthModal(true); setShowMobileOptions(false); }}
                           className="w-full py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800 transition duration-150"
                         >
                           Sign In
                         </button>
                       </div>
                     )}
+
                     <div>
                       <h4 className="text-sm font-medium text-neutral-500 uppercase mb-3">Sort Options</h4>
                       <div className="space-y-1">
                         {["default", "progress", "remaining"].map((option) => (
-                          <button 
-                            key={option} 
+                          <button
+                            key={option}
                             className={`w-full text-left px-3 py-2 rounded-xl transition ${
-                              sortBy === option ? "bg-neutral-100 text-neutral-900" : "text-neutral-700 hover:bg-neutral-100"
-                            }`} 
-                            onClick={() => { 
-                              setSortBy(option); 
-                              setShowMobileOptions(false); 
-                            }}
-                            aria-label={`Sort by ${option}`}
+                              sortBy === option
+                                ? "bg-neutral-100 text-neutral-900"
+                                : "text-neutral-700 hover:bg-neutral-100"
+                            }`}
+                            onClick={() => { setSortBy(option); setShowMobileOptions(false); }}
                             aria-pressed={sortBy === option}
                           >
                             Sort by {option.charAt(0).toUpperCase() + option.slice(1)}
@@ -872,27 +816,29 @@ const progress = useMemo(() => {
               )}
             </AnimatePresence>
 
+            {/* Main content */}
             <div className="md:flex-1">
+              {/* Search + sort bar */}
               <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 sm:p-6 mb-4 sm:mb-6">
                 <div className="flex flex-col gap-4">
-                  {/* Title + quick reset */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h2 className="text-lg sm:text-xl font-semibold text-neutral-900 tracking-tight truncate">
                         {activeSubject || "All Subjects"}
                       </h2>
                       <p className="text-xs sm:text-sm text-neutral-500 mt-1">
-                        Showing <span className="font-semibold text-neutral-800">{isGateExam ? filteredAndSortedTopics.length : filteredAndSortedChapters.length}</span>{" "}
+                        Showing{" "}
+                        <span className="font-semibold text-neutral-800">
+                          {isGateExam
+                            ? filteredAndSortedTopics.length
+                            : filteredAndSortedChapters.length}
+                        </span>{" "}
                         {isGateExam ? "topics" : "chapters"}
                       </p>
                     </div>
-
                     <button
                       type="button"
-                      onClick={() => {
-                        setSearchTerm("");
-                        setSortBy("default");
-                      }}
+                      onClick={() => { setSearchTerm(""); setSortBy("default"); }}
                       className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
                       aria-label="Reset search and sort"
                     >
@@ -901,27 +847,27 @@ const progress = useMemo(() => {
                     </button>
                   </div>
 
-                  {/* Search + sort */}
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    {/* Search */}
                     <div className="relative sm:max-w-xs w-full">
-                      <svg className="h-5 w-5 text-neutral-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-5 w-5 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
                       <input
+                        ref={searchInputRef}
                         type="text"
                         placeholder={`Search ${isGateExam ? "topics" : "chapters"} (Ctrl + /)`}
-                        className="pl-10 pr-10 sm:pr-4 py-2.5 w-full border border-neutral-300 rounded-xl focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 text-sm sm:text-base bg-white"
+                        className="pl-10 pr-10 py-2.5 w-full border border-neutral-300 rounded-xl focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 text-sm bg-white"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        ref={searchInputRef}
-                        aria-label="Search topics or chapters"
+                        aria-label="Search"
                       />
                       {searchTerm && (
                         <button
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2"
                           onClick={() => setSearchTerm("")}
                           aria-label="Clear search"
-                          type="button"
                         >
                           <svg className="h-5 w-5 text-neutral-400 hover:text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -930,314 +876,240 @@ const progress = useMemo(() => {
                       )}
                     </div>
 
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs sm:text-sm font-semibold text-neutral-600 whitespace-nowrap">
-                          Sort
-                        </p>
-
-                        <div className="inline-flex bg-neutral-100 p-1 rounded-2xl">
-                          {["default", "progress", "remaining"].map((option) => (
-                            <button
-                              key={option}
-                              type="button"
-                              onClick={() => setSortBy(option)}
-                              className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors ${
-                                sortBy === option
-                                  ? "bg-neutral-900 text-white"
-                                  : "text-neutral-700 hover:bg-neutral-200"
-                              }`}
-                              aria-label={`Sort by ${option}`}
-                              aria-pressed={sortBy === option}
-                            >
-                              {option === "default"
-                                ? "Default"
-                                : option === "progress"
-                                  ? "Progress"
-                                  : "Remaining"}
-                            </button>
-                          ))}
-                        </div>
+                    {/* Sort toggle */}
+                    <div className="flex-1 flex items-center justify-between gap-3">
+                      <p className="text-xs sm:text-sm font-semibold text-neutral-600 whitespace-nowrap">Sort</p>
+                      <div className="inline-flex bg-neutral-100 p-1 rounded-2xl">
+                        {["default", "progress", "remaining"].map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => setSortBy(option)}
+                            className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors ${
+                              sortBy === option
+                                ? "bg-neutral-900 text-white"
+                                : "text-neutral-700 hover:bg-neutral-200"
+                            }`}
+                            aria-pressed={sortBy === option}
+                          >
+                            {option === "default" ? "Default" : option === "progress" ? "Progress" : "Remaining"}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <Suspense fallback={<div>Loading alert...</div>}>
-                <Alert 
-                  type="info" 
-                  message="We update our question bank daily. Found an issue? Report it — we'll fix it within 48 hrs!" 
-                  linkText="Learn More" 
-                  linkHref="https://10tracker.com/about-us" 
-                  dismissible={true} 
+              <Suspense fallback={null}>
+                <Alert
+                  type="info"
+                  message="We update our question bank daily. Found an issue? Report it — we'll fix it within 48 hrs!"
+                  linkText="Learn More"
+                  linkHref="https://10tracker.com/about-us"
+                  dismissible
                 />
               </Suspense>
 
-              {/* Render chapters for non-GATE exams, topics for GATE exams */}
-              {!isGateExam ? (
-                // Chapters view for non-GATE exams - matching topic card style
-                <div
-                  id="practice-grid"
-                  className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
-                >
-                  {filteredAndSortedChapters.map((chapter) => {
-                    const chapterSlug = chapter.slug || chapter.title.toLowerCase().replace(/\s+/g, "-");
-                    const chapterKey = chapter.slug || chapter.title;
-                    const progress = chapterProgress[chapterKey] || {
-                      totalQuestions: chapter.count || 0,
-                      completedQuestions: 0,
-                      correctAnswers: 0,
-                      completedTopics: 0,
-                      totalTopics: 0,
-                      progressPercentage: 0,
-                      accuracy: 0,
-                      isCompleted: false
-                    };
-                    
-                    const completedCount = progress.completedQuestions || 0;
-                    const totalQuestions = progress.totalQuestions || chapter.count || 0;
-                    const progressPercentage = totalQuestions ? Math.round((completedCount / totalQuestions) * 100) : 0;
-                    const isCompleted = progress.isCompleted;
-                    const accuracyPercentage = progress.accuracy || 0;
-                    
-                    return (
-                      <motion.div
-                        key={chapter.slug || chapter.title}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.2 }}
-                        className={`group bg-white rounded-2xl shadow-sm border ${
-                          isCompleted ? "border-green-200" : completedCount > 0 ? "border-neutral-300" : "border-neutral-200"
-                        } hover:shadow-lg hover:border-neutral-300 transition-all duration-200`}
-                      >
-                        <div className="p-4 sm:p-5">
-                          <div className="flex items-start justify-between gap-3 mb-3">
-                            <div className="min-w-0">
-                              <h3 className="text-base sm:text-lg font-semibold text-neutral-900 line-clamp-2 leading-snug">
-                                {chapter.title}
-                              </h3>
-                              <div className="text-xs sm:text-sm text-neutral-500 mt-0.5 truncate">
-                                {chapter.subject || formattedSubject}
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                              {isCompleted ? (
-                                <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
-                                  Completed
-                                </span>
-                              ) : completedCount > 0 ? (
-                                <span className="bg-neutral-100 text-neutral-800 text-xs px-2.5 py-0.5 rounded-full">
-                                  In progress
-                                </span>
-                              ) : (
-                                <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 text-xs px-2.5 py-0.5 rounded-full">
-                                  New
-                                </span>
-                              )}
+              {/* ── Grid ─────────────────────────────────────────────────────── */}
+              <div id="practice-grid" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+                {isGateExam
+                  ? filteredAndSortedTopics.map((topic) => {
+                      const tp           = userProgress[topic.title] || { completedQuestions: [], correctAnswers: [], points: 0 };
+                      const completedCnt = tp.completedQuestions?.length || 0;
+                      const correctCnt   = tp.correctAnswers?.length    || 0;
+                      const pct          = topic.count ? Math.round((completedCnt / topic.count) * 100) : 0;
+                      const done         = completedCnt === topic.count && topic.count > 0;
+                      const accuracy     = completedCnt > 0 ? Math.round((correctCnt / completedCnt) * 100) : 0;
 
-                              <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-center min-w-[64px]">
-                                <p className="text-sm font-semibold text-neutral-900 tabular-nums">
-                                  {progressPercentage}%
-                                </p>
-                                <p className="text-[10px] text-neutral-500">done</p>
+                      return (
+                        <TopicCard
+                          key={topic.uniqueId}
+                          title={topic.title.replace(/-/g, " ")}
+                          subtitle={topic.parentSubject}
+                          completedCount={completedCnt}
+                          totalCount={topic.count}
+                          progressPercentage={pct}
+                          isCompleted={done}
+                          accuracy={accuracy}
+                          href={`/${category}/practice/${topic.title}`}
+                          extra={
+                            completedCnt > 0 && (
+                              <div className="flex flex-wrap gap-2 text-xs text-neutral-600">
+                                <Pill label="Points" value={tp.points} />
+                                <Pill label="Correct" value={correctCnt} />
                               </div>
-                            </div>
-                          </div>
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between text-sm text-neutral-700">
-                              <span className="truncate">{completedCount} of {totalQuestions} questions</span>
-                              <span className="tabular-nums text-neutral-600">Accuracy {accuracyPercentage}%</span>
-                            </div>
-                            <div className="w-full bg-neutral-200 rounded-full h-2">
-                              <div
-                                className={`h-2 rounded-full ${
-                                  isCompleted ? "bg-green-500" : completedCount > 0 ? "bg-neutral-800" : "bg-neutral-300"
-                                }`}
-                                style={{ width: `${progressPercentage}%` }}
-                              />
-                            </div>
-                            {completedCount > 0 && (
+                            )
+                          }
+                        />
+                      );
+                    })
+                  : filteredAndSortedChapters.map((chapter) => {
+                      const chapterKey = chapter.slug || chapter.title;
+                      const cp         = chapterProgressMap[chapterKey] || {
+                        totalQuestions: chapter.count || 0,
+                        completedQuestions: 0, correctAnswers: 0,
+                        completedTopics: 0, totalTopics: 0,
+                        progressPercentage: 0, accuracy: 0, isCompleted: false,
+                      };
+                      const chapterSlug = chapter.slug || chapter.title.toLowerCase().replace(/\s+/g, "-");
+
+                      return (
+                        <TopicCard
+                          key={chapterKey}
+                          title={chapter.title}
+                          subtitle={chapter.subject || formattedSubject}
+                          completedCount={cp.completedQuestions}
+                          totalCount={cp.totalQuestions || chapter.count || 0}
+                          progressPercentage={cp.progressPercentage}
+                          isCompleted={cp.isCompleted}
+                          accuracy={cp.accuracy}
+                          detailsHref={`/${category}/${subject}/${chapterSlug}`}
+                          href={`/${category}/${subject}/${chapterSlug}/practice`}
+                          extra={
+                            cp.completedQuestions > 0 && (
                               <div className="flex items-center justify-between text-xs text-neutral-500">
-                                <span className="tabular-nums">Correct: {progress.correctAnswers || 0}</span>
-                                <span className="tabular-nums">Topics: {progress.completedTopics}/{progress.totalTopics}</span>
+                                <span>Correct: {cp.correctAnswers}</span>
+                                <span>Topics: {cp.completedTopics}/{cp.totalTopics}</span>
                               </div>
-                            )}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                              <Link
-                                href={`/${category}/${subject}/${chapterSlug}`}
-                                className="block text-center py-2 rounded-xl border border-neutral-300 text-neutral-800 hover:bg-neutral-50 transition-colors duration-150 font-semibold"
-                              >
-                                Details
-                              </Link>
-                              <Link
-                                href={`/${category}/${subject}/${chapterSlug}/practice`}
-                                className={`block text-center py-2 rounded-xl border ${
-                                  isCompleted
-                                    ? "border-green-300 text-green-800 hover:bg-green-50"
-                                    : "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800 hover:border-neutral-800"
-                                } transition-colors duration-150 font-medium`}
-                              >
-                                {completedCount > 0 ? "Resume" : "Start"} practice
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              ) : (
-                // Topics view for GATE exams (existing code)
-              <div
-                id="practice-grid"
-                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
-              >
-              {/* // Updated topic card rendering with correct field names */}
-{filteredAndSortedTopics.map((topic) => {
-  const topicProgress = userProgress[topic.title] || { 
-    completedQuestions: [], 
-    correctAnswers: [], 
-    points: 0 
-  };
-  const completedCount = topicProgress.completedQuestions?.length || 0;
-  const correctCount = topicProgress.correctAnswers?.length || 0;
-  const progressPercentage = topic.count ? Math.round((completedCount / topic.count) * 100) : 0;
-  const isCompleted = completedCount === topic.count && topic.count > 0;
-  const accuracyPercentage = completedCount > 0 ? Math.round((correctCount / completedCount) * 100) : 0;
-
-                  return (
-                    <motion.div
-                      key={topic.uniqueId}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.2 }}
-                      className={`group bg-white rounded-2xl shadow-sm border ${
-                        isCompleted ? "border-green-200" : completedCount > 0 ? "border-neutral-300" : "border-neutral-200"
-                      } hover:shadow-lg hover:border-neutral-300 transition-all duration-200`}
-                    >
-                      <div className="p-4 sm:p-5">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                        <h3 className="text-base sm:text-lg font-semibold text-neutral-900 line-clamp-2 leading-snug">
-                          {topic.title.replace(/-/g, " ")}
-                        </h3>
-                        <div className="text-xs sm:text-sm text-neutral-500 mt-0.5">{topic.parentSubject}</div>
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            {isCompleted ? (
-                              <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">
-                                Completed
-                              </span>
-                            ) : completedCount > 0 ? (
-                              <span className="bg-neutral-100 text-neutral-800 text-xs px-2.5 py-0.5 rounded-full">
-                                In progress
-                              </span>
-                            ) : (
-                              <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 text-xs px-2.5 py-0.5 rounded-full">
-                                New
-                              </span>
-                            )}
-
-                            <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-center min-w-[64px]">
-                              <p className="text-sm font-semibold text-neutral-900 tabular-nums">
-                                {progressPercentage}%
-                              </p>
-                              <p className="text-[10px] text-neutral-500">done</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-3">
-                          <div className="flex justify-between text-sm">
-                            <span>{completedCount} of {topic.count} questions</span>
-                            <span className="text-neutral-600 tabular-nums">Accuracy {accuracyPercentage}%</span>
-                          </div>
-                          <div className="w-full bg-neutral-200 rounded-full h-2">
-                            <div
-                              className={`h-2 rounded-full ${
-                                isCompleted ? "bg-green-500" : completedCount > 0 ? "bg-neutral-800" : "bg-neutral-300"
-                              }`}
-                              style={{ width: `${progressPercentage}%` }}
-                            />
-                          </div>
-                          {completedCount > 0 && (
-                            <div className="flex flex-wrap gap-2 text-xs text-neutral-600">
-                              <span className="inline-flex items-center rounded-full bg-neutral-50 border border-neutral-200 px-2.5 py-1">
-                                Points <span className="ml-1 font-semibold text-neutral-900 tabular-nums">{topicProgress.points}</span>
-                              </span>
-                              <span className="inline-flex items-center rounded-full bg-neutral-50 border border-neutral-200 px-2.5 py-1">
-                                Correct <span className="ml-1 font-semibold text-neutral-900 tabular-nums">{correctCount}</span>
-                              </span>
-                            </div>
-                          )}
-                          <a
-                            href={`/${category}/practice/${topic.title}`}
-                            className={`block text-center py-2 rounded-xl border ${
-                              isCompleted 
-                                ? "border-green-300 text-green-800 hover:bg-green-50" 
-                                : "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800 hover:border-neutral-800"
-                            } transition-colors duration-150 font-medium`}
-                          >
-                            {completedCount > 0 ? "Resume" : "Start"} practice
-                          </a>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                            )
+                          }
+                        />
+                      );
+                    })}
               </div>
-              )}
 
-              {((isGateExam && filteredAndSortedTopics.length === 0) || (!isGateExam && filteredAndSortedChapters.length === 0)) && (
-                <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center border border-neutral-200">
-                  <svg className="h-10 w-10 sm:h-12 sm:w-12 text-neutral-400 mx-auto mb-3 sm:mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              {/* Empty state */}
+              {((isGateExam && filteredAndSortedTopics.length === 0) ||
+                (!isGateExam && filteredAndSortedChapters.length === 0)) && (
+                <div className="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center border border-neutral-200 mt-4">
+                  <svg className="h-10 w-10 text-neutral-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <h3 className="text-base sm:text-lg font-medium text-neutral-900 mb-2">
                     {isGateExam ? "No topics found" : "No chapters found"}
                   </h3>
-                  <p className="text-sm sm:text-base text-neutral-500 mb-4">
-                    {searchTerm 
-                      ? `No ${isGateExam ? 'topics' : 'chapters'} match "${searchTerm}"` 
-                      : activeSubject 
-                        ? `No ${isGateExam ? 'topics' : 'chapters'} found for "${activeSubject}"` 
-                        : `No ${isGateExam ? 'topics' : 'chapters'} available`}
+                  <p className="text-sm text-neutral-500">
+                    {searchTerm
+                      ? `No ${isGateExam ? "topics" : "chapters"} match "${searchTerm}"`
+                      : activeSubject
+                        ? `No ${isGateExam ? "topics" : "chapters"} found for "${activeSubject}"`
+                        : `No ${isGateExam ? "topics" : "chapters"} available`}
                   </p>
-                  {/* Debug info in development */}
-                  {process.env.NODE_ENV === 'development' && (
-                    <div className="mt-4 p-4 bg-neutral-50 rounded-lg text-left text-xs">
-                      <p className="font-semibold mb-2">Debug Info:</p>
-                      <p>Data length: {data.length}</p>
-                      <p>All subtopics: {allSubtopics.length}</p>
-                      <p>Active subject: {activeSubject || "None"}</p>
-                      <p>Available subjects: {data.map(s => s.subject).join(", ") || "None"}</p>
-                      <p>Is loading: {isLoading ? "Yes" : "No"}</p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
 
+        {/* Mobile FAB */}
         <div className="md:hidden fixed bottom-6 right-6 z-30">
-          <button 
-            onClick={() => setShowMobileOptions(true)} 
-            className="h-14 w-14 rounded-full bg-white text-neutral-800 border border-neutral-300 shadow-md flex items-center justify-center hover:bg-neutral-50" 
+          <button
+            onClick={() => setShowMobileOptions(true)}
+            className="h-14 w-14 rounded-full bg-white text-neutral-800 border border-neutral-300 shadow-md flex items-center justify-center hover:bg-neutral-50"
             aria-label="Show options"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>
           </button>
         </div>
 
-        {/* Auth modal will only be shown when explicitly triggered elsewhere */}
-        
         <Toaster position="bottom-right" />
       </div>
     </ErrorBoundary>
   );
 };
+
+// =============================================================================
+// Sub-components (extracted to avoid re-renders of the whole list)
+// =============================================================================
+
+const statusBadge = (isCompleted, completedCount) => {
+  if (isCompleted)      return <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full">Completed</span>;
+  if (completedCount > 0) return <span className="bg-neutral-100 text-neutral-800 text-xs px-2.5 py-0.5 rounded-full">In progress</span>;
+  return <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 text-xs px-2.5 py-0.5 rounded-full">New</span>;
+};
+
+const TopicCard = React.memo(({
+  title, subtitle,
+  completedCount, totalCount,
+  progressPercentage, isCompleted, accuracy,
+  href, detailsHref,
+  extra,
+}) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ duration: 0.2 }}
+    className={`group bg-white rounded-2xl shadow-sm border ${
+      isCompleted ? "border-green-200" : completedCount > 0 ? "border-neutral-300" : "border-neutral-200"
+    } hover:shadow-lg hover:border-neutral-300 transition-all duration-200`}
+  >
+    <div className="p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <h3 className="text-base sm:text-lg font-semibold text-neutral-900 line-clamp-2 leading-snug">
+            {title}
+          </h3>
+          <div className="text-xs sm:text-sm text-neutral-500 mt-0.5 truncate">{subtitle}</div>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          {statusBadge(isCompleted, completedCount)}
+          <div className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-center min-w-[64px]">
+            <p className="text-sm font-semibold text-neutral-900 tabular-nums">{progressPercentage}%</p>
+            <p className="text-[10px] text-neutral-500">done</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-sm text-neutral-700">
+          <span>{completedCount} of {totalCount} questions</span>
+          <span className="tabular-nums text-neutral-600">Accuracy {accuracy}%</span>
+        </div>
+        <div className="w-full bg-neutral-200 rounded-full h-2">
+          <div
+            className={`h-2 rounded-full transition-all duration-500 ${
+              isCompleted ? "bg-green-500" : completedCount > 0 ? "bg-neutral-800" : "bg-neutral-300"
+            }`}
+            style={{ width: `${progressPercentage}%` }}
+          />
+        </div>
+        {extra}
+        <div className={`grid gap-2 pt-1 ${detailsHref ? "grid-cols-2" : "grid-cols-1"}`}>
+          {detailsHref && (
+            <Link
+              href={detailsHref}
+              className="block text-center py-2 rounded-xl border border-neutral-300 text-neutral-800 hover:bg-neutral-50 transition-colors duration-150 font-semibold text-sm"
+            >
+              Details
+            </Link>
+          )}
+          <Link
+            href={href}
+            className={`block text-center py-2 rounded-xl border text-sm ${
+              isCompleted
+                ? "border-green-300 text-green-800 hover:bg-green-50"
+                : "border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800"
+            } transition-colors duration-150 font-medium`}
+          >
+            {completedCount > 0 ? "Resume" : "Start"} practice
+          </Link>
+        </div>
+      </div>
+    </div>
+  </motion.div>
+));
+TopicCard.displayName = "TopicCard";
+
+const Pill = React.memo(({ label, value }) => (
+  <span className="inline-flex items-center rounded-full bg-neutral-50 border border-neutral-200 px-2.5 py-1">
+    {label} <span className="ml-1 font-semibold text-neutral-900 tabular-nums">{value}</span>
+  </span>
+));
+Pill.displayName = "Pill";
 
 export default React.memo(Examtracker);
