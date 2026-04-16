@@ -23,7 +23,7 @@ import { NextResponse } from "next/server";
  *   importantFacts: string[] | null  // special extraction for blockquote list
  * }
  */
-export function parseArticle(html, url = "") {
+function parseArticle(html, url = "") {
   const $ = cheerio.load(html);
 
   // Remove social share box — we don't want it

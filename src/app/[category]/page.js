@@ -1,1167 +1,1043 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, {
+  useState, useEffect, useCallback, useMemo, memo,
+} from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  BookOpen, Search, Clock, Target, Zap, 
-  Grid3X3, List, Play, X, ChevronDown, AlertCircle,
-  ClipboardCheck, ArrowRight
+import toast, { Toaster } from 'react-hot-toast';
+import {
+  BookOpen, Search, Target, Zap,
+  Grid3X3, Play, X, ChevronDown, AlertCircle,
+  ClipboardCheck, ArrowRight, ArrowUp,
 } from 'lucide-react';
 import MetaDataJobs from '@/components/Seo';
 import Navbar from '@/components/Navbar';
 
-// Client-side cache configuration
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const CACHE_KEY_PREFIX = 'category_data_';
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-// Debounce utility function
-const useDebounce = (value, delay) => {
-  const [debouncedValue, setDebouncedValue] = useState(value);
+const CACHE_VERSION    = 'v2';
+const CACHE_TTL_MS     = 10 * 60 * 1000;
+const SEARCH_DEBOUNCE  = 200;
+const CACHE_PREFIX     = `et_${CACHE_VERSION}_`;
+const FETCH_TIMEOUT_MS = 15_000;
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
+// ─── Cache helpers ────────────────────────────────────────────────────────────
 
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-};
-
-// Cache utility functions
-const getCachedData = (key) => {
+function readCache(key) {
   if (typeof window === 'undefined') return null;
   try {
-    const cached = sessionStorage.getItem(key);
-    if (!cached) return null;
-    const { data, timestamp } = JSON.parse(cached);
-    if (Date.now() - timestamp > CACHE_TTL) {
-      sessionStorage.removeItem(key);
-      return null;
-    }
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL_MS) { sessionStorage.removeItem(key); return null; }
     return data;
-  } catch (error) {
-    return null;
-  }
-};
+  } catch { return null; }
+}
 
-const setCachedData = (key, data) => {
+function writeCache(key, data) {
   if (typeof window === 'undefined') return;
   try {
-    sessionStorage.setItem(key, JSON.stringify({
-      data,
-      timestamp: Date.now()
-    }));
-  } catch (error) {
-    // Storage quota exceeded or other error
-    console.warn('Failed to cache data:', error);
+    sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+  } catch {
+    try {
+      const keys = Object.keys(sessionStorage).filter(k => k.startsWith(CACHE_PREFIX));
+      if (keys.length) sessionStorage.removeItem(keys[0]);
+      sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() }));
+    } catch { /* give up */ }
   }
-};
+}
 
-// Optimized animation variants
-const cardVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { 
-    opacity: 1, 
-    y: 0,
-    transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] }
+// ─── Fetch helper ─────────────────────────────────────────────────────────────
+
+async function fetchData(url, signal) {
+  const res = await fetch(url, {
+    signal,
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  return json.subjectsData ?? [];
+}
+
+// ─── Debounce hook ────────────────────────────────────────────────────────────
+
+function useDebounce(value, delay) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
+// ─── Animation variants ───────────────────────────────────────────────────────
+
+const makeVariants = (reduced) => ({
+  card: {
+    hidden:  reduced ? { opacity: 0 } : { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } },
+    hover:   reduced ? {} : { y: -3, transition: { duration: 0.18 } },
   },
-  hover: { 
-    y: -4,
-    transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] }
-  }
-};
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      ease: [0.4, 0, 0.2, 1]
-    }
-  }
-};
-
-// Memoized Topic Card Component
-const TopicCard = React.memo(({ topic, category, index }) => {
-  // Memoize formatted strings
-  const formattedTitle = useMemo(() => 
-    topic?.title?.replace(/-/g, ' ') || 'Unknown Topic',
-    [topic?.title]
-  );
-  
-  const topicSlug = useMemo(() => 
-    topic?.title?.replace(/\s+/g, '-')?.toLowerCase() || 'default',
-    [topic?.title]
-  );
-  
-  const readingTime = useMemo(() => 
-    Math.ceil((topic?.count || 0) * 0.8),
-    [topic?.count]
-  );
-
-  return (
-    <motion.div
-      variants={cardVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
-      className="group bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200"
-    >
-      <div className="p-4 sm:p-5">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3 sm:mb-4">
-          <div className="flex-1 min-w-0 pr-2">
-            <h3 className="font-semibold text-neutral-900 text-sm sm:text-base leading-tight mb-1.5 sm:mb-2 line-clamp-2">
-              {formattedTitle}
-            </h3>
-            <div className="flex items-center text-xs sm:text-sm text-neutral-500">
-              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-              <span>{readingTime} min</span>
-            </div>
-          </div>
-          
-          <div className="ml-2 sm:ml-4 flex-shrink-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-neutral-100 rounded-lg flex items-center justify-center">
-              <span className="font-bold text-base sm:text-lg text-neutral-700">{topic?.count || 0}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Action */}
-        <a
-          href={`/${category}/practice/${topicSlug}`}
-          className="inline-flex items-center w-full justify-center px-3 sm:px-4 py-2 sm:py-2.5 border border-neutral-300 text-neutral-800 font-medium text-sm sm:text-base rounded-lg hover:bg-neutral-50 active:bg-neutral-100 transition-colors duration-150 touch-manipulation"
-        >
-          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-          Start practice
-        </a>
-      </div>
-    </motion.div>
-  );
+  container: {
+    hidden:  { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: reduced ? 0 : 0.07 } },
+  },
+  fade: {
+    hidden:  { opacity: 0 },
+    visible: { opacity: 1, transition: { duration: 0.25 } },
+  },
 });
 
-TopicCard.displayName = 'TopicCard';
+// ─── Utility ──────────────────────────────────────────────────────────────────
 
-// Memoized Subject Card Component
-const SubjectCard = React.memo(({ subject, category, index }) => {
-  const [expanded, setExpanded] = useState(false);
-  
-  // Memoize computed values
-  const subjectSlug = useMemo(() => 
-    subject?.subject?.replace(/\s+/g, '-')?.toLowerCase() || 'default',
-    [subject?.subject]
-  );
-  
-  const formattedSubject = useMemo(() => 
-    subject?.subject?.replace(/-/g, ' ') || 'Unknown Subject',
-    [subject?.subject]
-  );
-  
-  const totalQuestions = useMemo(() => 
-    subject?.subtopics?.reduce((sum, t) => sum + (t?.count || 0), 0) || 0,
-    [subject?.subtopics]
-  );
-  
-  const topicsCount = useMemo(() => 
-    subject?.subtopics?.length || 0,
-    [subject?.subtopics]
-  );
+const slugify   = (str) => (str ?? '').replace(/\s+/g, '-').toLowerCase();
+const unslug    = (str) => (str ?? '').replace(/-/g, ' ');
+const titleCase = (str) =>
+  (str ?? '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-  return (
-    <motion.div
-      variants={cardVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
-      className="bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200"
-    >
-      <div className="p-4 sm:p-6">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3 sm:mb-4">
-          <div className="flex-1 min-w-0 pr-2">
-            <h3 className="font-semibold text-neutral-900 text-lg sm:text-xl leading-tight mb-2 sm:mb-3 line-clamp-2">
-              {formattedSubject}
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
-              <div className="flex items-center text-xs sm:text-sm text-neutral-600">
-                <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-neutral-600 flex-shrink-0" />
-                <span className="font-medium">{topicsCount}</span>
-                <span className="ml-1">Topics</span>
-              </div>
-              <div className="flex items-center text-xs sm:text-sm text-neutral-600">
-                <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 text-neutral-600 flex-shrink-0" />
-                <span className="font-medium">{totalQuestions}</span>
-                <span className="ml-1">Questions</span>
-              </div>
-            </div>
-          </div>
-        </div>
+function getSubjectStats(subject) {
+  const topicsCount    = subject?.subtopics?.length ?? 0;
+  const questionsCount = subject?.subtopics?.reduce((s, t) => s + (t?.count ?? 0), 0) ?? 0;
+  return { topicsCount, questionsCount };
+}
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-          <a
-            href={`/${category}/${subjectSlug}`}
-            className="flex-1 inline-flex items-center justify-center px-3 sm:px-4 py-2 sm:py-2.5 border border-neutral-300 text-neutral-800 font-medium text-sm sm:text-base rounded-lg hover:bg-neutral-50 active:bg-neutral-100 transition-colors duration-150 touch-manipulation"
-          >
-            Explore Subject
-          </a>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="px-3 sm:px-4 py-2 sm:py-2.5 bg-neutral-100 text-neutral-700 font-medium text-sm sm:text-base rounded-lg hover:bg-neutral-200 active:bg-neutral-300 transition-colors duration-150 flex items-center justify-center touch-manipulation min-w-[44px] sm:min-w-[auto]"
-            aria-label={expanded ? 'Collapse topics' : 'Expand topics'}
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
+// ─── QuickStats ───────────────────────────────────────────────────────────────
 
-        {/* Expandable Topics */}
-        <AnimatePresence initial={false}>
-          {expanded && subject?.subtopics && subject.subtopics.length > 0 && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-              className="border-t border-neutral-200 pt-3 sm:pt-4 overflow-hidden"
-            >
-              <div className="space-y-2">
-                {subject.subtopics.map((subtopic, subIndex) => {
-                  const formattedSubtopic = subtopic?.title?.replace(/-/g, ' ') || 'Unknown Topic';
-                  return (
-                    <a
-                      key={subtopic?.title || subIndex}
-                      href={`/${category}/practice/${subtopic?.title || ''}`}
-                      className="flex items-center justify-between px-3 py-2 sm:py-2.5 rounded-lg border border-neutral-200 hover:bg-neutral-50 active:bg-neutral-100 transition-colors duration-150 touch-manipulation"
-                    >
-                      <span className="font-medium text-neutral-800 text-xs sm:text-sm line-clamp-1 pr-2">
-                        {formattedSubtopic}
-                      </span>
-                      <span className="bg-neutral-100 text-neutral-700 px-2 py-1 rounded-md text-xs font-bold min-w-[2rem] text-center flex-shrink-0">
-                        {subtopic?.count || 0}
-                      </span>
-                    </a>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
-  );
-});
+const QuickStats = memo(({ data }) => {
+  const { subjects, topics, questions } = useMemo(() => ({
+    subjects:  data.length,
+    topics:    data.reduce((s, sub) => s + (sub?.subtopics?.length ?? 0), 0),
+    questions: data.reduce((s, sub) =>
+      s + (sub?.subtopics?.reduce((ss, t) => ss + (t?.count ?? 0), 0) ?? 0), 0),
+  }), [data]);
 
-SubjectCard.displayName = 'SubjectCard';
-
-// Memoized Stats Component
-const QuickStats = React.memo(({ data }) => {
-  // Memoize computed stats
-  const totalTopics = useMemo(() => 
-    data.reduce((sum, subject) => sum + (subject?.subtopics?.length || 0), 0),
-    [data]
-  );
-  
-  const totalQuestions = useMemo(() => 
-    data.reduce((sum, subject) => 
-      sum + (subject?.subtopics?.reduce((subSum, topic) => subSum + (topic?.count || 0), 0) || 0), 0
-    ),
-    [data]
-  );
-
-  const stats = useMemo(() => [
-    { label: 'Subjects', value: data?.length || 0, icon: BookOpen, color: 'blue' },
-    { label: 'Topics', value: totalTopics, icon: Target, color: 'green' },
-    { label: 'Questions', value: totalQuestions, icon: Zap, color: 'purple' },
-  ], [data?.length, totalTopics, totalQuestions]);
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.1 }}
-      className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8"
-    >
-      {stats.map((stat, index) => {
-        const IconComponent = stat.icon;
-        return (
-          <div key={stat.label} className="bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-neutral-200 hover:shadow-md transition-shadow duration-200">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="text-xl sm:text-2xl font-bold text-neutral-900 mb-0.5 sm:mb-1">{stat.value}</div>
-                <div className="text-xs sm:text-sm font-medium text-neutral-600">{stat.label}</div>
-              </div>
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-neutral-100 flex items-center justify-center flex-shrink-0 ml-2">
-                <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-600" />
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </motion.div>
-  );
-});
-
-QuickStats.displayName = 'QuickStats';
-
-// Category hub: PYQs tracker, topic tests, mock tests, daily material
-const PracticePathCards = React.memo(({ category, onOpenPracticeTopics }) => {
-  const practiceSectionId = 'practice-content';
-  const examCategory = category || 'gate-cse';
-  const mockTestHref = `/mock-test/${examCategory}`;
-  const topicTestsHref = `/mock-test/${examCategory}?tab=tests`;
-  const dailyPracticeHref = `/${examCategory}/daily-practice`;
-
-  const cards = [
-    {
-      id: 'pyq-tracker',
-      href: `#${practiceSectionId}`,
-      title: 'Practice PYQs with tracker',
-      description: 'Solve past year questions with detailed solutions and smart tracking.',
-      icon: BookOpen,
-      badge: 'Recommended start',
-      onClick: () => onOpenPracticeTopics && onOpenPracticeTopics(),
-    },
-    {
-      id: 'topic-tests',
-      href: topicTestsHref,
-      title: 'Topic-wise tests',
-      description: 'Timed mini-tests focused on individual topics to fix weak areas.',
-      icon: Grid3X3,
-      badge: 'Speed + accuracy',
-    },
-    {
-      id: 'mock-tests',
-      href: mockTestHref,
-      title: 'Full mock tests',
-      description: 'Simulate the real exam with curated full-length tests and analytics.',
-      icon: ClipboardCheck,
-      badge: 'Exam simulation',
-    },
-    {
-      id: 'daily-practice',
-      href: dailyPracticeHref,
-      title: 'Daily practice material',
-      description: 'Curated questions, notes and revision lists for your daily study slot.',
-      icon: Target,
-      badge: 'Consistency',
-    },
+  const stats = [
+    { label: 'Subjects',  value: subjects,  icon: BookOpen },
+    { label: 'Topics',    value: topics,    icon: Target   },
+    { label: 'Questions', value: questions, icon: Zap      },
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: 0.05 }}
-      className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8"
-    >
-      {cards.map(({ id, href, title, description, icon: Icon, badge, onClick }) => (
-        <Link
-          key={id}
-          href={href}
-          className="group block bg-white rounded-xl shadow-sm border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all duration-200 p-4 sm:p-6 text-left"
-          onClick={onClick}
+    <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      {stats.map(({ label, value, icon: Icon }) => (
+        <div
+          key={label}
+          className="bg-white/70 backdrop-blur rounded-2xl p-3 sm:p-4 border border-neutral-200/80"
         >
-          <div className="flex items-start gap-3 sm:gap-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-200 transition-colors">
-              <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-neutral-700" />
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xl sm:text-2xl font-bold text-neutral-900 tabular-nums">
+                {value.toLocaleString()}
+              </p>
+              <p className="text-[11px] sm:text-xs font-medium text-neutral-500 mt-0.5">{label}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0">
+              <Icon className="w-4 h-4 text-neutral-600" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
+QuickStats.displayName = 'QuickStats';
+
+// ─── PracticePathCards ────────────────────────────────────────────────────────
+
+const PATH_CARDS = (category) => [
+  {
+    id: 'pyq',
+    href: '#practice-content',
+    title: 'Practice MCQs',
+    desc: 'Solve past year questions topic-wise with smart progress tracking.',
+    icon: BookOpen,
+    badge: 'Start here',
+    scroll: true,
+  },
+  {
+    id: 'topic-tests',
+    href: `/${category}`,
+    title: 'Topic-wise tests',
+    desc: 'Timed mini-tests to identify and fix weak areas fast.',
+    icon: Grid3X3,
+    badge: 'Accuracy',
+    comingSoon: true,
+  },
+  {
+    id: 'mock-tests',
+    href: `/mock-test/${category}`,
+    title: 'Full mock tests',
+    desc: 'Full-length simulated exams with detailed analytics.',
+    icon: ClipboardCheck,
+    badge: 'Simulate exam',
+    comingSoon: true,
+  },
+  {
+    id: 'daily',
+    href: `/${category}/daily-practice`,
+    title: 'Daily practice',
+    desc: 'Curated daily question sets for consistent revision.',
+    icon: Target,
+    badge: 'Consistency',
+    comingSoon: true,
+  },
+];
+
+const PracticePathCards = memo(({ category }) => {
+  const cards = useMemo(() => PATH_CARDS(category), [category]);
+
+  const notifyInProgress = useCallback((title) => {
+    toast(`${title} is in progress. Stay tuned!`, {
+      duration: 2600,
+      style: { borderRadius: '14px' },
+    });
+  }, []);
+
+  const handleScrollClick = useCallback((e) => {
+    e.preventDefault();
+    document.getElementById('practice-content')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+      {cards.map(({ id, href, title, desc, icon: Icon, badge, scroll, comingSoon }) => {
+        const className = "group flex items-start gap-3 sm:gap-4 bg-white rounded-2xl border border-neutral-200 p-4 sm:p-5 hover:border-neutral-300 hover:shadow-md transition-all duration-200";
+
+        const content = (
+          <>
+            <div className="w-10 h-10 rounded-xl bg-neutral-100 flex items-center justify-center flex-shrink-0 group-hover:bg-neutral-900 transition-colors duration-200">
+              <Icon className="w-5 h-5 text-neutral-700 group-hover:text-white transition-colors duration-200" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <h3 className="font-semibold text-neutral-900 text-base sm:text-lg line-clamp-2">
-                  {title}
-                </h3>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-semibold text-neutral-900 text-sm sm:text-base">{title}</span>
                 {badge && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-neutral-100 text-neutral-700">
+                  <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neutral-100 text-neutral-600">
                     {badge}
                   </span>
                 )}
               </div>
-              <p className="text-sm text-neutral-600 mb-3 sm:mb-4 line-clamp-3">
-                {description}
-              </p>
-              <span className="inline-flex items-center font-medium text-neutral-800 text-sm">
-                Explore <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
-              </span>
+              <p className="text-xs sm:text-sm text-neutral-500 leading-relaxed line-clamp-2">{desc}</p>
             </div>
-          </div>
-        </Link>
-      ))}
-    </motion.div>
+            <ArrowRight className="w-4 h-4 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-0.5 transition-all duration-200 flex-shrink-0 mt-0.5" />
+          </>
+        );
+
+        if (scroll) {
+          return (
+            <Link key={id} href={href} onClick={handleScrollClick} className={className}>
+              {content}
+            </Link>
+          );
+        }
+
+        if (comingSoon) {
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => notifyInProgress(title)}
+              className={className}
+            >
+              {content}
+            </button>
+          );
+        }
+
+        return (
+          <Link key={id} href={href} className={className}>
+            {content}
+          </Link>
+        );
+      })}
+    </div>
   );
 });
 PracticePathCards.displayName = 'PracticePathCards';
 
-// Memoized Search + View Toggle (compact, app-like)
-const SearchBar = React.memo(({ searchTerm, setSearchTerm }) => (
-  <div className="flex items-center gap-3">
-    <div className="relative flex-1">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-      <input
-        type="text"
-        placeholder="Search subjects…"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="w-full pl-9 pr-9 py-2.5 bg-white border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900 transition-colors text-sm"
-        aria-label="Search subjects"
-      />
-      {searchTerm && (
-        <button
-          type="button"
-          onClick={() => setSearchTerm('')}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition-colors flex items-center justify-center"
-          aria-label="Clear search"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-    </div>
-  </div>
-));
+// ─── SubjectCard (Mobile) ─────────────────────────────────────────────────────
+// Replaces the <tr> layout on small screens with a tappable card design.
 
-SearchBar.displayName = 'SearchBar';
-
-// Lightweight news & updates section (dummy content, per category)
-const NewsSection = React.memo(({ category }) => {
-  const normalized = (category || '').toUpperCase() || 'EXAM';
-  const items = [
-    {
-      id: 1,
-      title: `${normalized} strategy deep-dive coming soon`,
-      summary: 'We are preparing an in-depth strategy guide tailored to this exam. Stay tuned.',
-      tag: 'Guide',
-    },
-    {
-      id: 2,
-      title: 'Daily practice sets and revision lists',
-      summary: 'You will soon see curated daily sets here – PYQs, mixed-level questions and quick revisions.',
-      tag: 'Daily practice',
-    },
-    {
-      id: 3,
-      title: 'Exam notifications & important dates',
-      summary: 'This space will show official notifications, important dates and last-minute checklists.',
-      tag: 'Updates',
-    },
-  ];
+const SubjectCard = memo(({ subject, category }) => {
+  const [open, setOpen] = useState(false);
+  const { topicsCount, questionsCount } = useMemo(() => getSubjectStats(subject), [subject]);
+  const subjectName = subject?.subject ?? 'Unknown';
+  const subjectSlug = useMemo(() => slugify(subjectName), [subjectName]);
 
   return (
-    <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 sm:p-6 lg:p-7"
-      >
-        <div className="flex items-center justify-between mb-4 sm:mb-5">
-          <div>
-            <h2 className="text-lg sm:text-xl font-semibold text-neutral-900">News & updates</h2>
-            <p className="text-xs sm:text-sm text-neutral-500">
-              Placeholder updates for now – you can plug your live news feed here later.
-            </p>
+    <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden transition-shadow hover:shadow-sm">
+      {/* Card header */}
+      <div className="p-4 flex items-start gap-3">
+        {/* Expand toggle */}
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-label={open ? 'Collapse topics' : 'Expand topics'}
+          aria-expanded={open}
+          className="mt-0.5 w-7 h-7 rounded-lg bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center flex-shrink-0 transition-colors"
+        >
+          <ChevronDown
+            className={`w-3.5 h-3.5 text-neutral-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        {/* Subject info */}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-neutral-900 text-sm leading-tight">{subjectName}</p>
+          <div className="flex items-center gap-3 mt-1.5">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500">
+              <Target className="w-3 h-3" />
+              {topicsCount} topics
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500">
+              <Zap className="w-3 h-3" />
+              {questionsCount.toLocaleString()} Qs
+            </span>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-xl border border-neutral-200 bg-neutral-50/60 p-3.5 sm:p-4 flex flex-col justify-between"
-            >
-              <div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-neutral-900 text-white mb-2">
-                  {item.tag}
-                </span>
-                <h3 className="text-sm sm:text-base font-semibold text-neutral-900 mb-1.5 line-clamp-2">
-                  {item.title}
-                </h3>
-                <p className="text-xs sm:text-sm text-neutral-600 line-clamp-3">
-                  {item.summary}
-                </p>
+
+        {/* CTA */}
+        <Link
+          href={`/${category}/${subjectSlug}`}
+          className="flex-shrink-0 inline-flex items-center gap-1 rounded-xl bg-neutral-900 text-white px-3 py-1.5 text-xs font-semibold
+                     hover:bg-neutral-700 transition-colors shadow-sm"
+        >
+          Open <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+
+      {/* Expandable topics */}
+      <AnimatePresence initial={false}>
+        {open && subject?.subtopics?.length > 0 && (
+          <motion.div
+            key="topics"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-neutral-100 bg-neutral-50/60 px-4 py-3">
+              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Topics</p>
+              <div className="flex flex-wrap gap-2">
+                {subject.subtopics.map((t) => (
+                  <p
+                    key={t?.title}
+                    //href={`/${category}/practice/${t?.title ?? ''}`}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-neutral-200 bg-white
+                               hover:border-neutral-400 hover:bg-neutral-50 active:scale-95 transition-all text-xs font-medium text-neutral-700"
+                  >
+                    <Play className="w-3 h-3 text-neutral-400" />
+                    {unslug(t?.title)}
+                    <span className="bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-md font-bold text-[10px]">
+                      {t?.count ?? 0}
+                    </span>
+                  </p>
+                ))}
               </div>
-              <span className="mt-3 inline-flex items-center text-[11px] sm:text-xs font-medium text-neutral-700">
-                Coming soon
-              </span>
             </div>
-          ))}
-        </div>
-      </motion.div>
-    </section>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 });
+SubjectCard.displayName = 'SubjectCard';
 
-NewsSection.displayName = 'NewsSection';
+// ─── SubjectRow (Desktop table row) ──────────────────────────────────────────
 
-// Memoized No Results Component
-const NoResults = React.memo(({ searchTerm, setSearchTerm, type }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3 }}
-    className="bg-white rounded-xl shadow-sm p-8 sm:p-12 text-center border border-neutral-200"
-  >
-    <div className="w-12 h-12 sm:w-16 sm:h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-      <Search className="w-6 h-6 sm:w-8 sm:h-8 text-neutral-400" />
-    </div>
-    <h3 className="text-lg sm:text-xl font-semibold text-neutral-900 mb-2">
-      No {type} found
-    </h3>
-    <p className="text-sm sm:text-base text-neutral-600 mb-4 sm:mb-6 px-4">
-      We couldn&apos;t find any {type} matching &apos;{searchTerm}&apos;
-    </p>
-    <button 
-      onClick={() => setSearchTerm('')} 
-      className="px-5 sm:px-6 py-2 sm:py-2.5 border border-neutral-300 text-neutral-800 font-medium text-sm sm:text-base rounded-lg hover:bg-neutral-50 active:bg-neutral-100 transition-colors duration-150 touch-manipulation"
-    >
-      Clear Search
-    </button>
-  </motion.div>
+const SubjectRow = memo(({ subject, category }) => {
+  const [open, setOpen] = useState(false);
+  const { topicsCount, questionsCount } = useMemo(() => getSubjectStats(subject), [subject]);
+  const subjectName = subject?.subject ?? 'Unknown';
+  const subjectSlug = useMemo(() => slugify(subjectName), [subjectName]);
+
+  return (
+    <>
+      <tr className="odd:bg-white even:bg-neutral-50/40 hover:bg-neutral-100/50 transition-colors">
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setOpen(o => !o)}
+              aria-label={open ? 'Collapse topics' : 'Expand topics'}
+              aria-expanded={open}
+              className="w-6 h-6 rounded-lg bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center flex-shrink-0 transition-colors"
+            >
+              <ChevronDown className={`w-3.5 h-3.5 text-neutral-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+            </button>
+            <div>
+              <p className="font-semibold text-neutral-900 text-sm leading-tight">{subjectName}</p>
+              <p className="text-[11px] text-neutral-400 mt-0.5">Topic-wise MCQs</p>
+            </div>
+          </div>
+        </td>
+        <td className="py-3 px-4 text-right">
+          <span className="tabular-nums text-sm font-semibold text-neutral-700">{topicsCount}</span>
+        </td>
+        <td className="py-3 px-4 text-right">
+          <span className="tabular-nums text-sm font-semibold text-neutral-700">
+            {questionsCount.toLocaleString()}
+          </span>
+        </td>
+        <td className="py-3 px-4 text-right">
+          <Link
+            href={`/${category}/${subjectSlug}`}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 text-white px-3 py-1.5 text-xs font-semibold
+                       hover:bg-neutral-700 transition-colors shadow-sm"
+          >
+            Open <ArrowRight className="w-3 h-3" />
+          </Link>
+        </td>
+      </tr>
+
+      <AnimatePresence initial={false}>
+        {open && subject?.subtopics?.length > 0 && (
+          <motion.tr
+            key="subtopics"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <td colSpan={4} className="px-4 pb-3 pt-0">
+              <div className="ml-8 border-l-2 border-neutral-200 pl-4">
+                <div className="flex flex-wrap gap-2 py-2">
+                  {subject.subtopics.map((t) => (
+                    <Link
+                      key={t?.title}
+                      href={`/${category}/practice/${t?.title ?? ''}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-neutral-200 bg-white
+                                 hover:border-neutral-400 hover:bg-neutral-50 transition-colors text-xs font-medium text-neutral-700"
+                    >
+                      <Play className="w-3 h-3 text-neutral-400" />
+                      {unslug(t?.title)}
+                      <span className="bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded-md font-bold">
+                        {t?.count ?? 0}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </td>
+          </motion.tr>
+        )}
+      </AnimatePresence>
+    </>
+  );
+});
+SubjectRow.displayName = 'SubjectRow';
+
+// ─── SearchBar ────────────────────────────────────────────────────────────────
+
+const SearchBar = memo(({ value, onChange }) => (
+  <div className="relative">
+    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+    <input
+      type="search"
+      inputMode="search"
+      autoComplete="off"
+      placeholder="Search subjects or topics…"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full pl-10 pr-10 py-2.5 bg-white border border-neutral-300 rounded-xl
+                 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-neutral-900
+                 transition-colors text-sm placeholder:text-neutral-400"
+      aria-label="Search subjects and topics"
+    />
+    {value && (
+      <button
+        type="button"
+        onClick={() => onChange('')}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-lg flex items-center justify-center
+                   text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+        aria-label="Clear search"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    )}
+  </div>
 ));
+SearchBar.displayName = 'SearchBar';
 
+// ─── NoResults ────────────────────────────────────────────────────────────────
+
+const NoResults = memo(({ term, onClear }) => (
+  <div className="py-16 text-center">
+    <div className="w-12 h-12 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+      <Search className="w-5 h-5 text-neutral-400" />
+    </div>
+    <p className="text-sm font-semibold text-neutral-900 mb-1">No subjects found</p>
+    <p className="text-xs text-neutral-500 mb-4">No results for &ldquo;{term}&rdquo;</p>
+    <button
+      onClick={onClear}
+      className="px-4 py-2 border border-neutral-300 text-neutral-800 text-sm font-medium rounded-xl hover:bg-neutral-50 transition-colors"
+    >
+      Clear search
+    </button>
+  </div>
+));
 NoResults.displayName = 'NoResults';
 
-// Skeleton Loading Component
-const SkeletonCard = () => (
-  <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-4 sm:p-6 animate-pulse">
-    <div className="flex items-start justify-between mb-4">
-      <div className="flex-1 space-y-3">
-        <div className="h-5 bg-neutral-200 rounded w-3/4"></div>
-        <div className="h-4 bg-neutral-100 rounded w-1/2"></div>
-      </div>
-      <div className="w-12 h-12 bg-neutral-100 rounded-lg"></div>
-    </div>
-    <div className="h-10 bg-neutral-100 rounded-lg"></div>
-  </div>
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+const Skeleton = ({ className }) => (
+  <div className={`bg-neutral-200 rounded-xl animate-pulse ${className}`} />
 );
 
-const SkeletonLoading = () => (
+const PageSkeleton = () => (
   <div className="min-h-screen bg-neutral-50">
     <Navbar />
-    <div className="pt-24">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-6 sm:pb-8">
-        {/* Hero Skeleton */}
-        <div className="text-center mb-8 space-y-3">
-          <div className="h-10 bg-neutral-200 rounded w-1/3 mx-auto animate-pulse"></div>
-          <div className="h-5 bg-neutral-100 rounded w-2/3 mx-auto animate-pulse"></div>
+    <div className="pt-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
+        <div className="lg:col-span-7 space-y-4">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-10 w-3/4" />
+          <Skeleton className="h-5 w-full" />
+          <div className="flex gap-2">
+            {[1,2,3,4].map(i => <Skeleton key={i} className="h-9 w-28" />)}
+          </div>
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            {[1,2,3].map(i => <Skeleton key={i} className="h-20" />)}
+          </div>
         </div>
-        
-        {/* Stats Skeleton */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-xl p-4 shadow-sm border border-neutral-200 animate-pulse">
-              <div className="h-8 bg-neutral-200 rounded w-1/4 mb-2"></div>
-              <div className="h-4 bg-neutral-100 rounded w-1/2"></div>
-            </div>
-          ))}
+        <div className="lg:col-span-5">
+          <Skeleton className="h-44 w-full rounded-3xl" />
         </div>
       </div>
-      
-      {/* Content Skeleton */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-        <div className="mb-6 space-y-4">
-          <div className="h-12 bg-neutral-200 rounded-lg animate-pulse"></div>
-          <div className="h-10 bg-neutral-100 rounded-lg w-1/2 mx-auto animate-pulse"></div>
-        </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
       </div>
     </div>
   </div>
 );
 
-// Error Component
-const ErrorDisplay = ({ error, onRetry }) => (
-  <div className="min-h-screen bg-neutral-50">
+// ─── Error ────────────────────────────────────────────────────────────────────
+
+const ErrorPage = ({ error, onRetry }) => (
+  <div className="min-h-screen bg-neutral-50 flex flex-col">
     <Navbar />
-    <div className="flex justify-center items-center min-h-[60vh] pt-24 px-4">
-      <div className="text-center p-6 sm:p-8 bg-white rounded-xl shadow-sm border border-neutral-200 max-w-md w-full">
-        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-          <AlertCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
+    <div className="flex-1 flex items-center justify-center px-4 pt-24">
+      <div className="text-center p-8 bg-white rounded-2xl border border-neutral-200 shadow-sm max-w-sm w-full">
+        <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="w-7 h-7 text-red-500" />
         </div>
-        <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 mb-2 sm:mb-3">
-          Failed to Load Data
-        </h1>
-        <p className="text-sm sm:text-base text-neutral-600 mb-4 sm:mb-6">
-          {error?.message || 'An error occurred while fetching data. Please try again.'}
-        </p>
+        <h2 className="text-lg font-bold text-neutral-900 mb-2">Failed to load</h2>
+        <p className="text-sm text-neutral-600 mb-5">{error?.message ?? 'Something went wrong.'}</p>
         <button
           onClick={onRetry}
-          className="px-5 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors duration-200 touch-manipulation"
+          className="px-5 py-2.5 bg-neutral-900 text-white font-semibold text-sm rounded-xl hover:bg-neutral-700 transition-colors"
         >
-          Try Again
+          Try again
         </button>
       </div>
     </div>
   </div>
 );
 
-// Main Component
-const ExamTracker = () => {
-  const [data, setData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState('subjects'); // kept for backward compatibility; UI is subjects-only
-  const [practiceFocusMode, setPracticeFocusMode] = useState(false);
-  const { category } = useParams();
-  
-  // AbortController for request cancellation
-  const abortControllerRef = useRef(null);
-  
-  // Debounced search term (300ms delay)
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+// ─── NewsSection ──────────────────────────────────────────────────────────────
 
-  const safeCategory = category || 'default';
-  const cacheKey = `${CACHE_KEY_PREFIX}${safeCategory?.toUpperCase()}`;
-  const apiEndpoint = `/api/allsubtopics?category=${safeCategory?.toUpperCase()}`;
+const NEWS_ITEMS = [
+  { id: 1, tag: 'Guide',          title: 'Strategy deep-dive coming soon',      summary: 'An in-depth strategy guide tailored to this exam. Stay tuned.' },
+  { id: 2, tag: 'Daily practice', title: 'Daily sets and revision lists',        summary: 'Curated daily sets – MCQs, mixed questions and quick revisions.' },
+  { id: 3, tag: 'Updates',        title: 'Exam notifications & important dates', summary: 'Official notifications, important dates and last-minute checklists.' },
+];
 
-  // Memoize formatted category
-  const formattedCategory = useMemo(() => 
-    safeCategory
-      ? safeCategory.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-      : 'Default',
-    [safeCategory]
-  );
+const NewsSection = memo(({ category }) => (
+  <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+    <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-5 sm:p-7">
+      <div className="mb-5">
+        <h2 className="text-base sm:text-lg font-semibold text-neutral-900">News & updates</h2>
+        <p className="text-xs text-neutral-400 mt-0.5">Placeholder — plug your live news feed here.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {NEWS_ITEMS.map((item) => (
+          <div key={item.id} className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 flex flex-col gap-2">
+            <span className="inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-900 text-white">
+              {item.tag}
+            </span>
+            <p className="text-sm font-semibold text-neutral-900 leading-snug">{item.title}</p>
+            <p className="text-xs text-neutral-500 leading-relaxed flex-1">{item.summary}</p>
+            <span className="text-[11px] font-semibold text-neutral-400">Coming soon</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+));
+NewsSection.displayName = 'NewsSection';
 
-  const fetchData = useCallback(async () => {
-    // Cancel previous request if exists
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    // Create new AbortController
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-    
-    // Check cache first
-    const cachedData = getCachedData(cacheKey);
-    if (cachedData) {
-      setData(cachedData);
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(apiEndpoint, {
-        method: 'GET',
-        signal, // Add abort signal
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (signal.aborted) return; // Request was cancelled
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const responseData = await response.json();
-      const subjectsData = responseData.subjectsData || [];
-      
-      // Cache the data
-      setCachedData(cacheKey, subjectsData);
-      setData(subjectsData);
-      setError(null);
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        // Request was cancelled, ignore
-        return;
-      }
-      console.error('Error fetching data:', error);
-      setError(error);
-      
-      // Try to get cached data as fallback
-      const cachedData = getCachedData(cacheKey);
-      if (cachedData) {
-        setData(cachedData);
-      }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, [apiEndpoint, cacheKey]);
+// ─── FAB ──────────────────────────────────────────────────────────────────────
+
+const FAB = memo(({ quickStartHref }) => {
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    fetchData();
-    
-    // Cleanup: abort request on unmount
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [fetchData]);
+    const onScroll = () => setScrolled(window.scrollY > 300);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
-  // Memoize all topics
-  const allTopics = useMemo(() => 
-    data.flatMap((subject) =>
-      (subject?.subtopics || []).map((t) => ({
-        ...t,
-        parentSubject: subject.subject,
-        uniqueId: `${subject.subject}-${t.title}`
-      }))
-    ),
-    [data]
+  if (!scrolled) return null;
+
+  return (
+    <motion.div
+      className="fixed bottom-5 right-5 sm:bottom-7 sm:right-7 z-50 flex flex-col gap-2 items-end"
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+    >
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        aria-label="Back to top"
+        className="w-10 h-10 bg-white border border-neutral-300 text-neutral-700 rounded-full flex items-center justify-center shadow-md hover:bg-neutral-50 transition-colors"
+      >
+        <ArrowUp className="w-4 h-4" />
+      </button>
+      <Link
+        href={quickStartHref}
+        aria-label="Quick start practice"
+        className="bg-neutral-900 hover:bg-neutral-700 text-white w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-200"
+      >
+        <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
+      </Link>
+    </motion.div>
   );
+});
+FAB.displayName = 'FAB';
 
-  // Memoize filtered subjects with debounced search
-  const filteredSubjects = useMemo(() => {
-    if (!debouncedSearchTerm) return data;
-    const term = debouncedSearchTerm.toLowerCase();
-    return data.filter((subject) => {
-      const subjectMatch = subject?.subject?.toLowerCase()?.includes(term);
-      const topicsMatch = (subject?.subtopics || []).some((t) => 
-        t?.title?.toLowerCase()?.includes(term)
-      );
-      return subjectMatch || topicsMatch;
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function ExamTracker() {
+  const { category } = useParams();
+  const safeCategory = category ?? 'default';
+
+  const cacheKey = `${CACHE_PREFIX}${safeCategory.toUpperCase()}`;
+  const apiURL   = `/api/allsubtopics?category=${encodeURIComponent(safeCategory.toUpperCase())}`;
+
+  const formattedCat = useMemo(() => titleCase(safeCategory), [safeCategory]);
+  const reduced      = useReducedMotion();
+  const vars         = useMemo(() => makeVariants(reduced), [reduced]);
+
+  const [data,    setData   ] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError  ] = useState(null);
+  const [search,  setSearch ] = useState('');
+
+  const notifyInProgress = useCallback((label) => {
+    toast(`${label} is in progress. Stay tuned!`, {
+      duration: 2600,
+      style: { borderRadius: '14px' },
     });
-  }, [data, debouncedSearchTerm]);
+  }, []);
 
-  // Memoize filtered topics with debounced search
-  const filteredTopics = useMemo(() => {
-    if (!debouncedSearchTerm) return allTopics;
-    const term = debouncedSearchTerm.toLowerCase();
-    return allTopics.filter((t) => 
-      t?.title?.toLowerCase()?.includes(term) || 
-      t?.parentSubject?.toLowerCase()?.includes(term)
-    );
-  }, [allTopics, debouncedSearchTerm]);
+  useEffect(() => {
+    setSearch('');
+    setError(null);
 
-  // Memoize quick start link
-  const quickStartLink = useMemo(() => {
-    if (filteredSubjects.length > 0) {
-      const subjectSlug = filteredSubjects[0]?.subject?.replace(/\s+/g, '-')?.toLowerCase() || '';
-      return `/${safeCategory}/${subjectSlug}`;
+    const ac = new AbortController();
+    const { signal } = ac;
+
+    const cached = readCache(cacheKey);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      fetchData(apiURL, signal)
+        .then((fresh) => {
+          if (signal.aborted) return;
+          writeCache(cacheKey, fresh);
+          setData(fresh);
+        })
+        .catch((err) => {
+          if (err?.name !== 'AbortError') {
+            console.warn('[ExamTracker] background revalidation failed:', err);
+          }
+        });
+      return () => ac.abort();
     }
-    return '#';
+
+    setData([]);
+    setLoading(true);
+
+    const timeoutId = setTimeout(() => {
+      ac.abort();
+      setError(new Error('Request timed out. Please try again.'));
+      setLoading(false);
+    }, FETCH_TIMEOUT_MS);
+
+    fetchData(apiURL, signal)
+      .then((fresh) => {
+        if (signal.aborted) return;
+        clearTimeout(timeoutId);
+        writeCache(cacheKey, fresh);
+        setData(fresh);
+        setLoading(false);
+      })
+      .catch((err) => {
+        clearTimeout(timeoutId);
+        if (err?.name === 'AbortError') return;
+        setError(err);
+        setLoading(false);
+      });
+
+    return () => {
+      clearTimeout(timeoutId);
+      ac.abort();
+    };
+  }, [cacheKey, apiURL]);
+
+  const retry = useCallback(() => {
+    sessionStorage.removeItem(cacheKey);
+    setError(null);
+    setData([]);
+    setLoading(true);
+
+    const ac = new AbortController();
+    fetchData(apiURL, ac.signal)
+      .then((fresh) => {
+        writeCache(cacheKey, fresh);
+        setData(fresh);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        setError(err);
+        setLoading(false);
+      });
+  }, [cacheKey, apiURL]);
+
+  // ── Derived state ─────────────────────────────────────────────────────────
+
+  const debouncedSearch = useDebounce(search, SEARCH_DEBOUNCE);
+
+  const filteredSubjects = useMemo(() => {
+    if (!debouncedSearch) return data;
+    const t = debouncedSearch.toLowerCase();
+    return data.filter((sub) =>
+      sub?.subject?.toLowerCase().includes(t) ||
+      sub?.subtopics?.some((topic) =>
+        topic?.title?.toLowerCase().includes(t) ||
+        String(topic?.count ?? '').includes(t),
+      ),
+    );
+  }, [data, debouncedSearch]);
+
+  const quickStartHref = useMemo(() => {
+    if (!filteredSubjects.length) return '#';
+    return `/${safeCategory}/${slugify(filteredSubjects[0]?.subject ?? '')}`;
   }, [filteredSubjects, safeCategory]);
 
-  // Hub links (for premium hero quick actions)
-  const hubLinks = useMemo(() => {
-    const examCategory = safeCategory || 'gate-cse';
-    return {
-      practiceAnchor: '#practice-content',
-      mockTests: `/mock-test/${examCategory}`,
-      topicTests: `/mock-test/${examCategory}?tab=tests`,
-      dailyPractice: `/${examCategory}/daily-practice`,
-    };
-  }, [safeCategory]);
+  const hubLinks = useMemo(() => ({
+    mockTests:     `/mock-test/${safeCategory}`,
+    topicTests:    `/mock-test/${safeCategory}?tab=tests`,
+    dailyPractice: `/${safeCategory}/daily-practice`,
+  }), [safeCategory]);
 
-  if (error && !data.length) {
-    return (
-      <ErrorDisplay 
-        error={error} 
-        onRetry={fetchData}
+  // ── Render guards ──────────────────────────────────────────────────────────
+
+  if (loading && !data.length) return <PageSkeleton />;
+  if (error   && !data.length) return <ErrorPage error={error} onRetry={retry} />;
+
+  if (!data.length) return (
+    <div className="min-h-screen bg-neutral-50 flex flex-col">
+      <MetaDataJobs
+        seoTitle={`${formattedCat} Practice Tracker`}
+        seoDescription={`Practice ${formattedCat} MCQs topic-wise with detailed solutions.`}
       />
-    );
-  }
-
-  if (isLoading) return <SkeletonLoading />;
-
-  if (!data.length) {
-    return (
-      <div className="min-h-screen bg-neutral-50">
-        <MetaDataJobs
-          seoTitle={`${formattedCategory} Practice Tracker`}
-          seoDescription={`Practice ${formattedCategory} PYQs Topic-Wise with detailed solutions.`}
-        />
-        <Navbar />
-        <div className="flex justify-center items-center min-h-[60vh] pt-24 px-4">
-          <div className="text-center p-6 sm:p-8 bg-white rounded-xl shadow-sm border border-neutral-200 max-w-md w-full">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-              <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-neutral-400" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 mb-2 sm:mb-3">
-              No Subjects Available
-            </h1>
-            <p className="text-sm sm:text-base text-neutral-600 mb-4 sm:mb-6">
-              We couldn&apos;t find any subjects in this category.
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-5 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white font-medium text-sm sm:text-base rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors duration-200 touch-manipulation"
-            >
-              Refresh Page
-            </button>
-          </div>
+      <Navbar />
+      <div className="flex-1 flex items-center justify-center px-4 pt-24">
+        <div className="text-center p-8 bg-white rounded-2xl border border-neutral-200 max-w-sm w-full">
+          <BookOpen className="w-8 h-8 text-neutral-300 mx-auto mb-3" />
+          <p className="font-semibold text-neutral-900 mb-1">No subjects available</p>
+          <p className="text-sm text-neutral-500 mb-5">Nothing found in this category yet.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-5 py-2.5 bg-neutral-900 text-white text-sm font-semibold rounded-xl hover:bg-neutral-700 transition-colors"
+          >
+            Refresh
+          </button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+
+  // ── Main render ────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-neutral-50">
       <MetaDataJobs
-        seoTitle={`${formattedCategory} Practice Tracker`}
-        seoDescription={`Practice ${formattedCategory} PYQs Topic-Wise with detailed solutions.`}
+        seoTitle={`${formattedCat} Practice Tracker`}
+        seoDescription={`Practice ${formattedCat} MCQs topic-wise with detailed solutions.`}
       />
+      <Toaster position="top-center" />
       <Navbar />
-      
-      <div className="pt-24 min-h-screen">
-        {/* Hero + metrics + options + news */}
-        {!practiceFocusMode && (
-          <section className="relative border-b border-neutral-200 bg-white">
-            {/* subtle premium background */}
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_25%,rgba(0,0,0,0.06),transparent_55%),radial-gradient(circle_at_85%_30%,rgba(0,0,0,0.04),transparent_55%)]" />
 
-            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-8 sm:pb-10">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* Left: title + quick actions */}
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45 }}
-                  className="lg:col-span-7"
-                >
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200">
-                    <Zap className="w-4 h-4 text-neutral-700" />
-                    <span className="text-xs sm:text-sm font-medium text-neutral-700">
-                      {formattedCategory} • practice hub
-                    </span>
-                  </div>
+      <div className="pt-20">
 
-                  <h1 className="mt-4 text-3xl sm:text-4xl font-semibold text-neutral-900 tracking-tight">
-                    {formattedCategory} dashboard
-                  </h1>
-                  <p className="mt-3 text-base sm:text-lg text-neutral-600 max-w-2xl leading-relaxed">
-                    One clean place to practice PYQs, run topic tests, attempt mocks, and build consistency with daily practice.
-                  </p>
+        {/* ── Hero ──────────────────────────────────────────────────────── */}
+        <section className="relative bg-white border-b border-neutral-200 overflow-hidden">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-[0.03]"
+            style={{
+              backgroundImage: 'linear-gradient(#000 1px,transparent 1px),linear-gradient(90deg,#000 1px,transparent 1px)',
+              backgroundSize: '40px 40px',
+            }}
+          />
 
-                  {/* Quick action chips */}
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <Link
-                      href={hubLinks.practiceAnchor}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setPracticeFocusMode(true);
-                        setSearchTerm('');
-                        setViewMode('subjects');
-                        // Scroll after state update
-                        setTimeout(() => {
-                          const el = document.getElementById('practice-content');
-                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }, 50);
-                      }}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-neutral-900 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      Start PYQs
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
-                    <Link
-                      href={hubLinks.mockTests}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
-                    >
-                      <ClipboardCheck className="w-4 h-4" />
-                      Mock tests
-                    </Link>
-                    <Link
-                      href={hubLinks.topicTests}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
-                    >
-                      <Grid3X3 className="w-4 h-4" />
-                      Topic tests
-                    </Link>
-                    <Link
-                      href={hubLinks.dailyPractice}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
-                    >
-                      <Target className="w-4 h-4" />
-                      Daily practice
-                    </Link>
-                  </div>
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-10 pb-10 sm:pb-12">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-                  <div className="mt-6">
-                    <QuickStats data={data} />
-                  </div>
-                </motion.div>
-
-                {/* Right: study plan / shortcuts */}
-                <motion.aside
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, delay: 0.05 }}
-                  className="lg:col-span-5"
-                >
-                  <div className="rounded-3xl border border-neutral-200 bg-white/80 backdrop-blur p-5 sm:p-6 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-neutral-900">Quick plan</p>
-                      <span className="text-[11px] font-medium text-neutral-500">Simple workflow</span>
-                    </div>
-
-                    <ol className="mt-4 space-y-3 text-sm text-neutral-700">
-                      <li className="flex items-start gap-3">
-                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 text-xs font-bold text-neutral-800">
-                          1
-                        </span>
-                        <span>Start PYQs topic-wise and mark your progress.</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 text-xs font-bold text-neutral-800">
-                          2
-                        </span>
-                        <span>Take topic tests to fix weak areas quickly.</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 text-xs font-bold text-neutral-800">
-                          3
-                        </span>
-                        <span>Attempt mocks weekly for exam temperament.</span>
-                      </li>
-                    </ol>
-
-                    <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
-                      <p className="text-xs text-neutral-600">
-                        Tip: Use the search inside <span className="font-semibold text-neutral-900">Practice topic-wise</span> to jump directly to any topic.
-                      </p>
-                    </div>
-                  </div>
-                </motion.aside>
-              </div>
-
-              {/* Primary actions (cards) */}
-              <div className="mt-8">
-                <PracticePathCards
-                  category={safeCategory}
-                  onOpenPracticeTopics={() => {
-                    setPracticeFocusMode(true);
-                    setSearchTerm('');
-                    setViewMode('subjects');
-                    setTimeout(() => {
-                      const el = document.getElementById('practice-content');
-                      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 50);
-                  }}
-                />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Practice content: subjects & topics (shown only in focus mode) */}
-        {practiceFocusMode && (
-          <section
-            id="practice-content"
-            className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 scroll-mt-24 pt-6 sm:pt-8"
-          >
-            {/* subtle workspace background */}
-            <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_0%,rgba(0,0,0,0.04),transparent_55%),radial-gradient(circle_at_85%_10%,rgba(0,0,0,0.03),transparent_55%)]" />
-
-            {/* Header */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-4">
+              {/* Left */}
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="min-w-0"
+                transition={{ duration: 0.4 }}
+                className="lg:col-span-7 space-y-5"
               >
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-neutral-200">
-                  <BookOpen className="w-4 h-4 text-neutral-700" />
-                  <span className="text-[11px] sm:text-xs font-semibold text-neutral-700">
-                    {formattedCategory} • practice workspace
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-100 border border-neutral-200">
+                  <Zap className="w-3.5 h-3.5 text-neutral-600" />
+                  <span className="text-xs font-semibold text-neutral-700">
+                    {formattedCat} · Practice Hub
                   </span>
                 </div>
-                <h2 className="mt-3 text-xl sm:text-2xl font-semibold text-neutral-900 tracking-tight">
-                  Practice topic-wise
-                </h2>
-                <p className="mt-1 text-xs sm:text-sm text-neutral-600">
-                  Search and pick what to practice next.
-                </p>
+
+                <div>
+                  <h1 className="text-3xl sm:text-4xl font-bold text-neutral-900 tracking-tight">
+                    {formattedCat} dashboard
+                  </h1>
+                  <p className="mt-2.5 text-sm sm:text-base text-neutral-600 max-w-xl leading-relaxed">
+                    One place to practice PYQs, take topic tests, attempt mocks and keep your prep consistent.
+                  </p>
+                </div>
+
+                {/* Chips */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: 'Start Practicing', icon: BookOpen, scroll: true },
+                    { label: 'Mock tests',  icon: ClipboardCheck, href: hubLinks.mockTests, comingSoon: true },
+                    { label: 'Topic tests', icon: Grid3X3,        href: hubLinks.topicTests, comingSoon: true },
+                    { label: 'Daily',       icon: Target,          href: hubLinks.dailyPractice, comingSoon: true },
+                  ].map(({ label, icon: Icon, href, scroll, comingSoon }) =>
+                    scroll ? (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() =>
+                          document.getElementById('practice-content')
+                            ?.scrollIntoView({ behavior: 'smooth' })
+                        }
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-neutral-900 text-white text-sm font-semibold hover:bg-neutral-700 transition-colors"
+                      >
+                        <Icon className="w-4 h-4" /> {label} <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    ) : comingSoon ? (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => notifyInProgress(label)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
+                      >
+                        <Icon className="w-4 h-4" /> {label}
+                      </button>
+                    ) : (
+                      <Link
+                        key={label}
+                        href={href}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-sm font-semibold hover:bg-neutral-50 transition-colors"
+                      >
+                        <Icon className="w-4 h-4" /> {label}
+                      </Link>
+                    )
+                  )}
+                </div>
+
+                <QuickStats data={data} />
               </motion.div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPracticeFocusMode(false);
-                    setSearchTerm('');
-                    setViewMode('subjects');
-                  }}
-                  className="inline-flex items-center rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
-                >
-                  <ArrowRight className="w-4 h-4 mr-1 rotate-180" />
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchTerm('');
-                    setViewMode('subjects');
-                  }}
-                  className="inline-flex items-center rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
-                  aria-label="Reset search and view"
-                >
-                  <X className="w-4 h-4 mr-1 text-neutral-500" />
-                  Reset
-                </button>
-              </div>
+              {/* Right: Quick plan */}
+              <motion.aside
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.06 }}
+                className="lg:col-span-5"
+              >
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 sm:p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-bold text-neutral-900">Quick plan</p>
+                    <span className="text-[11px] text-neutral-400 font-medium">Simple workflow</span>
+                  </div>
+                  <ol className="space-y-3">
+                    {[
+                      'Start Practicing MCQs topic-wise and mark your progress.',
+                      'Take topic tests to fix weak areas quickly.',
+                      'Attempt mocks weekly for exam temperament.',
+                    ].map((step, i) => (
+                      <li key={i} className="flex items-start gap-3 text-sm text-neutral-700">
+                        <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white border border-neutral-200 text-xs font-bold text-neutral-800 flex-shrink-0">
+                          {i + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="mt-4 rounded-xl border border-neutral-200 bg-white px-4 py-3">
+                    <p className="text-xs text-neutral-500">
+                      <span className="font-semibold text-neutral-800">Tip:</span> Use the search below to jump to any topic directly.
+                    </p>
+                  </div>
+                </div>
+              </motion.aside>
             </div>
 
-            {/* Sticky tools */}
-            <div className="sticky top-20 z-10">
-              <div className="bg-white/90 backdrop-blur rounded-3xl border border-neutral-200 shadow-sm p-4 sm:p-5">
-                <SearchBar 
-                  searchTerm={searchTerm}
-                  setSearchTerm={setSearchTerm}
-                />
+            {/* Path cards */}
+            <div className="mt-8">
+              <PracticePathCards category={safeCategory} />
+            </div>
+          </div>
+        </section>
 
-                {/* Result summary chips */}
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                  <span className="text-neutral-500 font-medium">Showing</span>
-                  <span className="inline-flex items-center gap-2 rounded-full bg-neutral-50 border border-neutral-200 px-3 py-1 font-semibold text-neutral-800">
-                    {filteredSubjects.length} subjects
-                  </span>
-                  {searchTerm && (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-neutral-50 border border-neutral-200 px-3 py-1 font-semibold text-neutral-700">
-                      Search: “{searchTerm}”
+        {/* ── Practice content ──────────────────────────────────────────── */}
+        <section
+          id="practice-content"
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 scroll-mt-20"
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
+          >
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-neutral-900">Practice topic-wise</h2>
+              <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
+                Search subjects and pick what to practice next.
+              </p>
+            </div>
+
+            {error && data.length > 0 && (
+              <div className="inline-flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                Showing cached data — refresh may be needed.
+              </div>
+            )}
+          </motion.div>
+
+          {/*
+            ── Sticky toolbar ────────────────────────────────────────────────
+            FIX: Changed from `sticky top-[4.5rem]` to `sticky top-16` (= 64px,
+            matching a standard h-16 navbar). The previous value was sometimes
+            slightly off causing a visible 1–2px gap/overlap on scroll, which
+            made the toolbar appear to "break".
+
+            Also removed `backdrop-blur` from the inner div and placed a solid
+            `bg-neutral-50` on the outer sticky wrapper — this fully prevents
+            content bleeding through behind the toolbar on iOS Safari, which
+            doesn't always honour `backdrop-filter` correctly while scrolling.
+          ──────────────────────────────────────────────────────────────────── */}
+          <div className="sticky top-16 z-20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 bg-neutral-50 pb-3 pt-1">
+            <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-3 sm:p-4">
+              <SearchBar value={search} onChange={setSearch} />
+
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-neutral-400">Showing</span>
+                <span className="inline-flex items-center rounded-full bg-neutral-100 border border-neutral-200 px-2.5 py-1 font-semibold text-neutral-700">
+                  {filteredSubjects.length} subjects
+                </span>
+                {debouncedSearch && (
+                  <>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 border border-neutral-200 px-2.5 py-1 font-semibold text-neutral-700">
+                      &ldquo;{debouncedSearch}&rdquo;
                       <button
                         type="button"
-                        onClick={() => setSearchTerm('')}
-                        className="text-neutral-500 hover:text-neutral-900"
+                        onClick={() => setSearch('')}
                         aria-label="Clear search"
+                        className="text-neutral-400 hover:text-neutral-700"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3 h-3" />
                       </button>
                     </span>
-                  )}
-                  {searchTerm && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSearchTerm('');
-                        setViewMode('subjects');
-                      }}
-                      className="ml-auto inline-flex items-center gap-2 rounded-full bg-neutral-900 text-white px-3 py-1 font-semibold hover:bg-neutral-800 transition-colors"
-                      aria-label="Reset filters"
+                      onClick={() => setSearch('')}
+                      className="ml-auto inline-flex items-center gap-1 rounded-full bg-neutral-900 text-white px-2.5 py-1 font-semibold hover:bg-neutral-700 transition-colors"
                     >
-                      Reset
-                      <X className="w-3.5 h-3.5" />
+                      Reset <X className="w-3 h-3" />
                     </button>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
             </div>
-            
-            {/* Show error banner if error exists but data is available */}
-            {error && data.length > 0 && (
+          </div>
+
+          {/* Subject list */}
+          <AnimatePresence mode="wait">
+            {filteredSubjects.length > 0 ? (
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2 text-sm text-yellow-800"
+                key="subjects"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
               >
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>Showing cached data. Some information may be outdated.</span>
-              </motion.div>
-            )}
+                {/*
+                  ── Mobile: card stack ─────────────────────────────────────
+                  Shown only on screens below `sm` (< 640px).
+                  Each subject gets a tappable card with expand/collapse topics.
+                ──────────────────────────────────────────────────────────── */}
+                <div className="sm:hidden mt-3 flex flex-col gap-3">
+                  {filteredSubjects.map((subject, i) => (
+                    <SubjectCard
+                      key={subject?.subject ?? i}
+                      subject={subject}
+                      category={safeCategory}
+                    />
+                  ))}
+                </div>
 
-            {/* Results */}
-            <AnimatePresence mode="wait">
-              {filteredSubjects.length > 0 ? (
-                <motion.div 
-                  key="subjects"
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="hidden"
-                  className="mt-5"
-                >
-                  <div className="bg-white rounded-3xl border border-neutral-200 shadow-sm overflow-hidden">
-                    <div className="max-h-[70vh] overflow-auto">
-                      <table className="min-w-full text-sm">
-                        <thead className="bg-neutral-50 border-b border-neutral-200 sticky top-0 z-10">
-                          <tr className="text-left text-neutral-600">
-                            <th className="py-3 px-4 font-semibold">Subject</th>
-                            <th className="py-3 px-4 font-semibold text-right w-[110px]">Topics</th>
-                            <th className="py-3 px-4 font-semibold text-right w-[120px]">Questions</th>
-                            <th className="py-3 px-4 font-semibold text-right w-[140px]">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-100">
-                          {filteredSubjects.map((subject, index) => {
-                            const subjectName = subject?.subject || `Subject ${index + 1}`;
-                            const topicsCount = subject?.subtopics?.length || 0;
-                            const questionsCount =
-                              subject?.subtopics?.reduce((sum, t) => sum + (t?.count || 0), 0) || 0;
-                            const subjectSlug = subjectName.replace(/\s+/g, "-").toLowerCase();
-
-                            return (
-                              <tr
-                                key={subjectName}
-                                className="odd:bg-white even:bg-neutral-50/40 hover:bg-neutral-100/60 transition-colors"
-                              >
-                                <td className="py-3 px-4">
-                                  <div className="font-semibold text-neutral-900">{subjectName}</div>
-                                  <div className="text-xs text-neutral-500 mt-0.5">
-                                    Topic-wise PYQs with tracker
-                                  </div>
-                                </td>
-                                <td className="py-3 px-4 text-right tabular-nums text-neutral-700">
-                                  <span className="inline-flex items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 px-2.5 py-1 font-semibold">
-                                    {topicsCount}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-right tabular-nums text-neutral-700">
-                                  <span className="inline-flex items-center justify-center rounded-full bg-neutral-100 border border-neutral-200 px-2.5 py-1 font-semibold">
-                                    {questionsCount}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-right">
-                                  <Link
-                                    href={`/${safeCategory}/${subjectSlug}`}
-                                    className="inline-flex items-center justify-center rounded-xl bg-neutral-900 text-white px-3 py-2 text-xs font-semibold hover:bg-neutral-800 transition-colors shadow-sm hover:shadow"
-                                  >
-                                    Open
-                                  </Link>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                {/*
+                  ── Desktop: table ─────────────────────────────────────────
+                  Shown only on `sm` and above (≥ 640px).
+                ──────────────────────────────────────────────────────────── */}
+                <div className="hidden sm:block mt-3 bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
+                  <div className="max-h-[68vh] overflow-auto overscroll-contain">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-neutral-50 border-b border-neutral-200 sticky top-0 z-10">
+                        <tr className="text-left text-neutral-500 text-xs font-semibold uppercase tracking-wide">
+                          <th className="py-3 px-4">Subject</th>
+                          <th className="py-3 px-4 text-right w-24">Topics</th>
+                          <th className="py-3 px-4 text-right w-28">Questions</th>
+                          <th className="py-3 px-4 text-right w-28">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {filteredSubjects.map((subject, i) => (
+                          <SubjectRow
+                            key={subject?.subject ?? i}
+                            subject={subject}
+                            category={safeCategory}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </motion.div>
-              ) : (
-                <NoResults searchTerm={searchTerm} setSearchTerm={setSearchTerm} type="subjects" />
-              )}
-            </AnimatePresence>
-          </section>
-        )}
+                </div>
+              </motion.div>
+            ) : (
+              <NoResults key="noresults" term={debouncedSearch} onClear={() => setSearch('')} />
+            )}
+          </AnimatePresence>
+        </section>
 
-        {/* Floating Action Button */}
-        <motion.div
-          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.5 }}
-        >
-          <a
-            href={quickStartLink}
-            className="bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 text-white w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl active:shadow-2xl transition-all duration-200 touch-manipulation"
-            aria-label="Quick start"
-          >
-            <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
-          </a>
-        </motion.div>
+        <NewsSection category={safeCategory} />
       </div>
+
+      <FAB quickStartHref={quickStartHref} />
     </div>
   );
-};
-
-export default ExamTracker;
+}

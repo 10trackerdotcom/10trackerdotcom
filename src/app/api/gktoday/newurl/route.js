@@ -31,7 +31,7 @@ import { NextResponse } from "next/server";
  *   ]
  * }
  */
-export function parseListingPage(html, pageUrl = "") {
+function parseListingPage(html, pageUrl = "") {
   const $ = cheerio.load(html);
 
   // ── Pagination ────────────────────────────────────────────────────────────

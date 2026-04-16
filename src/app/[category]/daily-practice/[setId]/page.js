@@ -1,13 +1,35 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import MetaDataJobs from "@/components/Seo";
 import { MathJax, MathJaxContext } from "better-react-mathjax";
-import { BookOpen, AlertCircle, CheckCircle, XCircle } from "lucide-react";
+import { BookOpen, AlertCircle, CheckCircle, XCircle, ChevronDown, ChevronUp } from "lucide-react";
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { docco } from "react-syntax-highlighter/dist/esm/styles/hljs";
+
+/* ─── constants ───────────────────────────────────────────────── */
+
+const mathJaxConfig = {
+  "fast-preview": { disabled: false },
+  tex: {
+    inlineMath: [["$", "$"], ["\\(", "\\)"]],
+    displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+    processEscapes: true,
+  },
+  messageStyle: "none",
+  showMathMenu: false,
+};
+
+const CODE_BLOCK_REGEX =
+  /<pre><code(?: class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/gi;
+
+const LINK_REGEX = /https?:\/\/[^\s<>"']+/g;
+
+const OPTIONS = ["A", "B", "C", "D"];
+
+/* ─── pure helpers ────────────────────────────────────────────── */
 
 const normalizeCategory = (param) =>
   (param || "gate-cse").toString().trim().toUpperCase().replace(/_/g, "-");
@@ -15,118 +37,67 @@ const normalizeCategory = (param) =>
 const categoryLabel = (param) =>
   (param || "gate-cse").toString().trim().replace(/-/g, " ").toUpperCase();
 
-// Local MathJax config tuned for daily practice (v3 style, supports $...$ and \(...\))
-const mathJaxConfig = {
-  "fast-preview": { disabled: false },
-  tex: {
-    inlineMath: [
-      ["$", "$"],
-      ["\\(", "\\)"],
-    ],
-    displayMath: [
-      ["$$", "$$"],
-      ["\\[", "\\]"],
-    ],
-    processEscapes: true,
-  },
-  messageStyle: "none",
-  showMathMenu: false,
-};
-
-// Helpers to render rich HTML with code blocks + MathJax, same style as practice pages
-const CODE_BLOCK_REGEX =
-  /<pre><code(?: class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/gi;
-
-// Naive linkifier: wraps bare http/https URLs in <a> tags when no <a> already present
-const LINK_REGEX = /https?:\/\/[^\s<>"']+/g;
-
 const decodeHtml = (html) => {
   if (typeof window === "undefined") return html;
-  const txt = document.createElement("textarea");
-  txt.innerHTML = html;
-  return txt.value;
+  const el = document.createElement("textarea");
+  el.innerHTML = html;
+  return el.value;
 };
 
-// Very lightweight C-style formatter for inline code snippets
 const formatCCode = (raw) => {
   if (!raw) return "";
-  let text = raw;
-  // Normalize <br> tags to newlines
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-  // Basic splitting around common C tokens
-  text = text
+  let text = raw
+    .replace(/<br\s*\/?>/gi, "\n")
     .replace(/\s*#include/g, "\n#include")
     .replace(/\s*int main/g, "\nint main")
     .replace(/{/g, "{\n")
     .replace(/;/g, ";\n")
-    .replace(/}\s*/g, "\n}\n");
-  // Collapse multiple blank lines
-  text = text.replace(/\n{3,}/g, "\n\n");
-  // Simple indentation based on braces
-  const lines = text.split("\n");
+    .replace(/}\s*/g, "\n}\n")
+    .replace(/\n{3,}/g, "\n\n");
+
   let indentLevel = 0;
-  const indented = lines
+  return text
+    .split("\n")
     .map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return "";
-      // Decrease indent if line starts with a closing brace
-      if (trimmed.startsWith("}")) {
-        indentLevel = Math.max(indentLevel - 1, 0);
-      }
-      const prefix = "  ".repeat(indentLevel);
-      // Increase indent after opening brace
-      if (trimmed.includes("{")) {
-        indentLevel += 1;
-      }
-      return prefix + trimmed;
+      const t = line.trim();
+      if (!t) return "";
+      if (t.startsWith("}")) indentLevel = Math.max(indentLevel - 1, 0);
+      const out = "  ".repeat(indentLevel) + t;
+      if (t.includes("{")) indentLevel += 1;
+      return out;
     })
-    .join("\n");
-  return indented.trim();
+    .join("\n")
+    .trim();
 };
+
+/* ─── rich-content renderers ──────────────────────────────────── */
 
 const renderCQuestionIfNeeded = (html) => {
   if (!html) return null;
   const decoded = decodeHtml(html);
-
-  // Prefer an explicit <pre><code> block if present – ignore everything after it
-  const preMatch = decoded.match(
-    /<pre><code[^>]*>([\s\S]*?)<\/code><\/pre>/i
-  );
+  const preMatch = decoded.match(/<pre><code[^>]*>([\s\S]*?)<\/code><\/pre>/i);
 
   let intro = "";
   let codeRaw = "";
 
   if (preMatch) {
-    const full = preMatch[0];
-    const inner = preMatch[1] || "";
-    const start = decoded.indexOf(full);
+    const start = decoded.indexOf(preMatch[0]);
     intro = decoded.slice(0, start);
-    codeRaw = inner;
+    codeRaw = preMatch[1] || "";
   } else {
     const hasInclude = decoded.includes("#include");
     const hasMain = decoded.includes("int main");
-    if (!hasInclude && !hasMain) {
-      return null;
-    }
+    if (!hasInclude && !hasMain) return null;
     const splitIndex = hasInclude
       ? decoded.indexOf("#include")
       : decoded.indexOf("int main");
     intro = decoded.slice(0, splitIndex);
     codeRaw = decoded.slice(splitIndex);
-
-    // If the HTML around the code is messy (no proper <pre> wrapper),
-    // stop the code before common non-code tags like </pre>, <ol>, etc.
-    const stopMarkers = ["</pre", "<ol", "<ul", "<div", "<p", "<span", "<table"];
-    const stopIndexes = stopMarkers
-      .map((m) => {
-        const idx = codeRaw.indexOf(m);
-        return idx === -1 ? null : idx;
-      })
-      .filter((v) => v !== null);
-    if (stopIndexes.length > 0) {
-      const stopAt = Math.min(...stopIndexes);
-      codeRaw = codeRaw.slice(0, stopAt);
-    }
+    const stopAt = Math.min(
+      ...["</pre", "<ol", "<ul", "<div", "<p", "<span", "<table"]
+        .map((m) => (codeRaw.includes(m) ? codeRaw.indexOf(m) : Infinity))
+    );
+    if (isFinite(stopAt)) codeRaw = codeRaw.slice(0, stopAt);
   }
 
   const formattedCode = formatCCode(codeRaw);
@@ -139,15 +110,11 @@ const renderCQuestionIfNeeded = (html) => {
         </MathJax>
       )}
       {formattedCode && (
-        <div className="my-3 rounded-lg border border-neutral-200 bg-neutral-50 text-neutral-50 overflow-x-auto">
+        <div className="my-3 rounded-lg border border-neutral-200 overflow-x-auto">
           <SyntaxHighlighter
             language="c"
             style={docco}
-            customStyle={{
-              margin: 0,
-              background: "transparent",
-              fontSize: "0.85rem",
-            }}
+            customStyle={{ margin: 0, background: "transparent", fontSize: "0.82rem" }}
             wrapLongLines
             showLineNumbers={false}
           >
@@ -162,7 +129,6 @@ const renderCQuestionIfNeeded = (html) => {
 const renderRichContent = (html) => {
   if (!html) return null;
 
-  // If there is already an <a> tag, assume author formatted links manually
   const source = html.includes("<a")
     ? html
     : html.replace(LINK_REGEX, (url) => {
@@ -173,20 +139,18 @@ const renderRichContent = (html) => {
   const elements = [];
   let lastIndex = 0;
   let match;
+  const regex = new RegExp(CODE_BLOCK_REGEX.source, "gi");
 
-  while ((match = CODE_BLOCK_REGEX.exec(source)) !== null) {
+  while ((match = regex.exec(source)) !== null) {
     const [fullMatch, lang, codeHtml] = match;
-
-    const precedingHtml = source.slice(lastIndex, match.index);
-    if (precedingHtml.trim()) {
+    const preceding = source.slice(lastIndex, match.index);
+    if (preceding.trim()) {
       elements.push(
         <MathJax dynamic key={`mj-${lastIndex}`}>
-          <div dangerouslySetInnerHTML={{ __html: precedingHtml }} />
+          <div dangerouslySetInnerHTML={{ __html: preceding }} />
         </MathJax>
       );
     }
-
-    const code = decodeHtml(codeHtml);
     elements.push(
       <div className="my-4" key={`code-${match.index}`}>
         <SyntaxHighlighter
@@ -195,19 +159,18 @@ const renderRichContent = (html) => {
           wrapLongLines
           showLineNumbers={false}
         >
-          {code}
+          {decodeHtml(codeHtml)}
         </SyntaxHighlighter>
       </div>
     );
-
     lastIndex = match.index + fullMatch.length;
   }
 
-  const remainingHtml = source.slice(lastIndex);
-  if (remainingHtml.trim()) {
+  const remaining = source.slice(lastIndex);
+  if (remaining.trim()) {
     elements.push(
       <MathJax dynamic key={`mj-end-${lastIndex}`}>
-        <div dangerouslySetInnerHTML={{ __html: remainingHtml }} />
+        <div dangerouslySetInnerHTML={{ __html: remaining }} />
       </MathJax>
     );
   }
@@ -215,253 +178,320 @@ const renderRichContent = (html) => {
   return elements;
 };
 
+/* ─── sub-components ──────────────────────────────────────────── */
+
+function SkeletonSet() {
+  return (
+    <div className="animate-pulse space-y-4">
+      <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-3">
+        <div className="h-5 w-1/3 rounded bg-neutral-200" />
+        <div className="h-3 w-2/3 rounded bg-neutral-100" />
+      </div>
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-3">
+          <div className="h-4 w-12 rounded-full bg-neutral-200" />
+          <div className="h-4 w-full rounded bg-neutral-100" />
+          <div className="h-4 w-3/4 rounded bg-neutral-100" />
+          <div className="space-y-2 pt-2">
+            {[1, 2, 3, 4].map((j) => (
+              <div key={j} className="h-9 rounded-lg bg-neutral-100" />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OptionButton({ opt, value, selected, answered, correctOption, onSelect }) {
+  const isCorrect = correctOption === opt;
+  const isChosen = selected === opt;
+
+  let base =
+    "w-full text-left px-3.5 py-2.5 rounded-xl border text-sm transition-all duration-150 flex items-start gap-2.5";
+
+  let variant;
+  if (answered) {
+    if (isCorrect) variant = "border-emerald-400 bg-emerald-50 text-emerald-900";
+    else if (isChosen) variant = "border-red-300 bg-red-50 text-red-800";
+    else variant = "border-neutral-200 bg-white text-neutral-500";
+  } else {
+    variant = isChosen
+      ? "border-neutral-900 bg-neutral-900 text-white"
+      : "border-neutral-200 bg-white text-neutral-800 hover:border-neutral-400 hover:bg-neutral-50 cursor-pointer";
+  }
+
+  const icon = answered
+    ? isCorrect
+      ? <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500" />
+      : isChosen
+      ? <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+      : <span className="h-4 w-4 shrink-0 mt-0.5" />
+    : (
+      <span className={`flex h-4 w-4 shrink-0 mt-0.5 items-center justify-center rounded-full text-[10px] font-bold border ${
+        isChosen ? "border-white text-white" : "border-neutral-300 text-neutral-400"
+      }`}>
+        {opt}
+      </span>
+    );
+
+  return (
+    <button
+      type="button"
+      onClick={() => !answered && onSelect(opt)}
+      className={`${base} ${variant}`}
+      disabled={answered}
+    >
+      {icon}
+      <MathJax hideUntilTypeset="first" inline dynamic>
+        <span dangerouslySetInnerHTML={{ __html: value }} />
+      </MathJax>
+    </button>
+  );
+}
+
+function QuestionCard({ q, idx, selected, onAnswer }) {
+  const [solutionOpen, setSolutionOpen] = useState(false);
+
+  const answered = !!selected;
+  const isCorrect = answered && selected === q.correct_option;
+
+  const visibleOptions = OPTIONS.filter((opt) => {
+    const v = q[`options_${opt}`];
+    return typeof v === "string" && v.trim() !== "";
+  });
+  const hasOptions = visibleOptions.length > 0;
+
+  const showSolution = hasOptions ? answered : solutionOpen;
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+      {/* Question header */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-3 sm:px-5">
+        <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold text-neutral-600 tabular-nums">
+          Q{idx + 1}
+        </span>
+        {answered && (
+          <span className={`inline-flex items-center gap-1 text-xs font-semibold ${
+            isCorrect ? "text-emerald-600" : "text-red-500"
+          }`}>
+            {isCorrect
+              ? <><CheckCircle className="h-3.5 w-3.5" /> Correct</>
+              : <><XCircle className="h-3.5 w-3.5" /> Incorrect — {q.correct_option} is right</>
+            }
+          </span>
+        )}
+      </div>
+
+      {/* Question body */}
+      <div className="px-4 pb-3 sm:px-5 overflow-x-hidden">
+        <div className="prose prose-sm max-w-none text-sm leading-relaxed text-neutral-800 sm:text-base break-words">
+          {renderCQuestionIfNeeded(q.question) || renderRichContent(q.question)}
+        </div>
+      </div>
+
+      {/* Options */}
+      {hasOptions && (
+        <div className="px-4 pb-4 sm:px-5 space-y-2">
+          {visibleOptions.map((opt) => (
+            <OptionButton
+              key={opt}
+              opt={opt}
+              value={q[`options_${opt}`]}
+              selected={selected}
+              answered={answered}
+              correctOption={q.correct_option}
+              onSelect={(o) => onAnswer(q._id, o)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Solution */}
+      {q.solution && (
+        <div className={`border-t border-neutral-100 px-4 py-3 sm:px-5 transition-colors ${
+          showSolution ? "bg-neutral-50" : "bg-white"
+        }`}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-neutral-700">Explanation</p>
+            {!hasOptions && (
+              <button
+                type="button"
+                onClick={() => setSolutionOpen((v) => !v)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-neutral-500 hover:text-neutral-800 transition-colors"
+              >
+                {solutionOpen ? (
+                  <><ChevronUp className="h-3.5 w-3.5" /> Hide</>
+                ) : (
+                  <><ChevronDown className="h-3.5 w-3.5" /> Show</>
+                )}
+              </button>
+            )}
+          </div>
+          {showSolution && (
+            <div className="mt-2 prose prose-sm max-w-none text-neutral-700 break-words overflow-x-hidden">
+              {renderRichContent(q.solution)}
+            </div>
+          )}
+          {!showSolution && hasOptions && !answered && (
+            <p className="mt-1 text-xs text-neutral-400">Answer to reveal.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgressBar({ total, answered }) {
+  const pct = total === 0 ? 0 : Math.round((answered / total) * 100);
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex-1 h-1.5 rounded-full bg-neutral-200 overflow-hidden">
+        <div
+          className="h-full bg-neutral-900 rounded-full transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-xs tabular-nums text-neutral-500 shrink-0">
+        {answered}/{total}
+      </span>
+    </div>
+  );
+}
+
+/* ─── page ───────────────────────────────────────────────────── */
+
 export default function DailyPracticeSetPage() {
   const { category, setId } = useParams();
   const safeCategory = category || "gate-cse";
   const label = categoryLabel(safeCategory);
+
   const [setData, setSetData] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [answers, setAnswers] = useState({});
-  const [openSolutions, setOpenSolutions] = useState({});
 
   useEffect(() => {
+    let cancelled = false;
     const fetchSet = async () => {
       setLoading(true);
       setError(null);
       try {
         const res = await fetch(`/api/daily-practice/sets/${setId}`);
         const data = await res.json();
-        if (!res.ok || !data?.success) {
+        if (!res.ok || !data?.success)
           throw new Error(data?.error || "Failed to load daily practice set");
+        if (!cancelled) {
+          setSetData(data.set);
+          setQuestions(data.questions || []);
         }
-        setSetData(data.set);
-        setQuestions(data.questions || []);
       } catch (err) {
-        console.error(err);
-        setError(err.message || "Failed to load daily practice set");
+        if (!cancelled) setError(err.message || "Failed to load daily practice set");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchSet();
+    return () => { cancelled = true; };
   }, [setId]);
 
-  const handleAnswer = (qid, option) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [qid]: option,
-    }));
-  };
+  const handleAnswer = useCallback((qid, option) => {
+    setAnswers((prev) => ({ ...prev, [qid]: option }));
+  }, []);
+
+  const answeredCount = useMemo(
+    () => Object.keys(answers).length,
+    [answers]
+  );
+
+  const seoTitle = setData
+    ? `${setData.title} – ${label} Daily Practice`
+    : `${label} Daily Practice`;
 
   return (
     <MathJaxContext config={mathJaxConfig}>
       <div className="min-h-screen bg-neutral-50">
         <MetaDataJobs
-          seoTitle={
-            setData
-              ? `${setData.title} – ${label} daily practice`
-              : `${label} daily practice`
-          }
+          seoTitle={seoTitle}
           seoDescription={`Solve MCQs in a daily practice set for ${label}.`}
         />
         <Navbar />
 
-        <div className="pt-24 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16">
+        <main className="mx-auto max-w-3xl px-4 pb-16 pt-24 sm:px-6 lg:px-8">
           {loading ? (
-            <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 sm:p-6">
-              <div className="animate-pulse space-y-3">
-                <div className="h-5 bg-neutral-200 rounded w-1/3" />
-                <div className="h-4 bg-neutral-100 rounded w-2/3" />
-                <div className="h-24 bg-neutral-100 rounded" />
-              </div>
-            </div>
+            <SkeletonSet />
           ) : error ? (
-            <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-5 sm:p-6 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
+            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-5">
+              <AlertCircle className="h-5 w-5 shrink-0 text-red-500 mt-0.5" />
               <div>
-                <h1 className="text-base sm:text-lg font-semibold text-neutral-900 mb-1">
-                  Failed to load daily practice set
-                </h1>
-                <p className="text-sm text-neutral-600">{error}</p>
+                <p className="font-semibold text-red-800 text-sm">Failed to load set</p>
+                <p className="text-sm text-red-700 mt-0.5">{error}</p>
               </div>
             </div>
           ) : (
             <>
-              <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-5 sm:p-6 mb-5 sm:mb-6">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                  <div>
-                    <h1 className="text-lg sm:text-xl font-semibold text-neutral-900 mb-1">
-                      {setData?.title || "Daily practice"}
-                    </h1>
-                    <p className="text-xs sm:text-sm text-neutral-600">
-                      {setData?.description ||
-                        "Solve these MCQs at your own pace. See immediate feedback and explanations."}
+              {/* ── Set header ── */}
+              <div className="mb-6 rounded-2xl border border-neutral-200 bg-white p-5 sm:p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+                      Daily Practice
                     </p>
+                    <h1 className="text-lg font-bold tracking-tight text-neutral-900 sm:text-xl">
+                      {setData?.title || "Practice Set"}
+                    </h1>
+                    {setData?.description && (
+                      <p className="mt-1 text-sm text-neutral-500">
+                        {setData.description}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex flex-col items-start sm:items-end gap-1 text-xs sm:text-sm text-neutral-600">
-                    <span className="inline-flex items-center gap-1">
-                      <BookOpen className="w-4 h-4" />
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-1.5">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-neutral-500">
+                      <BookOpen className="h-3.5 w-3.5" />
                       {label}
                     </span>
                     {setData?.date_for && (
-                      <span className="inline-flex items-center gap-1 text-neutral-500">
-                        {setData.date_for}
-                      </span>
+                      <span className="text-xs text-neutral-400">{setData.date_for}</span>
                     )}
-                    <span className="inline-flex items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                      Practice only – no scoring
+                    <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-medium text-neutral-600">
+                      No scoring · Practice only
                     </span>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-4 sm:space-y-5">
-                {questions.map((q, idx) => {
-                  const selected = answers[q._id];
-                  const isCorrect =
-                    selected && selected === q.correct_option;
-                  const hasOptions = ["A", "B", "C", "D"].some((opt) => {
-                    const v = q[`options_${opt}`];
-                    return typeof v === "string" && v.trim() !== "";
-                  });
-                  const isSolutionOpen = !!openSolutions[q._id];
-                  return (
-                    <div
-                      key={q._id || idx}
-                      className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 sm:p-5"
-                    >
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-700">
-                          Q{idx + 1}
-                        </div>
-                        {selected && (
-                          <div className="inline-flex items-center gap-1 text-xs font-medium">
-                            {isCorrect ? (
-                              <>
-                                <CheckCircle className="w-4 h-4 text-emerald-600" />
-                                <span className="text-emerald-700">
-                                  Correct
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <XCircle className="w-4 h-4 text-red-500" />
-                                <span className="text-red-600">
-                                  Incorrect
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mb-3 sm:mb-4 overflow-x-hidden">
-                        <div className="prose max-w-none text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
-                          {renderCQuestionIfNeeded(q.question) ||
-                            renderRichContent(q.question)}
-                        </div>
-                      </div>
-
-                      {hasOptions && (
-                        <div className="space-y-2">
-                          {["A", "B", "C", "D"].map((opt) => {
-                            const isSelected = selected === opt;
-                            const isOptCorrect = q.correct_option === opt;
-                            const value = q[`options_${opt}`];
-                            if (!value || typeof value !== "string" || value.trim() === "") {
-                              return null;
-                            }
-                            let cls =
-                              "w-full text-left px-3 py-2.5 rounded-lg border text-sm sm:text-base transition-colors";
-                            if (selected) {
-                              if (isOptCorrect) {
-                                cls +=
-                                  " border-emerald-500 bg-emerald-50 text-emerald-900";
-                              } else if (isSelected && !isOptCorrect) {
-                                cls +=
-                                  " border-red-400 bg-red-50 text-red-800";
-                              } else {
-                                cls +=
-                                  " border-neutral-200 bg-white text-neutral-900";
-                              }
-                            } else if (isSelected) {
-                              cls +=
-                                " border-neutral-900 bg-neutral-900 text-white";
-                            } else {
-                              cls +=
-                                " border-neutral-200 bg-white text-neutral-900 hover:bg-neutral-50";
-                            }
-                            return (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => handleAnswer(q._id, opt)}
-                                className={cls}
-                              >
-                                <span className="font-semibold mr-2">
-                                  {opt}.
-                                </span>
-                                <MathJax hideUntilTypeset={"first"} inline dynamic>
-                                  <span
-                                    dangerouslySetInnerHTML={{
-                                      __html: value,
-                                    }}
-                                  />
-                                </MathJax>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {q.solution && (
-                        <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 overflow-x-hidden">
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <p className="text-xs sm:text-sm font-semibold text-neutral-800">
-                              Explanation
-                            </p>
-                            {!hasOptions && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setOpenSolutions((prev) => ({
-                                    ...prev,
-                                    [q._id]: !prev[q._id],
-                                  }))
-                                }
-                                className="text-[11px] sm:text-xs font-medium text-neutral-700 hover:text-neutral-900"
-                              >
-                                {isSolutionOpen ? "Hide solution" : "Show solution"}
-                              </button>
-                            )}
-                          </div>
-
-                          {(hasOptions ? selected : isSolutionOpen) && (
-                            <div className="prose prose-sm max-w-none text-neutral-700 whitespace-pre-wrap break-words">
-                              {renderRichContent(q.solution)}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {questions.length === 0 && (
-                  <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-5 sm:p-6 text-center">
-                    <p className="text-sm sm:text-base text-neutral-600">
-                      This daily practice set does not have any questions yet.
-                    </p>
+                {questions.length > 0 && (
+                  <div className="mt-4">
+                    <ProgressBar total={questions.length} answered={answeredCount} />
                   </div>
                 )}
               </div>
-          </>
-        )}
+
+              {/* ── Questions ── */}
+              {questions.length === 0 ? (
+                <div className="rounded-2xl border border-neutral-200 bg-white p-6 text-center">
+                  <p className="text-sm text-neutral-500">
+                    No questions in this set yet. Check back soon.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {questions.map((q, idx) => (
+                    <QuestionCard
+                      key={q._id || idx}
+                      q={q}
+                      idx={idx}
+                      selected={answers[q._id]}
+                      onAnswer={handleAnswer}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </main>
       </div>
-    </div>
     </MathJaxContext>
   );
 }
-

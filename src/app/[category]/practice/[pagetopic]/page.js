@@ -7,6 +7,11 @@ import { supabase } from "@/app/lib/supabase";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
 import { upsertUserProgress } from "@/lib/userProgressUpsert";
+import {
+  readProgressBuffer,
+  writeProgressBuffer,
+  saveProgressBufferToSupabase,
+} from "@/lib/progressBuffer";
 import toast, { Toaster } from "react-hot-toast";
 import { Clock } from "lucide-react";
 
@@ -134,10 +139,10 @@ const Pagetracker = memo(() => {
   );
 
   // Refs for optimization
-  const pendingUpdatesRef = useRef(new Map());
   const cacheRef = useRef(new Map());
-  const isSavingRef = useRef(false);
-  const saveRequestIdRef = useRef(0);
+  const [unsavedCount, setUnsavedCount] = useState(0);
+  const [isManualSaving, setIsManualSaving] = useState(false);
+  const hasShownUnsavedToastRef = useRef(false);
 
   // Cache helpers with cleanup
   const cleanupCache = useCallback(() => {
@@ -332,109 +337,79 @@ const Pagetracker = memo(() => {
     };
   }, [user, pagetopic, category]);
 
-  // Helper: Merge progress updates
-  const mergeProgressUpdates = useCallback((existing, updates) => {
-    const aggregated = updates.reduce((acc, update) => ({
-      completed: [...new Set([...acc.completed, ...update.completed])],
-      correct: [...new Set([...acc.correct, ...update.correct])],
-      points: acc.points + (update.points || 0)
-    }), { completed: [], correct: [], points: 0 });
+  const refreshUnsavedCount = useCallback(() => {
+    const userId = user?.id;
+    if (!userId || typeof window === "undefined") { setUnsavedCount(0); return; }
+    const buffer = readProgressBuffer(userId);
+    setUnsavedCount(Object.keys(buffer.entries ?? {}).length);
+  }, [user?.id]);
+
+  // One-time UX hint if buffer exists (e.g. user returned later)
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!unsavedCount) { hasShownUnsavedToastRef.current = false; return; }
+    if (hasShownUnsavedToastRef.current) return;
+    hasShownUnsavedToastRef.current = true;
+    toast("You have unsaved progress. Click “Save Progress” to sync it.", { duration: 3500 });
+  }, [user?.id, unsavedCount]);
+
+  // Overlay buffered (unsaved) progress onto what we display for THIS page's loaded questions.
+  const effectiveProgress = useMemo(() => {
+    if (!user?.id) return progress;
+    const visibleIds = new Set((questions ?? []).map((q) => String(q?._id ?? "")).filter(Boolean));
+    if (!visibleIds.size) return progress;
+
+    const area = String(category ?? "").trim().toLowerCase();
+    const topic = String(pagetopic ?? "").trim();
+    const { entries } = readProgressBuffer(user.id);
+
+    const completed = new Set((progress.completed ?? []).map(String));
+    const correct = new Set((progress.correct ?? []).map(String));
+    let pointsDelta = 0;
+
+    for (const [qidRaw, e] of Object.entries(entries ?? {})) {
+      const qid = String(qidRaw ?? "");
+      if (!qid || !visibleIds.has(qid)) continue;
+      if (String(e?.area ?? "") !== area) continue;
+      if (String(e?.topic ?? "") !== topic) continue;
+
+      const alreadyCompleted = completed.has(qid);
+      completed.add(qid);
+
+      if (e?.correct === true) {
+        correct.add(qid);
+        if (!alreadyCompleted) pointsDelta += typeof e?.points === "number" ? e.points : POINTS_PER_CORRECT_ANSWER;
+      } else {
+        correct.delete(qid);
+      }
+    }
 
     return {
-      completed: [...new Set([...existing.completed, ...aggregated.completed])],
-      correct: [...new Set([...existing.correct, ...aggregated.correct])],
-      points: existing.points + aggregated.points
+      completed: [...completed],
+      correct: [...correct],
+      points: (progress.points ?? 0) + pointsDelta,
     };
-  }, []);
+  }, [user?.id, category, pagetopic, questions, unsavedCount, progress]);
 
-  // Helper: Save progress to database
-  const saveProgressToDatabase = useCallback(async (progressData) => {
-    let { error: saveError } = await upsertUserProgress(supabase, progressData);
+  const saveBufferedProgress = useCallback(async () => {
+    if (!user?.id) { setShowAuthModal(true); return; }
+    if (typeof window === "undefined") return;
+    const userId = user.id;
+    if (Object.keys(readProgressBuffer(userId).entries ?? {}).length === 0) { setUnsavedCount(0); return; }
 
-    // If upsert fails, try insert then update
-    if (saveError) {
-      const { error: insertError } = await supabase
-        .from("user_progress")
-        .insert(progressData);
-
-      if (insertError) {
-        const { error: updateError } = await supabase
-          .from("user_progress")
-          .update({
-            completedquestions: progressData.completedquestions,
-            correctanswers: progressData.correctanswers,
-            points: progressData.points,
-            email: progressData.email,
-          })
-          .eq("user_id", user.id)
-          .eq("topic", pagetopic)
-          .eq("area", category);
-
-        if (updateError) {
-          throw updateError;
-        }
-      }
-    }
-  }, [user, pagetopic, category]);
-
-  // Save progress with race condition protection
-  const saveProgress = useCallback(async (immediate = false) => {
-    if (!user) return;
-    if (isSavingRef.current) return; // Prevent concurrent saves
-
-    if (pendingUpdatesRef.current.size === 0) return;
-
-    const requestId = ++saveRequestIdRef.current;
-    isSavingRef.current = true;
-
-    const updates = Array.from(pendingUpdatesRef.current.values());
-    pendingUpdatesRef.current.clear();
-
+    setIsManualSaving(true);
     try {
-      // Fetch existing progress
-      const existing = await fetchExistingProgress();
-
-      // Merge updates
-      const merged = mergeProgressUpdates(existing, updates);
-
-      // Prepare data
-      const progressData = {
-        user_id: user.id,
-        email: user?.emailAddresses[0]?.emailAddress || user?.primaryEmailAddress?.emailAddress,
-        topic: pagetopic,
-        completedquestions: merged.completed,
-        correctanswers: merged.correct,
-        points: merged.points,
-        area: category,
-      };
-
-      // Save to database
-      await saveProgressToDatabase(progressData);
-
-      // Only update local state if this is still the latest request
-      if (requestId === saveRequestIdRef.current) {
-        setProgress(prev => mergeProgressUpdates(prev, updates));
-        if (immediate) {
-          toast.success("Progress saved!", { duration: 2000 });
-        }
-      }
-    } catch (error) {
-      handleError(error, "Failed to save progress. Retrying...", "Error saving progress:");
-      // Re-add to queue for retry (limit retries)
-      if (updates.length < 10) {
-        updates.forEach(update => {
-          pendingUpdatesRef.current.set(Date.now(), update);
-        });
-      }
+      await saveProgressBufferToSupabase({ supabase, upsertUserProgress, user });
+      toast.success("Progress saved!", { duration: 2000 });
+      setUnsavedCount(0);
+      fetchUserProgress();
+    } catch (e) {
+      handleError(e, "Failed to save progress.", "Error saving buffered progress:");
+      refreshUnsavedCount();
     } finally {
-      isSavingRef.current = false;
+      setIsManualSaving(false);
     }
-  }, [user, pagetopic, category, fetchExistingProgress, mergeProgressUpdates, saveProgressToDatabase]);
-
-  // Immediate save function
-  const saveProgressImmediate = useCallback(() => {
-    saveProgress(true);
-  }, [saveProgress]);
+  }, [user, setShowAuthModal, fetchUserProgress, refreshUnsavedCount]);
 
   // Handle answer
   const handleAnswer = useCallback((questionId, isCorrect) => {
@@ -463,16 +438,25 @@ const Pagetracker = memo(() => {
       };
     });
 
-    // Queue for batch save
-    pendingUpdatesRef.current.set(questionId, {
-      completed: [questionId],
-      correct: isCorrect ? [questionId] : [],
-      points: isCorrect ? POINTS_PER_CORRECT_ANSWER : 0
-    });
-
-    // Save immediately
-    saveProgressImmediate();
-  }, [user, setShowAuthModal, saveProgressImmediate, progress]);
+    // Buffer locally (cross-route) instead of saving per-click
+    try {
+      const userId = user.id;
+      const buffer = readProgressBuffer(userId);
+      const entries = buffer.entries ?? {};
+      entries[String(questionId)] = {
+        completed: true,
+        correct: !!isCorrect,
+        points: isCorrect ? POINTS_PER_CORRECT_ANSWER : 0,
+        topic: String(pagetopic ?? "").trim(),
+        area: String(category ?? "").trim().toLowerCase(),
+        updatedAt: Date.now(),
+      };
+      writeProgressBuffer(userId, { ...buffer, entries });
+      setUnsavedCount(Object.keys(entries).length);
+    } catch (_) {
+      /* ignore */
+    }
+  }, [user, setShowAuthModal, progress.completed, pagetopic, category]);
 
   // Restore last difficulty when opening a new topic/chapter link that omits ?difficulty=
   useLayoutEffect(() => {
@@ -571,56 +555,52 @@ const Pagetracker = memo(() => {
     fetchUserProgress();
   }, [user?.id, pagetopic, category, fetchUserProgress]); // More specific dependencies
 
-  // Cleanup and save on unmount
-  useEffect(() => {
-    return () => {
-      if (pendingUpdatesRef.current.size > 0 && user) {
-        // Use sendBeacon for reliable save on unmount
-        const data = JSON.stringify({
-          updates: Array.from(pendingUpdatesRef.current.values()),
-          userId: user.id,
-          topic: pagetopic,
-          area: category,
-          email: user?.emailAddresses?.[0]?.emailAddress || user?.primaryEmailAddress?.emailAddress
-        });
-        
-        // Try sendBeacon first, fallback to sync save
-        if (navigator.sendBeacon) {
-          try {
-            navigator.sendBeacon('/api/save-progress', new Blob([data], { type: 'application/json' }));
-          } catch (e) {
-            // Fallback to immediate save
-            saveProgress(true);
-          }
-        } else {
-          saveProgress(true);
-        }
-      }
-    };
-  }, [user, pagetopic, category, saveProgress]);
+  // initialize unsaved count from shared local buffer
+  useEffect(() => { refreshUnsavedCount(); }, [refreshUnsavedCount]);
 
-  // Save progress before page unload
+  // unsaved changes warning: tab close/refresh + internal navigation
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!unsavedCount) return;
+    const warningText = "You have unsaved progress. Please save before leaving.";
+
     const handleBeforeUnload = (e) => {
-      if (pendingUpdatesRef.current.size > 0 && user) {
-        const data = JSON.stringify({
-          updates: Array.from(pendingUpdatesRef.current.values()),
-          userId: user.id,
-          topic: pagetopic,
-          area: category,
-          email: user?.emailAddresses?.[0]?.emailAddress || user?.primaryEmailAddress?.emailAddress
-        });
-        
-        // Use sendBeacon for reliable background save
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon('/api/save-progress', new Blob([data], { type: 'application/json' }));
-        }
+      e.preventDefault();
+      e.returnValue = warningText;
+      return warningText;
+    };
+
+    const handleDocumentClickCapture = (e) => {
+      const a = e.target?.closest?.("a");
+      if (!a) return;
+      const href = a.getAttribute("href") || "";
+      if (!href) return;
+      if (href.startsWith("#")) return;
+      if (a.getAttribute("target") === "_blank") return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+      const ok = window.confirm(warningText);
+      if (!ok) {
+        e.preventDefault();
+        e.stopPropagation();
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [user, pagetopic, category]);
+    const handlePopState = () => {
+      const ok = window.confirm(warningText);
+      if (!ok) window.history.forward();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("click", handleDocumentClickCapture, true);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("click", handleDocumentClickCapture, true);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [unsavedCount]);
 
   // Pagination helpers - must be defined before stats useMemo
   const totalQuestionsForDifficulty = useMemo(
@@ -639,13 +619,13 @@ const Pagetracker = memo(() => {
         total: 0,
         completionPercentage: 0,
         accuracy: 0,
-        points: progress.points
+        points: effectiveProgress.points
       };
     }
 
     // Filter progress to only include questions from current difficulty
-    const completedForDifficulty = progress.completed.filter(id => difficultyQuestionIds.has(id));
-    const correctForDifficulty = progress.correct.filter(id => difficultyQuestionIds.has(id));
+    const completedForDifficulty = effectiveProgress.completed.filter(id => difficultyQuestionIds.has(id));
+    const correctForDifficulty = effectiveProgress.correct.filter(id => difficultyQuestionIds.has(id));
     
     const completed = completedForDifficulty.length;
     const correct = correctForDifficulty.length;
@@ -656,9 +636,9 @@ const Pagetracker = memo(() => {
       total,
       completionPercentage: total ? Math.round((completed / total) * 100) : 0,
       accuracy: completed ? Math.round((correct / completed) * 100) : 0,
-      points: progress.points
+      points: effectiveProgress.points
     };
-  }, [totalQuestionsForDifficulty, difficultyQuestionIds, progress.completed, progress.correct, progress.points]);
+  }, [totalQuestionsForDifficulty, difficultyQuestionIds, effectiveProgress.completed, effectiveProgress.correct, effectiveProgress.points]);
   
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(totalQuestionsForDifficulty / QUESTIONS_PER_PAGE) || 1),
@@ -778,6 +758,34 @@ const Pagetracker = memo(() => {
                 ))}
               </div>
 
+              {/* Manual save (buffers across routes) */}
+              {user && (
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <p className="text-xs text-neutral-600">
+                    {unsavedCount > 0 ? (
+                      <>
+                        <span className="font-semibold text-neutral-900">{unsavedCount}</span>{" "}
+                        unsaved update{unsavedCount === 1 ? "" : "s"}
+                      </>
+                    ) : (
+                      "All progress saved"
+                    )}
+                  </p>
+                  <button
+                    onClick={saveBufferedProgress}
+                    disabled={unsavedCount === 0 || isManualSaving}
+                    className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-colors ${
+                      unsavedCount === 0 || isManualSaving
+                        ? "bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                        : "bg-neutral-900 text-white hover:bg-neutral-800"
+                    }`}
+                    title={unsavedCount > 0 ? "Save all buffered progress" : "No unsaved progress"}
+                  >
+                    {isManualSaving ? "Saving…" : "Save Progress"}
+                  </button>
+                </div>
+              )}
+
               {/* Sign in prompt */}
               {!user && (
                 <div className="bg-neutral-50 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -813,8 +821,8 @@ const Pagetracker = memo(() => {
                           index={index}
                           questionId={question._id}
                           onAnswer={handleAnswer}
-                          isCompleted={progress.completed.includes(question._id)}
-                          isCorrect={progress.correct.includes(question._id)}
+                          isCompleted={effectiveProgress.completed.includes(question._id)}
+                          isCorrect={effectiveProgress.correct.includes(question._id)}
                           isAdmin={user?.email === ADMIN_EMAIL || user?.primaryEmailAddress?.emailAddress === ADMIN_EMAIL}
                         />
                       ))}

@@ -60,13 +60,13 @@ export const examData = [
   {
     slug: 'upsc-prelims',
     name: 'UPSC Prelims',
-    image: 'https://dhurina.net/en/wp-content/uploads/2024/07/desktop-wallpaper-upsc-logo-upsc.jpg',
+    image: 'https://c.ndtvimg.com/upsc_625x300_1529562820916.jpg?downsize=773:435',
     icon: '📚',
     bg: 'bg-gray-200',
     color: 'from-orange-500 to-red-500',
     description: 'Union Public Service Commission - Civil Services Prelims Exam',
     category: 'Civil Services',
-    count: 2100, // Hardcoded question count
+    count: 14000, // Hardcoded question count
     active: true, // Inactive exam - will be grayed out
   },
   {

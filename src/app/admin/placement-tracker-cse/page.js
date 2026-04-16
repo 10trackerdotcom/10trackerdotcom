@@ -18,7 +18,11 @@ const FOCUS_AREAS = [
   // Add more focus areas here as needed
 ];
 
-export default function PlacementTrackerForm({ onAddEntry }) {
+export default function Page() {
+  return <PlacementTrackerForm />;
+}
+
+function PlacementTrackerForm({ onAddEntry } = {}) {
   const [formData, setFormData] = useState({
     dayNumber: '',
     focusAreas: [{ focus_area: '', tasks: [{ task_id: uuidv4(), task: '', resources: '' }] }],

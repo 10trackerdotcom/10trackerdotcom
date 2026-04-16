@@ -188,14 +188,15 @@ export default function HomePage({ categorySections = [] }) {
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link
-                    href="/article/latest-jobs"
+                    href="https://news.10tracker.com"
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-neutral-300 bg-white text-neutral-800 font-medium text-sm hover:bg-neutral-50 transition-colors"
                   >
                     <Briefcase className="w-4 h-4 text-emerald-700" />
                     Govt jobs
                   </Link>
                   <Link
-                    href="/article/news"
+                                        href="https://news.10tracker.com"
+
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-neutral-300 bg-white text-neutral-800 font-medium text-sm hover:bg-neutral-50 transition-colors"
                   >
                     <Newspaper className="w-4 h-4 text-amber-700" />
@@ -320,7 +321,7 @@ export default function HomePage({ categorySections = [] }) {
         </section>
 
         {/* News by category */}
-        {Array.isArray(categorySections) && categorySections.length > 0 ? (
+        {/* {Array.isArray(categorySections) && categorySections.length > 0 ? (
           <section className="py-12 md:py-16 bg-white border-y border-neutral-100">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <SectionHeader
@@ -421,7 +422,7 @@ export default function HomePage({ categorySections = [] }) {
               </div>
             </div>
           </section>
-        ) : null}
+        ) : null} */}
 
         {/* Feeds */}
         {/* <section className="py-12 md:py-16 bg-white border-y border-neutral-100">

@@ -1,26 +1,33 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
+import { NextResponse } from "next/server";
 
-  const apiKey =
-    "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";
-  const apiUrl = "https://openrouter.ai/api/v1/chat/completions"; // Correct API Endpoint
+export async function POST(request) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiUrl = "https://openrouter.ai/api/v1/chat/completions";
 
   try {
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Missing OPENROUTER_API_KEY environment variable" },
+        { status: 500 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const prompt = body?.prompt || "Hello!";
+
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:3000", // Your domain
-        "X-Title": "Your App Name",
+        "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER || "http://localhost:3000",
+        "X-Title": process.env.OPENROUTER_APP_TITLE || "cattracker",
       },
       body: JSON.stringify({
         model: "google/gemini-pro-2", // Correct model name
         messages: [
           { role: "system", content: "You are a helpful AI assistant." },
-          { role: "user", content: req.body.prompt || "Hello!" },
+          { role: "user", content: prompt },
         ],
       }),
     });
@@ -30,9 +37,12 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    res.status(200).json(data);
+    return NextResponse.json(data, { status: 200 });
   } catch (error) {
-    console.error("Error:", error.message);
-    res.status(500).json({ error: error.message });
+    console.error("Error:", error?.message || error);
+    return NextResponse.json(
+      { error: error?.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }

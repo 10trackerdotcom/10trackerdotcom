@@ -1,34 +1,34 @@
 import { createClient } from "@supabase/supabase-js";
+import { NextResponse } from "next/server";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL; // Replace with your Supabase URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // Replace with your Supabase API Key
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
+export async function GET(request) {
   try {
-    const { topics, number } = req.query;
+    const { searchParams } = new URL(request.url);
+    const topics = searchParams.get("topics");
+    const number = searchParams.get("number");
 
     // Validate query parameters
     if (!topics || !number) {
-      res.status(400).json({
+      return NextResponse.json(
+        {
         error: "Both 'topics' (comma-separated) and 'number' are required.",
-      });
-      return;
+        },
+        { status: 400 }
+      );
     }
 
     const topicsArray = topics.split("_");
     const questionsPerTopic = Math.floor(Number(number) / topicsArray.length);
 
     if (questionsPerTopic <= 0) {
-      res.status(400).json({
-        error: "Number of questions per topic must be greater than 0.",
-      });
-      return;
+      return NextResponse.json(
+        { error: "Number of questions per topic must be greater than 0." },
+        { status: 400 }
+      );
     }
 
     const questions = [];
@@ -51,9 +51,12 @@ export default async function handler(req, res) {
       }
     }
 
-    res.status(200).json(questions);
+    return NextResponse.json(questions, { status: 200 });
   } catch (error) {
-    console.error("Error:", error.message);
-    res.status(500).json({ error: error.message });
+    console.error("Error:", error?.message || error);
+    return NextResponse.json(
+      { error: error?.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }

@@ -486,7 +486,7 @@ const QuestionCard = memo(({ question, category, index, onAnswer, questionId: qu
     >
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <MathJaxContext config={config}>
-        <div className={`${quizLayout ? "bg-gradient-to-b from-slate-50 to-white p-4 sm:p-5 border-b border-slate-200/70" : "bg-gray-50 p-4 border-b border-gray-100/60"}`}>
+        <div className={`${quizLayout ? "bg-gradient-to-b from-slate-50 to-white p-4 sm:p-5 border-0 border-slate-200/70" : "bg-gray-50 p-4 border-0 border-gray-100/60"}`}>
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div className="flex items-center space-x-3 min-w-0">
               <div className={`rounded-xl text-white flex items-center justify-center font-bold ${quizLayout ? "w-9 h-9 sm:w-10 sm:h-10 text-sm sm:text-base bg-slate-900 shadow-inner" : "w-8 h-8 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 text-sm"}`}>{questionIndex + 1}</div>
