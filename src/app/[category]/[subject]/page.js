@@ -32,14 +32,11 @@ const supabase = createClient(
   { fetch: (...args) => fetch(...args) }
 );
 
-// FIX: API token should be in .env as NEXT_PUBLIC_API_TOKEN or better yet,
-// proxied through a Next.js API route so it never ships in client bundles.
-// Replace the hardcoded string below with: process.env.NEXT_PUBLIC_API_TOKEN
 const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || "";
 
 // ─── TTLs ─────────────────────────────────────────────────────────────────────
 const TTL_CONTENT  = 10 * 60 * 1000; // 10 min
-const TTL_PROGRESS =      30 * 1000; // 30 sec — short so progress feels live
+const TTL_PROGRESS =      30 * 1000; // 30 sec
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const toTitleCase = (str) => {
@@ -69,8 +66,7 @@ const pickProgress = (progressMap, ...candidates) => {
 
 // ─── GATE category set ────────────────────────────────────────────────────────
 const GATE_CATEGORIES = new Set([
-  "gate-cse", "gate-me", "gate-ec", "gate-ee", "gate-ex", "gate-da",
-  "general-aptitude", "verbal-reasoning", "non-verbal-reasoning", "verbal-ability",
+  "gate",
 ]);
 
 // =============================================================================
@@ -265,14 +261,21 @@ const Examtracker = () => {
     [category]
   );
 
-  // FIX: compute these as stable derived values — no useState/useEffect needed
-  const decodedSubject   = subject ? decodeURIComponent(subject) : null;
-  const formattedSubject = decodedSubject ? toTitleCase(decodedSubject) : null;
-  // FIX: activeSubject was mirrored state — just derive it directly
-  const activeSubject    = formattedSubject || "";
+  // FIX: stable memos instead of plain consts — prevents stale closure issues
+  // in useCallback deps and avoids recreating encoded strings on every render
+  const encodedCategory = useMemo(
+    () => (category ? encodeURIComponent(category.toUpperCase()) : ""),
+    [category]
+  );
+  const encodedSubject = useMemo(
+    () => (subject ? encodeURIComponent(subject) : ""),
+    [subject]
+  );
 
-  const encodedCategory = category ? encodeURIComponent(category.toUpperCase()) : "";
-  const encodedSubject  = subject  ? encodeURIComponent(subject)               : "";
+  const decodedSubject   = useMemo(() => (subject ? decodeURIComponent(subject) : null), [subject]);
+  const formattedSubject = useMemo(() => (decodedSubject ? toTitleCase(decodedSubject) : null), [decodedSubject]);
+  // activeSubject is purely derived — no useState mirror needed
+  const activeSubject    = formattedSubject || "";
 
   // ── State ────────────────────────────────────────────────────────────────────
   const [data,              setData]              = useState([]);
@@ -287,14 +290,18 @@ const Examtracker = () => {
 
   const searchInputRef = useRef(null);
 
-  // FIX: separate in-flight refs per fetch so they don't block each other
+  // Separate in-flight guards per fetch so they don't block each other
   const gateInFlightRef     = useRef(false);
   const chaptersInFlightRef = useRef(false);
 
+  // FIX: track last user id to detect user switches
   const lastUserIdRef = useRef(null);
 
   // ── Cache keys ───────────────────────────────────────────────────────────────
-  const cacheKeyContent  = `content-${category}-${subject}`;
+  const cacheKeyContent = useMemo(
+    () => `content-${category}-${subject}`,
+    [category, subject]
+  );
   const cacheKeyProgress = useMemo(
     () => `progress-${user?.id}-${category}`,
     [user?.id, category]
@@ -358,11 +365,11 @@ const Examtracker = () => {
             const json = await res.json();
             if (!json.success) throw new Error(json.error || "API error");
 
-            const chapters = json.data?.chapters || [];
+            const chapterList = json.data?.chapters || [];
             const topicsMap = Object.fromEntries(
-              chapters.map((ch) => [ch.slug || ch.title, ch.topics || []])
+              chapterList.map((ch) => [ch.slug || ch.title, ch.topics || []])
             );
-            return { chapters, topicsMap };
+            return { chapters: chapterList, topicsMap };
           },
           TTL_CONTENT
         );
@@ -443,8 +450,11 @@ const Examtracker = () => {
   useEffect(() => {
     if (user?.id) {
       const isNewUser = lastUserIdRef.current !== user.id;
-      lastUserIdRef.current = user.id;
-      fetchUserProgress(user.id, isNewUser);
+      // FIX: set ref AFTER determining isNewUser, not before — avoids stale
+      // ref on re-render if the fetch throws before completing
+      fetchUserProgress(user.id, isNewUser).finally(() => {
+        lastUserIdRef.current = user.id;
+      });
     } else {
       lastUserIdRef.current = null;
       setUserProgress({});
@@ -452,9 +462,12 @@ const Examtracker = () => {
   }, [user?.id, fetchUserProgress]);
 
   // ── Real-time Supabase subscription ──────────────────────────────────────────
-  // FIX: added area filter so only changes for THIS category trigger a re-fetch
   useEffect(() => {
     if (!user?.id || !category) return;
+
+    // FIX: active flag prevents stale callbacks from firing after cleanup
+    // (e.g. fast navigation away before the channel is removed)
+    let active = true;
 
     const channel = supabase
       .channel(`progress-${user.id}-${category}`)
@@ -464,10 +477,11 @@ const Examtracker = () => {
           event:  "*",
           schema: "public",
           table:  "user_progress",
-          // FIX: was filtering only on user_id — now also scopes to current category
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
+          if (!active) return;
+
           // Only re-fetch if the changed row belongs to this category
           const area = payload?.new?.area || payload?.old?.area || "";
           if (
@@ -482,14 +496,17 @@ const Examtracker = () => {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
   }, [user?.id, category, cacheKeyProgress, fetchUserProgress]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
-  // FIX: use refs for searchTerm / showMobileOptions so handler never re-registers
-  const searchTermRef       = useRef(searchTerm);
+  // Refs let the handler stay registered once without re-adding on every state change
+  const searchTermRef        = useRef(searchTerm);
   const showMobileOptionsRef = useRef(showMobileOptions);
-  useEffect(() => { searchTermRef.current = searchTerm; },       [searchTerm]);
+  useEffect(() => { searchTermRef.current        = searchTerm;        }, [searchTerm]);
   useEffect(() => { showMobileOptionsRef.current = showMobileOptions; }, [showMobileOptions]);
 
   useEffect(() => {
@@ -505,7 +522,6 @@ const Examtracker = () => {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-    // Intentionally empty deps — handler reads from refs, not state
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -527,8 +543,7 @@ const Examtracker = () => {
   // DERIVED DATA
   // ==========================================================================
 
-  // FIX: combined allSubtopics + totalQuestionCount into one memo (was two separate
-  // flatMap passes over the same `data` array)
+  // Single pass over data for both allSubtopics and totalQuestionCount
   const { allSubtopics, totalQuestionCount } = useMemo(() => {
     const subtopics = [];
     let total = 0;
@@ -545,10 +560,12 @@ const Examtracker = () => {
     return { allSubtopics: subtopics, totalQuestionCount: total };
   }, [data]);
 
+  // FIX: userProgress dep is gated behind isGateExam so non-GATE views
+  // don't recompute this memo on every progress update
   const filteredAndSortedTopics = useMemo(() => {
     if (!isGateExam) return [];
 
-    const normalize = (str) => str.toLowerCase().replace(/[-\s]/g, "");
+    const normalizeStr = (str) => str.toLowerCase().replace(/[-\s]/g, "");
 
     let topics = activeSubject
       ? (() => {
@@ -556,7 +573,7 @@ const Examtracker = () => {
             (s) =>
               s.subject === activeSubject ||
               s.subject.toLowerCase() === activeSubject.toLowerCase() ||
-              normalize(s.subject) === normalize(activeSubject)
+              normalizeStr(s.subject) === normalizeStr(activeSubject)
           );
           return found
             ? (found.subtopics || []).map((t) => ({
@@ -597,28 +614,42 @@ const Examtracker = () => {
     const map = {};
 
     for (const chapter of chapters) {
-      const key = chapter.slug || chapter.title;
+      const key    = chapter.slug || chapter.title;
+      const topics = chapterTopics?.[key] || [];
 
-      const cp = pickProgress(userProgress, chapter.title, chapter.slug) || {};
+      let totalQ = 0, completedQ = 0, correctA = 0, completedTopics = 0;
 
-      const completedQ = cp.completedQuestions?.length || 0;
-      const correctA   = cp.correctAnswers?.length    || 0;
-      const totalQ     = chapter.count || 0;
+      for (const t of topics) {
+        const tp   = pickProgress(userProgress, t?.title, t?.slug) || {};
+        const tq   = t?.count || 0;
+        const doneQ = tp.completedQuestions?.length || 0;
+        const corr  = tp.correctAnswers?.length    || 0;
+
+        totalQ += tq;
+        completedQ += doneQ;
+        correctA   += corr;
+        if (doneQ > 0) completedTopics += 1;
+      }
+
+      const totalTopics = topics.length;
+      const effectiveTotal = totalQ || chapter.count || 0;
 
       map[key] = {
-        totalQuestions:     totalQ,
+        totalQuestions:     effectiveTotal,
         completedQuestions: completedQ,
         correctAnswers:     correctA,
-        completedTopics:    completedQ > 0 ? 1 : 0,
-        totalTopics:        1,
-        progressPercentage: totalQ ? Math.round((completedQ / totalQ) * 100) : 0,
-        accuracy:           completedQ > 0 ? Math.round((correctA / completedQ) * 100) : 0,
-        isCompleted:        completedQ >= totalQ && totalQ > 0,
+        completedTopics,
+        totalTopics,
+        progressPercentage: effectiveTotal
+          ? Math.round((completedQ / effectiveTotal) * 100)
+          : 0,
+        accuracy:    completedQ > 0 ? Math.round((correctA / completedQ) * 100) : 0,
+        isCompleted: completedQ >= effectiveTotal && effectiveTotal > 0,
       };
     }
 
     return map;
-  }, [chapters, userProgress, isGateExam]);
+  }, [chapters, chapterTopics, userProgress, isGateExam]);
 
   const filteredAndSortedChapters = useMemo(() => {
     if (isGateExam) return [];
@@ -645,8 +676,8 @@ const Examtracker = () => {
     });
   }, [isGateExam, chapters, searchTerm, sortBy, chapterProgressMap]);
 
-  // FIX: aggregateProgress and snapshotTotalQuestions merged into one memo to
-  // avoid iterating `chapters` twice and reusing chapterProgressMap totals
+  // Single memo for both aggregateProgress and snapshotTotalQuestions —
+  // avoids iterating chapters multiple times
   const { aggregateProgress, snapshotTotalQuestions } = useMemo(() => {
     if (isGateExam) {
       const totalTopics     = allSubtopics.length;
@@ -672,11 +703,11 @@ const Examtracker = () => {
     const totalChapters     = chapters.length;
     const completedChapters = chapters.filter((ch) => chapterProgressMap[ch.slug || ch.title]?.isCompleted).length;
 
-    // FIX: single pass over chapters — was three separate .reduce() calls
+    // Single pass over chapters
     let totalQ = 0, completedQ = 0, correctA = 0;
     for (const ch of chapters) {
       const cp = chapterProgressMap[ch.slug || ch.title] || {};
-      totalQ    += cp.totalQuestions    || ch.count || 0;
+      totalQ    += cp.totalQuestions     || ch.count || 0;
       completedQ += cp.completedQuestions || 0;
       correctA   += cp.correctAnswers    || 0;
     }
@@ -694,10 +725,13 @@ const Examtracker = () => {
     };
   }, [isGateExam, allSubtopics.length, userProgress, totalQuestionCount, chapters, chapterProgressMap]);
 
-  const categoryLabel = toTitleCase(category?.replace(/-/g, " ") || "");
+  const categoryLabel = useMemo(
+    () => toTitleCase(category?.replace(/-/g, " ") || ""),
+    [category]
+  );
 
-  // FIX: wrap sharedSidebarProps in useMemo so React.memo on ProgressSidebarContent
-  // actually works — a plain object literal re-creates on every render
+  // FIX: memoized so React.memo on ProgressSidebarContent actually prevents
+  // re-renders — a plain object literal creates a new reference every render
   const sharedSidebarProps = useMemo(() => ({
     user,
     isGateExam,
@@ -990,7 +1024,15 @@ const Examtracker = () => {
               </Suspense>
 
               {/* ── Grid ─────────────────────────────────────────────────────── */}
-              <div id="practice-grid" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+              {/* FIX: animate the container once instead of every card individually.
+                  With 50+ cards, simultaneous motion.div instances cause jank. */}
+              <motion.div
+                id="practice-grid"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
+              >
                 {isGateExam
                   ? filteredAndSortedTopics.map((topic) => {
                       const tp = pickProgress(
@@ -1061,7 +1103,7 @@ const Examtracker = () => {
                         />
                       );
                     })}
-              </div>
+              </motion.div>
 
               {/* Empty state */}
               {visibleCount === 0 && (
@@ -1152,6 +1194,8 @@ const StatusBadge = React.memo(({ isCompleted, completedCount }) => {
 });
 StatusBadge.displayName = "StatusBadge";
 
+// FIX: TopicCard is now a plain div — no motion.div per card.
+// The grid container handles the single entry animation above.
 const TopicCard = React.memo(({
   title, subtitle,
   completedCount, totalCount,
@@ -1159,10 +1203,7 @@ const TopicCard = React.memo(({
   href, detailsHref,
   extra,
 }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 6 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.2 }}
+  <div
     className={`group bg-white rounded-2xl shadow-sm border transition-all duration-200 hover:shadow-md ${
       isCompleted
         ? "border-green-200 hover:border-green-300"
@@ -1235,7 +1276,7 @@ const TopicCard = React.memo(({
         </Link>
       </div>
     </div>
-  </motion.div>
+  </div>
 ));
 TopicCard.displayName = "TopicCard";
 

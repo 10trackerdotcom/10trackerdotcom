@@ -32,40 +32,39 @@ const fetchChaptersBySubject = async (category, subject) => {
 
   // ── Build subject variants to match DB values ──────────────────────────────
   // URL sends "medieval-history", DB might store "Medieval History" or "medieval-history"
+  // Using a Set ensures truly distinct strings only
   const subjectVariants = Array.from(
     new Set([
-      subject,                                          // raw: "medieval-history"
-      subject.replace(/-/g, " "),                       // "medieval history"
-      subject.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase()), // "Medieval History"
-      normalize(subject),                               // "medieval history"
+      subject,                                                              // raw: "medieval-history"
+      subject.replace(/-/g, " "),                                           // "medieval history"
+      subject.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), // "Medieval History"
     ])
   );
 
   // ── Single Supabase query — only columns we need ───────────────────────────
-  // We try each subject variant. Using .in() so it's still one round-trip.
   const { data, error } = await supabase
     .from("examtracker")
     .select("chapter, subject, category, topic")
     .eq("category", category.toUpperCase())
     .in("subject", subjectVariants)
-    .not("chapter", "is", null);    // skip rows with no chapter
+    .not("chapter", "is", null);
 
   if (error) {
     if (isDev) console.error("❌ Supabase error:", error);
     throw error;
   }
 
-  // ── Fallback: if .in() returned nothing, try ilike (partial match) ─────────
   let rows = data || [];
 
+  // ── Fallback: ilike partial match if exact variants returned nothing ────────
   if (rows.length === 0) {
     if (isDev) console.log("⚠️  No exact subject match — trying ilike fallback");
-    const normalized = normalize(subject);
+    const normalizedSubject = normalize(subject);
     const { data: fallbackData, error: fallbackError } = await supabase
       .from("examtracker")
       .select("chapter, subject, category, topic")
       .eq("category", category.toUpperCase())
-      .ilike("subject", `%${normalized}%`)
+      .ilike("subject", `%${normalizedSubject}%`)
       .not("chapter", "is", null);
 
     if (fallbackError) throw fallbackError;
@@ -74,28 +73,48 @@ const fetchChaptersBySubject = async (category, subject) => {
 
   if (isDev) console.log(`📊 Rows returned from DB: ${rows.length}`);
 
-  // ── Group by chapter in JS (only on the small filtered set) ───────────────
+  // ── Group by chapter, aggregate topics ────────────────────────────────────
   const chapterMap = {};
 
-  rows.forEach((row) => {
-    if (!row.chapter) return;
-    const key = row.chapter.toLowerCase().replace(/\s+/g, "-").trim();
+  for (const row of rows) {
+    if (!row.chapter) continue;
 
-    if (!chapterMap[key]) {
-      chapterMap[key] = {
-        title:    row.chapter,
-        slug:     key,
-        count:    0,
-        category: row.category,
-        subject:  row.subject,
+    const chapterSlug = row.chapter.toLowerCase().replace(/\s+/g, "-").trim();
+    const topicTitle  = row.topic ? String(row.topic).trim() : null;
+    const topicKey    = topicTitle ? topicTitle.toLowerCase() : null;
+
+    if (!chapterMap[chapterSlug]) {
+      chapterMap[chapterSlug] = {
+        title:        row.chapter,
+        slug:         chapterSlug,
+        count:        0,
+        category:     row.category,
+        subject:      row.subject,
+        _topicCounts: {},
       };
     }
-    chapterMap[key].count += 1;
-  });
 
-  const chapters = Object.values(chapterMap).sort((a, b) =>
-    a.title.localeCompare(b.title)
-  );
+    chapterMap[chapterSlug].count += 1;
+
+    if (topicKey) {
+      const existing = chapterMap[chapterSlug]._topicCounts[topicKey];
+      chapterMap[chapterSlug]._topicCounts[topicKey] = {
+        title: topicTitle,
+        slug:  topicKey.replace(/\s+/g, "-"),
+        count: (existing?.count || 0) + 1,
+      };
+    }
+  }
+
+  const chapters = Object.values(chapterMap)
+    .map((ch) => {
+      const topics = Object.values(ch._topicCounts).sort((a, b) =>
+        a.title.localeCompare(b.title)
+      );
+      const { _topicCounts, ...rest } = ch;
+      return { ...rest, topics };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
 
   if (isDev) console.log(`✅ ${chapters.length} chapters found`);
 
@@ -109,15 +128,16 @@ const fetchChaptersBySubject = async (category, subject) => {
 };
 
 /**
- * Stable cached wrapper.
- * unstable_cache is called ONCE per unique key — not recreated per request.
+ * FIX: unstable_cache must be created ONCE at module level, not per-request.
+ * Creating a new wrapper every request defeats Next.js's cache entirely.
+ * The function args (category, subject) are used as part of the cache key
+ * alongside the static key array.
  */
-const getChaptersCached = (category, subject) =>
-  unstable_cache(
-    () => fetchChaptersBySubject(category, subject),
-    [`chapters-by-subject-${category}-${subject}`],
-    { tags: ["examtracker"], revalidate: 300 }   // 5 min
-  )();
+const getChaptersCached = unstable_cache(
+  fetchChaptersBySubject,
+  ["chapters-by-subject"],
+  { tags: ["examtracker"], revalidate: 300 } // 5 min
+);
 
 // ── Route handler ─────────────────────────────────────────────────────────────
 export async function GET(req) {
