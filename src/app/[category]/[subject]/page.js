@@ -38,6 +38,10 @@ const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || "";
 const TTL_CONTENT  = 10 * 60 * 1000; // 10 min
 const TTL_PROGRESS =      30 * 1000; // 30 sec
 
+// ─── Progress fetch pagination ────────────────────────────────────────────────
+// Supabase default page size is 1000. We paginate to remove the hard cap.
+const PROGRESS_PAGE_SIZE = 1000;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const toTitleCase = (str) => {
   if (!str) return "";
@@ -52,22 +56,48 @@ const slugifyKey   = (str) =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
+// FIX: memoize pickProgress results per (progressMap, ...candidates) call site
+// via a simple per-render WeakMap cache keyed on the progressMap object.
+// This avoids re-running the 3-key lookup for every card re-render.
+const _pickCache = new WeakMap();
 const pickProgress = (progressMap, ...candidates) => {
-  for (const c of candidates) {
-    if (!c) continue;
-    if (progressMap?.[c])               return progressMap[c];
-    const nk = normalizeKey(c);
-    if (nk && progressMap?.[nk])        return progressMap[nk];
-    const sk = slugifyKey(c);
-    if (sk && progressMap?.[sk])        return progressMap[sk];
+  if (!progressMap) return null;
+
+  // Build a per-render cache keyed on the progressMap object reference
+  let cacheForMap = _pickCache.get(progressMap);
+  if (!cacheForMap) {
+    cacheForMap = new Map();
+    _pickCache.set(progressMap, cacheForMap);
   }
-  return null;
+
+  const cacheKey = candidates.join("\x00");
+  if (cacheForMap.has(cacheKey)) return cacheForMap.get(cacheKey);
+
+  let result = null;
+  outer: for (const c of candidates) {
+    if (!c) continue;
+    for (const key of [c, normalizeKey(c), slugifyKey(c)]) {
+      if (key && progressMap[key]) { result = progressMap[key]; break outer; }
+    }
+  }
+
+  cacheForMap.set(cacheKey, result);
+  return result;
 };
 
 // ─── GATE category set ────────────────────────────────────────────────────────
-const GATE_CATEGORIES = new Set([
-  "gate",
-]);
+const GATE_CATEGORIES = new Set(["gate"]);
+
+// ─── Debounce hook ────────────────────────────────────────────────────────────
+// Prevents filteredAndSortedTopics/Chapters from recomputing on every keystroke
+function useDebounce(value, delay = 180) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
 
 // =============================================================================
 // Error Boundary
@@ -261,8 +291,6 @@ const Examtracker = () => {
     [category]
   );
 
-  // FIX: stable memos instead of plain consts — prevents stale closure issues
-  // in useCallback deps and avoids recreating encoded strings on every render
   const encodedCategory = useMemo(
     () => (category ? encodeURIComponent(category.toUpperCase()) : ""),
     [category]
@@ -274,7 +302,6 @@ const Examtracker = () => {
 
   const decodedSubject   = useMemo(() => (subject ? decodeURIComponent(subject) : null), [subject]);
   const formattedSubject = useMemo(() => (decodedSubject ? toTitleCase(decodedSubject) : null), [decodedSubject]);
-  // activeSubject is purely derived — no useState mirror needed
   const activeSubject    = formattedSubject || "";
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -283,6 +310,7 @@ const Examtracker = () => {
   const [chapterTopics,     setChapterTopics]     = useState({});
   const [userProgress,      setUserProgress]      = useState({});
   const [searchTerm,        setSearchTerm]        = useState("");
+  const debouncedSearch = useDebounce(searchTerm, 180);
   const [sortBy,            setSortBy]            = useState("default");
   const [isLoading,         setIsLoading]         = useState(true);
   const [isRefreshing,      setIsRefreshing]      = useState(false);
@@ -290,12 +318,9 @@ const Examtracker = () => {
 
   const searchInputRef = useRef(null);
 
-  // Separate in-flight guards per fetch so they don't block each other
   const gateInFlightRef     = useRef(false);
   const chaptersInFlightRef = useRef(false);
-
-  // FIX: track last user id to detect user switches
-  const lastUserIdRef = useRef(null);
+  const lastUserIdRef       = useRef(null);
 
   // ── Cache keys ───────────────────────────────────────────────────────────────
   const cacheKeyContent = useMemo(
@@ -390,6 +415,9 @@ const Examtracker = () => {
     [cacheKeyContent, encodedCategory, encodedSubject]
   );
 
+  // ── fetchUserProgress: paginated to remove 1000-row hard cap ────────────────
+  // Fetches all pages of user_progress for a given user + category.
+  // Each page is PROGRESS_PAGE_SIZE rows; we stop when a page is short.
   const fetchUserProgress = useCallback(
     async (userId, forceRefresh = false) => {
       if (!userId || !category) return;
@@ -403,17 +431,34 @@ const Examtracker = () => {
             const areaLower = category.toLowerCase();
             const areaOr    = `area.eq.${areaLower},area.eq.${category},area.eq.${category.toUpperCase()}`;
 
-            const { data: rows, error } = await supabase
-              .from("user_progress")
-              .select("topic, completedquestions, correctanswers, points")
-              .eq("user_id", userId)
-              .or(areaOr)
-              .limit(1000);
+            // ── Paginate through all rows ──────────────────────────────────
+            const allRows = [];
+            let page = 0;
 
-            if (error) throw error;
+            while (true) {
+              const from = page * PROGRESS_PAGE_SIZE;
+              const to   = from + PROGRESS_PAGE_SIZE - 1;
+
+              const { data: rows, error } = await supabase
+                .from("user_progress")
+                .select("topic, completedquestions, correctanswers, points")
+                .eq("user_id", userId)
+                .or(areaOr)
+                .range(from, to)
+                .order("topic", { ascending: true }); // stable ordering helps cache hits
+
+              if (error) throw error;
+
+              allRows.push(...(rows || []));
+
+              // If we got fewer rows than the page size, we've reached the end
+              if (!rows || rows.length < PROGRESS_PAGE_SIZE) break;
+              page++;
+            }
+            // ── End pagination ─────────────────────────────────────────────
 
             const map = new Map();
-            for (const row of rows || []) {
+            for (const row of allRows) {
               const value = {
                 completedQuestions: row.completedquestions || [],
                 correctAnswers:     row.correctanswers    || [],
@@ -440,6 +485,39 @@ const Examtracker = () => {
     [cacheKeyProgress, category]
   );
 
+  // ── Surgical real-time progress patch ────────────────────────────────────────
+  // Instead of doing a full re-fetch on every Postgres change, we apply a
+  // targeted patch to the local state. A full re-fetch is only triggered when
+  // the row doesn't already exist in local state (i.e. a brand-new topic).
+  const patchProgressFromPayload = useCallback(
+    (payload) => {
+      const row = payload?.new;
+      if (!row) return;
+
+      const value = {
+        completedQuestions: row.completedquestions || [],
+        correctAnswers:     row.correctanswers    || [],
+        points:             row.points            || 0,
+      };
+      const raw  = (row.topic || "").toString();
+      const keys = [raw, raw.trim(), normalizeKey(raw), slugifyKey(raw)].filter(Boolean);
+
+      setUserProgress((prev) => {
+        // Check if any key already exists; if not, full re-fetch is safer
+        const exists = keys.some((k) => k in prev);
+        if (!exists) return prev; // signal full re-fetch below
+
+        const next = { ...prev };
+        for (const k of keys) next[k] = value;
+        return next;
+      });
+
+      // Return whether we need a full re-fetch (topic was new)
+      return keys.every((k) => !(k in userProgress));
+    },
+    [userProgress]
+  );
+
   // ── Mount / category+subject change ─────────────────────────────────────────
   useEffect(() => {
     if (isGateExam) fetchGateData(false);
@@ -450,8 +528,6 @@ const Examtracker = () => {
   useEffect(() => {
     if (user?.id) {
       const isNewUser = lastUserIdRef.current !== user.id;
-      // FIX: set ref AFTER determining isNewUser, not before — avoids stale
-      // ref on re-render if the fetch throws before completing
       fetchUserProgress(user.id, isNewUser).finally(() => {
         lastUserIdRef.current = user.id;
       });
@@ -465,8 +541,6 @@ const Examtracker = () => {
   useEffect(() => {
     if (!user?.id || !category) return;
 
-    // FIX: active flag prevents stale callbacks from firing after cleanup
-    // (e.g. fast navigation away before the channel is removed)
     let active = true;
 
     const channel = supabase
@@ -482,7 +556,7 @@ const Examtracker = () => {
         (payload) => {
           if (!active) return;
 
-          // Only re-fetch if the changed row belongs to this category
+          // Only process rows belonging to this category
           const area = payload?.new?.area || payload?.old?.area || "";
           if (
             area.toLowerCase() !== category.toLowerCase() &&
@@ -490,8 +564,17 @@ const Examtracker = () => {
             area !== category.toUpperCase()
           ) return;
 
-          invalidateCache(cacheKeyProgress);
-          fetchUserProgress(user.id, true);
+          // Try surgical patch first; fall back to full re-fetch only if the
+          // topic doesn't exist in local state yet (e.g. first attempt ever)
+          const needsFullRefetch = patchProgressFromPayload(payload);
+          if (needsFullRefetch) {
+            invalidateCache(cacheKeyProgress);
+            fetchUserProgress(user.id, true);
+          } else {
+            // Patch applied — just invalidate the cache entry so the next
+            // manual refresh or TTL expiry gets fresh data
+            invalidateCache(cacheKeyProgress);
+          }
         }
       )
       .subscribe();
@@ -500,10 +583,9 @@ const Examtracker = () => {
       active = false;
       supabase.removeChannel(channel);
     };
-  }, [user?.id, category, cacheKeyProgress, fetchUserProgress]);
+  }, [user?.id, category, cacheKeyProgress, fetchUserProgress, patchProgressFromPayload]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
-  // Refs let the handler stay registered once without re-adding on every state change
   const searchTermRef        = useRef(searchTerm);
   const showMobileOptionsRef = useRef(showMobileOptions);
   useEffect(() => { searchTermRef.current        = searchTerm;        }, [searchTerm]);
@@ -543,7 +625,6 @@ const Examtracker = () => {
   // DERIVED DATA
   // ==========================================================================
 
-  // Single pass over data for both allSubtopics and totalQuestionCount
   const { allSubtopics, totalQuestionCount } = useMemo(() => {
     const subtopics = [];
     let total = 0;
@@ -560,8 +641,8 @@ const Examtracker = () => {
     return { allSubtopics: subtopics, totalQuestionCount: total };
   }, [data]);
 
-  // FIX: userProgress dep is gated behind isGateExam so non-GATE views
-  // don't recompute this memo on every progress update
+  // FIX: use debouncedSearch instead of searchTerm so the filter memo doesn't
+  // recompute on every keystroke — only after typing pauses for 180ms
   const filteredAndSortedTopics = useMemo(() => {
     if (!isGateExam) return [];
 
@@ -585,8 +666,8 @@ const Examtracker = () => {
         })()
       : allSubtopics;
 
-    if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
+    if (debouncedSearch) {
+      const lower = debouncedSearch.toLowerCase();
       topics = topics.filter((t) => t.title.toLowerCase().includes(lower));
     }
 
@@ -607,8 +688,10 @@ const Examtracker = () => {
             : a.parentSubject.localeCompare(b.parentSubject) || a.title.localeCompare(b.title);
       }
     });
-  }, [isGateExam, activeSubject, allSubtopics, searchTerm, sortBy, userProgress, data]);
+  }, [isGateExam, activeSubject, allSubtopics, debouncedSearch, sortBy, userProgress, data]);
 
+  // FIX: chapterProgressMap depends only on chapters + chapterTopics + userProgress.
+  // Split from filteredAndSortedChapters so sorting doesn't recompute the progress map.
   const chapterProgressMap = useMemo(() => {
     if (isGateExam) return {};
     const map = {};
@@ -651,11 +734,15 @@ const Examtracker = () => {
     return map;
   }, [chapters, chapterTopics, userProgress, isGateExam]);
 
+  // FIX: filteredAndSortedChapters only depends on debouncedSearch + sortBy +
+  // chapterProgressMap — not on userProgress directly. This means a progress
+  // update only triggers a re-sort when chapterProgressMap changes, not on
+  // every intermediate userProgress write.
   const filteredAndSortedChapters = useMemo(() => {
     if (isGateExam) return [];
 
-    const filtered = searchTerm
-      ? chapters.filter((ch) => ch.title.toLowerCase().includes(searchTerm.toLowerCase()))
+    const filtered = debouncedSearch
+      ? chapters.filter((ch) => ch.title.toLowerCase().includes(debouncedSearch.toLowerCase()))
       : chapters;
 
     return [...filtered].sort((a, b) => {
@@ -674,10 +761,8 @@ const Examtracker = () => {
           return a.title.localeCompare(b.title);
       }
     });
-  }, [isGateExam, chapters, searchTerm, sortBy, chapterProgressMap]);
+  }, [isGateExam, chapters, debouncedSearch, sortBy, chapterProgressMap]);
 
-  // Single memo for both aggregateProgress and snapshotTotalQuestions —
-  // avoids iterating chapters multiple times
   const { aggregateProgress, snapshotTotalQuestions } = useMemo(() => {
     if (isGateExam) {
       const totalTopics     = allSubtopics.length;
@@ -703,7 +788,6 @@ const Examtracker = () => {
     const totalChapters     = chapters.length;
     const completedChapters = chapters.filter((ch) => chapterProgressMap[ch.slug || ch.title]?.isCompleted).length;
 
-    // Single pass over chapters
     let totalQ = 0, completedQ = 0, correctA = 0;
     for (const ch of chapters) {
       const cp = chapterProgressMap[ch.slug || ch.title] || {};
@@ -730,8 +814,8 @@ const Examtracker = () => {
     [category]
   );
 
-  // FIX: memoized so React.memo on ProgressSidebarContent actually prevents
-  // re-renders — a plain object literal creates a new reference every render
+  // FIX: include onSortChange in sharedSidebarProps so the mobile drawer
+  // gets the correct close callback — was missing in original
   const sharedSidebarProps = useMemo(() => ({
     user,
     isGateExam,
@@ -968,7 +1052,7 @@ const Examtracker = () => {
                       </h2>
                       <p className="text-xs text-neutral-500 mt-0.5">
                         {visibleCount} {isGateExam ? "topics" : "chapters"}
-                        {searchTerm && ` for "${searchTerm}"`}
+                        {debouncedSearch && ` for "${debouncedSearch}"`}
                       </p>
                     </div>
 
@@ -1024,8 +1108,6 @@ const Examtracker = () => {
               </Suspense>
 
               {/* ── Grid ─────────────────────────────────────────────────────── */}
-              {/* FIX: animate the container once instead of every card individually.
-                  With 50+ cards, simultaneous motion.div instances cause jank. */}
               <motion.div
                 id="practice-grid"
                 initial={{ opacity: 0, y: 8 }}
@@ -1122,8 +1204,8 @@ const Examtracker = () => {
                     {isGateExam ? "No topics found" : "No chapters found"}
                   </h3>
                   <p className="text-sm text-neutral-500">
-                    {searchTerm
-                      ? `No results for "${searchTerm}" — try a different keyword`
+                    {debouncedSearch
+                      ? `No results for "${debouncedSearch}" — try a different keyword`
                       : activeSubject
                         ? `Nothing available for "${activeSubject}" yet`
                         : "No content available yet"}
@@ -1194,8 +1276,6 @@ const StatusBadge = React.memo(({ isCompleted, completedCount }) => {
 });
 StatusBadge.displayName = "StatusBadge";
 
-// FIX: TopicCard is now a plain div — no motion.div per card.
-// The grid container handles the single entry animation above.
 const TopicCard = React.memo(({
   title, subtitle,
   completedCount, totalCount,

@@ -16,6 +16,22 @@ const normalize = (v) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const PAGE_SIZE = 1000;
+
+async function fetchAllRows(rangeQuery) {
+  const acc = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await rangeQuery(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    acc.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return acc;
+}
+
 /**
  * Single DB query that returns chapters AND topics for a category+subject.
  * The frontend previously made 1 + N calls (chapters, then one per chapter).
@@ -47,33 +63,31 @@ const fetchChaptersWithTopics = async (category, subject) => {
     ])
   );
 
-  // ONE query — all columns we need
-  const { data, error } = await supabase
-    .from("examtracker")
-    .select("chapter, topic, subject, category")
-    .eq("category", category.toUpperCase())
-    .in("subject", subjectVariants)
-    .not("chapter", "is", null)
-    .not("topic", "is", null);
-
-  let rows = data || [];
-
-  // Fallback: ilike if exact subject match returned nothing
-  if (rows.length === 0 && !error) {
-    if (isDev) console.log("⚠️  Trying ilike subject fallback");
-    const { data: fd, error: fe } = await supabase
+  let rows = await fetchAllRows((from, to) =>
+    supabase
       .from("examtracker")
       .select("chapter, topic, subject, category")
       .eq("category", category.toUpperCase())
-      .ilike("subject", `%${normalize(subject)}%`)
+      .in("subject", subjectVariants)
       .not("chapter", "is", null)
-      .not("topic", "is", null);
+      .not("topic", "is", null)
+      .range(from, to)
+  );
 
-    if (fe) throw fe;
-    rows = fd || [];
+  const ns = normalize(subject);
+  if (rows.length === 0 && ns.length >= 2) {
+    if (isDev) console.log("⚠️  Trying ilike subject fallback");
+    rows = await fetchAllRows((from, to) =>
+      supabase
+        .from("examtracker")
+        .select("chapter, topic, subject, category")
+        .eq("category", category.toUpperCase())
+        .ilike("subject", `%${ns}%`)
+        .not("chapter", "is", null)
+        .not("topic", "is", null)
+        .range(from, to)
+    );
   }
-
-  if (error) throw error;
 
   if (isDev) console.log(`📊 Total rows: ${rows.length}`);
 
